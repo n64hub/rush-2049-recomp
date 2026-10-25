@@ -14,6 +14,13 @@
 // every sub-list, vertex and matrix they reach, read the same on the next retrace as when the task started, so the
 // main thread is done with a frame when it queues it. At 30 fps nothing changes: the scheduler also holds a task while
 // the last frame's swap waits out its second retrace, and that swap is part of how the game counts its frames.
+//
+// On the web, 60 fps holds the game to 30 while it can't keep 60 up. A frame the game doesn't finish in one retrace
+// takes two, and RT64 draws few frames between those of a game that mixes frames of one and two retraces (it takes a
+// frame's length from the shortest of the last three): on a phone whose CPU held the race to 30-31 frames a second,
+// the page presented 41-44 a second at 60 and 55-56 at 30 (N64Recomp-browser's docs/phones.md). A second with 20-50
+// frames holds the game to 30 (fewer is a load or a stall, which changes nothing), and it tries 60 again for a second
+// 10 s later, twice as long after each try that didn't keep up, at most 80 s. A desktop build keeps 60.
 
 #include <algorithm>
 #include <atomic>
@@ -34,10 +41,67 @@ namespace {
     constexpr int32_t scheduler_queue = 0x8002E928;  // the scheduler (0x8002E8E8) waits on this queue, at +0x40
     constexpr int32_t scheduler_take_tasks = 0x29E;  // its message to take tasks from its command queue (+0x78)
 
+#ifdef __EMSCRIPTEN__
+    // 60 fps held to 30 while the game can't keep it up (above): the frames the main thread has queued, and what the
+    // scheduler thread makes of them on its retraces.
+    std::atomic<uint32_t> frames_queued{ 0 };
+    struct Fallback {
+        bool held = false;      // at 30
+        bool trying = false;    // at 60 again for a second
+        uint32_t retraces = 0;  // in this second
+        uint32_t frames = 0;    // frames_queued when it started
+        uint32_t seconds = 0;   // held so far
+        uint32_t wait = 10;     // seconds held before the next try
+    } fallback;
+
+    // On every retrace (the VI runs at 60 Hz at 60 fps and below), on the scheduler thread.
+    void update_fallback() {
+        Fallback& f = fallback;
+        if (setting.load(std::memory_order_relaxed) != 60) {
+            f = Fallback{};
+            return;
+        }
+        if (++f.retraces < 60) {
+            return;
+        }
+        uint32_t queued = frames_queued.load(std::memory_order_relaxed);
+        uint32_t frames = queued - f.frames;
+        f.frames = queued;
+        f.retraces = 0;
+        if (f.held) {
+            if (++f.seconds >= f.wait) {
+                f.held = false;
+                f.trying = true;
+                fprintf(stderr, "[frame rate] trying 60 fps again after %u s at 30\n", f.seconds);
+            }
+        }
+        else if (frames < 20) {
+            // A load or a stall, not a game that can't keep up.
+        }
+        else if (frames < 51) {
+            f.wait = f.trying ? std::min<uint32_t>(f.wait * 2, 80) : 10;
+            f.held = true;
+            f.trying = false;
+            f.seconds = 0;
+            fprintf(stderr, "[frame rate] %u frames in a second at 60 fps: 30 for %u s\n", frames, f.wait);
+        }
+        else if (f.trying) {
+            f.trying = false;
+            f.wait = 10;
+            fprintf(stderr, "[frame rate] %u frames in a second at 60 fps: kept\n", frames);
+        }
+    }
+#endif
+
     // Match Framerate follows the Framerate option above it: Original is 60, Display the monitor's refresh rate,
     // Manual its value. Never below 60.
     uint32_t wanted_fps() {
         uint32_t fps = setting.load(std::memory_order_relaxed);
+#ifdef __EMSCRIPTEN__
+        if (fps == 60 && fallback.held) {
+            return 30;
+        }
+#endif
         return fps != 0 ? fps : std::max<uint32_t>(60, ultramodern::get_target_framerate(60));
     }
 }
@@ -55,6 +119,9 @@ void rush2049::set_reduced_input_lag(bool reduced) {
 }
 
 extern "C" void rush2049_task_queued(uint8_t* rdram) {
+#ifdef __EMSCRIPTEN__
+    frames_queued.fetch_add(1, std::memory_order_relaxed);
+#endif
     if (reduced_input_lag.load(std::memory_order_relaxed)) {
         // Without blocking: if the queue is full, the scheduler has messages to read and takes the task on one.
         osSendMesg(rdram, scheduler_queue, scheduler_take_tasks, OS_MESG_NOBLOCK);
@@ -82,6 +149,9 @@ extern "C" gpr rush2049_frame_pace(gpr retraces) {
 // empties $t8 so the game's own loop sends none.
 extern "C" void rush2049_retrace_clients(uint8_t* rdram, recomp_context* ctx) {
     constexpr uint32_t main_thread_queue = 0x8002ECF8;  // the client func_80002238 adds
+#ifdef __EMSCRIPTEN__
+    update_fallback();
+#endif
     uint32_t fps = wanted_fps();
     if (fps != game_fps.load(std::memory_order_relaxed)) {
         game_fps = fps;
