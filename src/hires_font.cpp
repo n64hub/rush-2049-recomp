@@ -165,7 +165,7 @@ std::atomic<bool> title_cutting{ false };
 struct Rdp {
     uint8_t* rdram;
     uint32_t segments[16]{};
-    struct {
+    struct Image {
         uint32_t address = 0, fmt = 0, siz = 0, width = 0;
     } timg;
     RT64::LoadTile tiles[8]{};
@@ -173,6 +173,17 @@ struct Rdp {
     // Which TMEM bytes hold a known texture: written by a load block. Other loads (tile, TLUT) aren't emulated,
     // so they mark what they may have overwritten as unknown, and rectangles drawing from there are skipped.
     bool tmem_known[tmem_bytes]{};
+    // The loads since TMEM was last read, copied in only when a rectangle reads it (flush). Most of a frame's loads are
+    // its 3D textures, which no rectangle here reads and the next load overwrites, so a load that a later one covers
+    // is dropped uncopied.
+    struct Load {
+        bool tlut;
+        Image image;
+        RT64::LoadTile tile;
+        uint32_t uls, ult, lrs, lrt;
+        uint32_t lo, hi;  // the TMEM bytes it writes, [lo, hi), or lo == hi where they aren't one run
+    };
+    std::vector<Load> loads;
     std::vector<uint64_t> found;
     // Textures to make once the walk is done, new or with a glyph not drawn before, and their texels.
     struct Pending {
@@ -211,17 +222,55 @@ struct Rdp {
             return;
         }
         if (tile.siz == siz_32b && tile.fmt == fmt_rgba) {
-            std::fill(std::begin(tmem_known), std::end(tmem_known), false);
+            forget_tmem();
             return;
         }
+        uint32_t words = std::min(((lrs - uls) >> (4 - tile.siz)) + 1, tmem_bytes / 8);
+        uint32_t lo = (tile.tmem << 3) & (tmem_bytes - 1), hi = lo + words * 8;
+        if ((dxt != 0 && tile.line != 0) || hi > tmem_bytes) {  // rows apart, or wrapping around
+            lo = hi = 0;
+        }
+        add_load({ false, timg, tile, uls, ult, lrs, dxt, lo, hi });
+    }
+
+    void add_load(const Load& load) {
+        if (load.lo < load.hi) {
+            std::erase_if(loads, [&](const Load& l) { return l.lo < l.hi && load.lo <= l.lo && l.hi <= load.hi; });
+        }
+        loads.push_back(load);
+    }
+
+    // A load tile, or a 32-bit block load, which aren't emulated: nothing in TMEM is known after one.
+    void forget_tmem() {
+        loads.clear();
+        std::fill(std::begin(tmem_known), std::end(tmem_known), false);
+    }
+
+    // Copies the loads since the last flush into TMEM, before a rectangle reads it.
+    void flush() {
+        for (const Load& load : loads) {
+            if (load.tlut) {
+                copy_tlut(load);
+            }
+            else {
+                copy_block(load);
+            }
+        }
+        loads.clear();
+    }
+
+    void copy_block(const Load& load) {
+        const Image& timg = load.image;
+        const RT64::LoadTile& tile = load.tile;
+        uint32_t uls = load.uls, ult = load.ult, lrs = load.lrs, dxt = load.lrt;
         uint32_t bytes_per_row = timg.width << timg.siz >> 1;
         uint32_t src = timg.address + (uls << timg.siz >> 1) + bytes_per_row * ult;
         uint32_t words = ((lrs - uls) >> (4 - tile.siz)) + 1;
         uint32_t dst = (tile.tmem << 3) & (tmem_bytes - 1);
         uint32_t stride = tile.line << 3;
         uint32_t xor_mask = 0, dxt_counter = 0;
-        // Every texture the frame loads comes through here, so a source on a word boundary (nearly all of them) is copied
-        // a word at a time. dst is a multiple of 8, so xor_mask (0 or 4) swaps the two words.
+        // A source on a word boundary (nearly all of them) is copied a word at a time. dst is a multiple of 8, so xor_mask
+        // (0 or 4) swaps the two words.
         bool aligned = (src & 3) == 0;
         for (uint32_t w = 0; w < words && w < tmem_bytes / 8; w++) {
             if (aligned) {
@@ -255,6 +304,18 @@ struct Rdp {
         tile.ult = ult;
         tile.lrs = lrs;
         tile.lrt = lrt;
+        uint32_t rows = 1 + (lrt >> 2) - (ult >> 2), words = std::min((lrs >> 2) - (uls >> 2) + 1, tmem_bytes / 8);
+        uint32_t lo = (tile.tmem << 3) & (tmem_bytes - 1), hi = lo + words * 8;
+        if (rows != 1 || hi > tmem_bytes) {
+            lo = hi = 0;
+        }
+        add_load({ true, timg, tile, uls, ult, lrs, lrt, lo, hi });
+    }
+
+    void copy_tlut(const Load& load) {
+        const Image& timg = load.image;
+        const RT64::LoadTile& tile = load.tile;
+        uint32_t uls = load.uls, ult = load.ult, lrs = load.lrs, lrt = load.lrt;
         uint32_t bytes_per_row = timg.width << timg.siz >> 1;
         uint32_t src_row = timg.address + ((uls >> 2) << timg.siz >> 1) + bytes_per_row * (ult >> 2);
         uint32_t rows = 1 + (lrt >> 2) - (ult >> 2), words = (lrs >> 2) - (uls >> 2) + 1;
@@ -299,6 +360,7 @@ struct Rdp {
         if (width > 1024 || height > 1024 || RT64::TMEMHasher::requiresRawTMEM(tile, width, height, 0)) {
             return;
         }
+        flush();
         uint32_t row_bytes = tile.line << 3;
         uint32_t start = tile.tmem << 3;
         for (uint32_t y = 0; y < height; y++) {
@@ -418,7 +480,7 @@ struct Rdp {
                 load_block((w1 >> 24) & 7, (w0 >> 12) & 0xFFF, w0 & 0xFFF, (w1 >> 12) & 0xFFF, w1 & 0xFFF);
                 break;
             case 0xF4:  // G_LOADTILE
-                std::fill(std::begin(tmem_known), std::end(tmem_known), false);
+                forget_tmem();
                 break;
             case 0xF0:  // G_LOADTLUT
                 load_tlut((w1 >> 24) & 7, (w0 >> 12) & 0xFFF, w0 & 0xFFF, (w1 >> 12) & 0xFFF, w1 & 0xFFF);
@@ -698,6 +760,7 @@ void Rdp::title_rect(const RT64::LoadTile& tile, const uint32_t* rect) {
         RT64::TMEMHasher::requiresRawTMEM(tile, width, height, tlut)) {
         return;
     }
+    flush();
     uint32_t row_bytes = tile.line << 3, start = tile.tmem << 3;
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
@@ -1052,7 +1115,7 @@ extern "C" void rush2049_hires_font_scan(uint8_t* rdram, uint32_t task_addr) {
     rdp.extended_rdram = false;
     rdp.found_title = false;
     rdp.title_pending.clear();
-    std::fill(std::begin(rdp.tmem_known), std::end(rdp.tmem_known), false);
+    rdp.forget_tmem();
     rdp.walk((uint32_t)MEM_W(0x30, task), 0);
     for (const auto& [hash, atlas] : rdp.pending) {
         rdp.make_texture(hash, atlas.width, atlas.height, atlas.texels);

@@ -18,6 +18,10 @@ the game.
 RT64's render to RAM (each frame drawn again at the N64's resolution and read back into RDRAM) is off by default, on the
 desktop too: the Copy Frames to RAM option in `src/config.cpp` says why, `headless/main.cpp` what it costs.
 
+In a browser, Game Frame Rate's 60 holds the game to 30 while the device can't keep 60 up, and tries 60 again now and
+then: on a phone that gave every frame two drawn, where 60 drew few between them. `src/frame_rate.cpp`'s header says
+how and what it measured.
+
 ## headless/
 
 `headless/` builds the recompiled code, N64ModernRuntime and the MusyX audio with no window, menus or input, natively

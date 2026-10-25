@@ -113,6 +113,26 @@ void forget() {
     have_shadow = false;
 }
 
+// Whether n bytes at a and b are the same. The web build's memcmp (musl's) compares a byte at a time, and the 6 MB
+// compared every race frame took 5 ms of a phone's frame loop that way; 32 bytes at a time it vectorizes.
+bool same(const uint8_t* a, const uint8_t* b, uint32_t n) {
+    uint32_t i = 0;
+    for (; i + 32 <= n; i += 32) {
+        uint64_t x[4], y[4];
+        memcpy(x, a + i, sizeof(x));
+        memcpy(y, b + i, sizeof(y));
+        if (((x[0] ^ y[0]) | (x[1] ^ y[1]) | (x[2] ^ y[2]) | (x[3] ^ y[3])) != 0) {
+            return false;
+        }
+    }
+    for (; i < n; i++) {
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Calls f(offset, length) for each piece of saved memory that differs from the shadow.
 template <typename F>
 void for_each_change(const uint8_t* rdram, F f) {
@@ -120,13 +140,13 @@ void for_each_change(const uint8_t* rdram, F f) {
     for (Range r : saved) {
         for (uint32_t p = r.lo; p < r.hi;) {
             uint32_t end = std::min(p + block, r.hi);
-            if (memcmp(rdram + p, shadow.data() + p, end - p) == 0) {
+            if (same(rdram + p, shadow.data() + p, end - p)) {
                 p = end;
                 continue;
             }
             for (; p < end; p += piece) {
                 uint32_t n = std::min(piece, end - p);
-                if (memcmp(rdram + p, shadow.data() + p, n) != 0) {
+                if (!same(rdram + p, shadow.data() + p, n)) {
                     f(p, n);
                 }
             }

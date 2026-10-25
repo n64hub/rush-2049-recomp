@@ -375,6 +375,9 @@ void rush2049::init_config() {
         "Game Frame Rate",
         "How often the game draws a new frame. The original draws on every other screen refresh, 30 times a second. "
         "Car physics and timers follow real time, so a race runs at the same speed at any rate."
+#ifdef __EMSCRIPTEN__
+        " In a browser, 60 FPS draws 30 while the device can't keep 60 up, and tries 60 again now and then."
+#endif
         "<br/>"
         "<b>Match Framerate:</b> a new frame for every frame <recomp-color primary>Framerate</recomp-color> above "
         "presents, so Display draws at the monitor's refresh rate and Manual at its value (60 at least).",

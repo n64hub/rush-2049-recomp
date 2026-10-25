@@ -40,7 +40,8 @@ option has an Original value that runs the game as it shipped.
 - **Hi-res title screen**: the title picture is drawn from a 4× AI upscale (Real-ESRGAN) instead of at 240p. The
   repo ships only a patch, which the game applies to its own picture.
 - **60 fps and unlocked frame rates**: the game logic runs at 60 instead of 30, and on a high-refresh monitor
-  RT64 interpolates between frames up to the display's refresh rate.
+  RT64 interpolates between frames up to the display's refresh rate. In a browser it runs at 30 while the device can't
+  keep 60 up, which a phone plays more smoothly.
 - **Lower input lag**: each frame is drawn as soon as the game has worked it out instead of at the next screen
   refresh, so what you press shows on screen one frame (17 ms) sooner at 60 fps.
 - **Widescreen**: 3D widens to the window's aspect ratio, the race HUD moves out to the edges, two- and
