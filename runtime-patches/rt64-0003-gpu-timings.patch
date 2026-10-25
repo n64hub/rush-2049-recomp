@@ -220,7 +220,7 @@ index 7b7d896..fb8fe5c 100644
          ProfilingTimer presentProfiler = ProfilingTimer(120);
          Timestamp presentTimestamp;
 diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
-index cb271f4..b14355d 100644
+index 970fe0a..b621e7d 100644
 --- a/src/hle/rt64_workload_queue.cpp
 +++ b/src/hle/rt64_workload_queue.cpp
 @@ -4,6 +4,7 @@
@@ -309,7 +309,7 @@ index cb271f4..b14355d 100644
  
              // Indicate to the texture cache it's safe to delete the textures if no locks are active.
 diff --git a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
-index 2cebca9..8ffa08b 100644
+index 3eb3b9e..b4a0425 100644
 --- a/src/hle/rt64_workload_queue.h
 +++ b/src/hle/rt64_workload_queue.h
 @@ -7,6 +7,7 @@
@@ -320,16 +320,16 @@ index 2cebca9..8ffa08b 100644
  #include "common/rt64_profiling_timer.h"
  #include "common/rt64_user_configuration.h"
  #include "render/rt64_framebuffer_renderer.h"
-@@ -110,6 +111,7 @@ namespace RT64 {
-         DummyDepthTargets dummyDepthTargets;
+@@ -117,6 +118,7 @@ namespace RT64 {
  #   endif
          std::unique_ptr<RenderQueryPool> queryPool;
-+        GPUPartTimer partTimer;
          FramebufferChangePool scratchFbChangePool;
++        GPUPartTimer partTimer;
          ProfilingTimer rendererCPUProfiler = ProfilingTimer(120);
          ProfilingTimer rendererGPUProfiler = ProfilingTimer(120);
+         ProfilingTimer matchingProfiler = ProfilingTimer(120);
 diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
-index 3b9061d..d92ba9f 100644
+index 590eb56..c5029e0 100644
 --- a/src/render/rt64_framebuffer_renderer.cpp
 +++ b/src/render/rt64_framebuffer_renderer.cpp
 @@ -7,6 +7,7 @@
