@@ -86,6 +86,10 @@ sync() {
     fi
     remote "set -e; cd ~/$dir; exec flock .lock bash -s" << EOF
 set -e
+# No fetch recurses into submodules: the submodule update below fetches what the checkout names. A recursing fetch
+# walks every branch new to a submodule for the commits its own submodules name, and rt64's old branches name plume
+# and spirv-cross commits GitHub no longer serves ("not our ref"), so the first fetch after a pin moved failed.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=fetch.recurseSubmodules GIT_CONFIG_VALUE_0=false
 cd repo
 git fetch -q origin
 [ -f ../head.bundle ] && git fetch -q ../head.bundle refs/remote-build-sync && rm ../head.bundle
