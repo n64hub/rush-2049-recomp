@@ -7,6 +7,10 @@
 // controller and pak state, the audio and music threads' memory, the scheduler and graphics tasks, the vertex
 // buffers, the Z-buffer and the framebuffers, and the timestamp the game measures each tick against. Those were found
 // by watching which part of a frame writes each word: the tick, the frame's logic, its drawing, or another thread.
+// Watch more than one track: a word can be something else's in a race and the race's elsewhere. Stunt's first arena
+// animates a scene node from the frame's logic, stepping its model number (0x80130EA8) through the animation and to
+// none (0xFFFF) at its end; with that word not saved, a rewind put the node back in the scene with no model, and
+// drawing it (func_8009C8F0) read the model table out of bounds and crashed.
 //
 // A copy of that memory (the shadow) holds it as of the last frame saved. Each frame, the 64-byte pieces that changed
 // since are stored with their old contents as that frame's record, and the shadow is updated. A frame while Rewind is
@@ -55,7 +59,6 @@ constexpr Range not_saved[] = {
     { 0x80125338, 0x80126128 },  // matrices for the display list
     { 0x8012A0E8, 0x8012AC28 },  // the same
     { 0x8012E608, 0x8012E6D4 },
-    { 0x80130EA8, 0x80130EAC },
     { 0x80138A4C, 0x80138A5C },
     { 0x8013FED0, 0x8013FED4 },
     { 0x801403C0, 0x80140414 },
