@@ -135,7 +135,7 @@ index 0000000..e02dc54
 +    }
 +};
 diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
-index ad46c52..16f052b 100644
+index 2eda300..dbd0055 100644
 --- a/src/hle/rt64_present_queue.cpp
 +++ b/src/hle/rt64_present_queue.cpp
 @@ -4,6 +4,8 @@
@@ -220,7 +220,7 @@ index 7b7d896..fb8fe5c 100644
          ProfilingTimer presentProfiler = ProfilingTimer(120);
          Timestamp presentTimestamp;
 diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
-index 970fe0a..b621e7d 100644
+index 866f27e..c724d8b 100644
 --- a/src/hle/rt64_workload_queue.cpp
 +++ b/src/hle/rt64_workload_queue.cpp
 @@ -4,6 +4,7 @@
@@ -231,7 +231,7 @@ index 970fe0a..b621e7d 100644
  #include "common/rt64_thread.h"
  
  #include "rt64_present_queue.h"
-@@ -102,7 +103,7 @@ namespace RT64 {
+@@ -213,7 +214,7 @@ namespace RT64 {
          vertexProcessor = std::make_unique<VertexProcessor>(ext.device);
          framebufferRenderer = std::make_unique<FramebufferRenderer>(ext.workloadGraphicsWorker, true, ext.createdGraphicsAPI, ext.shaderLibrary);
          renderFramebufferManager = std::make_unique<RenderFramebufferManager>(ext.device);
@@ -240,7 +240,7 @@ index 970fe0a..b621e7d 100644
  
          projectionProcessor.setup(ext.workloadGraphicsWorker);
          transformProcessor.setup(ext.workloadGraphicsWorker);
-@@ -740,10 +741,13 @@ namespace RT64 {
+@@ -851,10 +852,13 @@ namespace RT64 {
  
              workerMutex.lock();
              ext.workloadGraphicsWorker->commandList->begin();
@@ -256,7 +256,7 @@ index 970fe0a..b621e7d 100644
              
              // Record all framebuffer pairs.
              uint32_t framebufferIndex = 0;
-@@ -830,7 +834,13 @@ namespace RT64 {
+@@ -941,7 +945,13 @@ namespace RT64 {
                          }
                      }
                      
@@ -270,7 +270,7 @@ index 970fe0a..b621e7d 100644
  
                      // Transition the render targets in case the present queue will show them so it doesn't have to perform transitions.
                      if (colorTarget != nullptr && depthTarget != nullptr) {
-@@ -852,6 +862,8 @@ namespace RT64 {
+@@ -963,6 +973,8 @@ namespace RT64 {
                          overrideTarget->resolveFromTarget(ext.workloadGraphicsWorker, colorTarget, ext.shaderLibrary);
                      }
  
@@ -279,7 +279,7 @@ index 970fe0a..b621e7d 100644
                      const uint64_t writeTimestamp = fbManager.nextWriteTimestamp();
                      FixedRect depthFbRect;
                      if (colorFb != nullptr) {
-@@ -878,7 +890,7 @@ namespace RT64 {
+@@ -989,7 +1001,7 @@ namespace RT64 {
                      fbPair.endFbOperations, targetManager, fixedResScale, f, workload.submissionFrame);
              }
  
@@ -288,7 +288,7 @@ index 970fe0a..b621e7d 100644
              ext.workloadGraphicsWorker->commandList->end();
              framebufferRenderer->waitForUploaders();
              ext.workloadGraphicsWorker->execute();
-@@ -894,9 +906,16 @@ namespace RT64 {
+@@ -1005,9 +1017,16 @@ namespace RT64 {
  #       if !defined(__EMSCRIPTEN__)
              // Not on WebGPU, which has no timestamps (plume's queries there do nothing and read zeros), and where behind
              // plume's device thread each of the two calls waits for a round trip to the page's thread after every workload.
@@ -309,18 +309,18 @@ index 970fe0a..b621e7d 100644
  
              // Indicate to the texture cache it's safe to delete the textures if no locks are active.
 diff --git a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
-index 3eb3b9e..b4a0425 100644
+index ff96f1a..47cd7e4 100644
 --- a/src/hle/rt64_workload_queue.h
 +++ b/src/hle/rt64_workload_queue.h
-@@ -7,6 +7,7 @@
- #include <array>
+@@ -8,6 +8,7 @@
+ #include <chrono>
  
  #include "common/rt64_enhancement_configuration.h"
 +#include "common/rt64_gpu_timings.h"
  #include "common/rt64_profiling_timer.h"
  #include "common/rt64_user_configuration.h"
  #include "render/rt64_framebuffer_renderer.h"
-@@ -117,6 +118,7 @@ namespace RT64 {
+@@ -146,6 +147,7 @@ namespace RT64 {
  #   endif
          std::unique_ptr<RenderQueryPool> queryPool;
          FramebufferChangePool scratchFbChangePool;
