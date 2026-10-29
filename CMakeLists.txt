@@ -234,7 +234,11 @@ endif()
 
 if (WIN32)
     include(FetchContent)
-    set(SDL2_VERSION "2.30.3")
+    # 2.32.4 or newer: before it, when Windows said it had read a controller's HID name strings without writing them
+    # (seen with a Bluetooth Xbox controller), SDL's raw input driver hashed whatever its buffer held into the
+    # controller's GUID (its crc16), so the controller was a new one on every connect: its saved bindings were not
+    # found, and a reconnect was not handed back to its player (RecompFrontend-0004 and -0005 match by that GUID).
+    set(SDL2_VERSION "2.32.10")
     FetchContent_Declare(
         sdl2
         URL https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-devel-${SDL2_VERSION}-VC.zip
