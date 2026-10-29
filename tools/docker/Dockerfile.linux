@@ -1,7 +1,7 @@
 # The image tools/release.sh builds the Linux release in (tools/remote_build.sh -d): Ubuntu 22.04, so the binary needs
 # glibc 2.35 and runs there, on Debian 12 and on anything newer (Ubuntu 24.04's toolchain asks for 2.38). clang 18 from
 # apt.llvm.org (jammy's own is 14), g++ 12's libstdc++ headers for C++20 (the game links it statically), CMake 3.31,
-# Ninja, ccache, GTK 3 and FreeType, patchelf, and SDL2 2.30.3 built from source, the version the Windows build ships:
+# Ninja, ccache, GTK 3 and FreeType, patchelf, and SDL2 2.32.10 built from source, the version the Windows build ships:
 # jammy's 2.0.20 lacks SDL_GetWindowSizeInPixels, which plume calls. The release carries that libSDL2 beside the binary,
 # as the Windows zip carries SDL2.dll; jammy's libsdl2-dev brings the X11, Wayland, PulseAudio, ALSA, udev and D-Bus
 # headers its backends need, which SDL loads at run time.
@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     ln -s /usr/bin/ld.lld-18 /usr/local/bin/ld.lld && rm -rf /var/lib/apt/lists/*
 RUN curl -sSfL https://github.com/Kitware/CMake/releases/download/v3.31.9/cmake-3.31.9-linux-x86_64.tar.gz | \
     tar xz -C /opt && ln -s /opt/cmake-3.31.9-linux-x86_64/bin/* /usr/local/bin/
-RUN curl -sSfL https://github.com/libsdl-org/SDL/releases/download/release-2.30.3/SDL2-2.30.3.tar.gz | tar xz -C /tmp && \
-    cmake -S /tmp/SDL2-2.30.3 -B /tmp/sdl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang \
+RUN curl -sSfL https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-2.32.10.tar.gz | tar xz -C /tmp && \
+    cmake -S /tmp/SDL2-2.32.10 -B /tmp/sdl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang \
         -DSDL_STATIC=OFF -DSDL_TEST=OFF > /dev/null && \
-    ninja -C /tmp/sdl install > /dev/null && rm -rf /tmp/SDL2-2.30.3 /tmp/sdl && ldconfig
+    ninja -C /tmp/sdl install > /dev/null && rm -rf /tmp/SDL2-2.32.10 /tmp/sdl && ldconfig
