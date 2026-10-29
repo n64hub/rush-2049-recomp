@@ -443,3 +443,10 @@ text = "    ctx->f0.fl = rush2049_far_clamp_distance(ctx->f0.fl);"
 func = "func_8009D708"
 before_vram = 0x8009D7D4
 text = "    rush2049_far_clamp_fit(ctx);"
+
+# Scenery Culling (src/draw_distance.cpp): func_8009EBC0 disables each of the track's scenery nodes whose bit is clear
+# in the visibility mask of the stretch of road the camera is in. t4 is the mask's word for this node and v0 its bit.
+[[patches.hook]]
+func = "func_8009EBC0"
+before_vram = 0x8009EFEC
+text = "    ctx->r12 = rush2049_scenery_mask(ctx->r12);"

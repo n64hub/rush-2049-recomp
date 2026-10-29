@@ -1,4 +1,5 @@
 // Draw Distance and Level of Detail (Graphics tab, config.cpp): the game's distance limits as multiples of its own.
+// Scenery Culling, beside them: the game's table of which scenery can be seen from where.
 //
 // The limits, all hooked in us.toml. Draw Distance scales the first four, Level of Detail the last:
 //   Far plane      the far plane (camera +0x3C, times 16 in world units: 32000 in a race) as func_8009F058 builds the
@@ -42,16 +43,19 @@
 // line across the painted trees, and as the near boards slide over the far ones the treetops seem to come and go. A
 // recording of an N64 shows the same.
 //
-// Not a limit either, and left alone: each track has a table of which scenery can be seen from where. func_8009EBC0,
-// called by func_8009F058 for each camera a frame, finds the stretch of road the camera is in (a list of boxes, 0x68
-// bytes each, from the pointer at 0x80149B80) and takes that stretch's 16-byte record from the track's table (picked
-// by the track index at 0x8014978C; Track 1's starts at 0x8011B898): a 128-bit mask of the track's scenery objects
-// (their count is the byte at 0x8011E748 + the track; Track 1 has 117), and every object whose bit is clear gets the
-// disable bit (bit 31) in its node's flags. It hides 79-100 of Track 1's objects from each stretch, yet with every bit
-// treated as set, frames held at 78 crossings from one stretch to the next on tracks 1-6, at 4x and at 16x with the
-// highest detail, show nothing more: what a stretch hides can't be seen from it. In a whole attract race on Track 1
-// at 16x with the highest detail, logging every model func_8009C8F0 draws, the only scenery that came and went was
-// two objects the table hides, 500-1400 units out; the rest that did were the cars' parts.
+// Scenery Culling, beside them: each track has a table of which scenery can be seen from where. func_8009EBC0, called
+// by func_8009F058 for each camera a frame, finds the stretch of road the camera is in (a list of boxes, 0x68 bytes
+// each, from the pointer at 0x80149B80) and takes that stretch's 16-byte record from the track's table (picked by the
+// track index at 0x8014978C; Track 1's starts at 0x8011B898): a 128-bit mask of the track's scenery objects (their
+// count is the byte at 0x8011E748 + the track; Track 1 has 117), and every object whose bit is clear gets the disable
+// bit (bit 31) in its node's flags. It hides 79-100 of Track 1's objects from each stretch, and not only what can't be
+// seen: in the attract race's opening shot of Track 1 a tall building stands over the trees on the right with the
+// table off and is sky with it on (the race slowed twelvefold and the table switched every four frames). As the
+// camera crosses from one stretch into the next, what the new mask lets through appears at once, at any distance,
+// which is what a player reported on Track 1 (GitHub #267): scenery close to the car coming and going as they roll
+// back and forth over one spot. Off (us.toml, at 0x8009EFEC) treats every bit as set, so every object is drawn from
+// every stretch and the limits alone decide. While the byte at 0x8014061A is set, the function disables every object
+// whatever its bit; that is kept.
 //
 // Besides these limits and that table, func_8009DD88 skips a node only by its per-camera hidden bit (0x100 << camera
 // in its flags, func_8009DD18: hidden unless a child is visible) and its disable bit. The game sets and clears them
@@ -72,6 +76,7 @@ namespace {
 // Set from the settings menu, read on the game thread.
 std::atomic<float> distance_scale{ 1.0f };
 std::atomic<float> detail_scale{ 1.0f };
+std::atomic<bool> scenery_culling{ true };
 
 // What func_8009D99C or func_8009D45C divided the node's offset by, from the start of the call to its end.
 int matrix_divisor = 1;
@@ -91,6 +96,10 @@ void rush2049::set_draw_distance(float scale) {
 
 void rush2049::set_level_of_detail(float scale) {
     detail_scale.store(scale, std::memory_order_relaxed);
+}
+
+void rush2049::set_scenery_culling(bool on) {
+    scenery_culling.store(on, std::memory_order_relaxed);
 }
 
 extern "C" float rush2049_draw_distance_lod(float limit) {
@@ -117,6 +126,10 @@ extern "C" gpr rush2049_draw_distance_prim_depth(gpr z) {
 
 extern "C" float rush2049_draw_distance_cull(float cull) {
     return cull * distance();
+}
+
+extern "C" gpr rush2049_scenery_mask(gpr mask) {
+    return scenery_culling.load(std::memory_order_relaxed) ? mask : (gpr)(int32_t)-1;
 }
 
 extern "C" void rush2049_far_matrix_begin(recomp_context* ctx) {
