@@ -11,6 +11,9 @@
 // animates a scene node from the frame's logic, stepping its model number (0x80130EA8) through the animation and to
 // none (0xFFFF) at its end; with that word not saved, a rewind put the node back in the scene with no model, and
 // drawing it (func_8009C8F0) read the model table out of bounds and crashed.
+// Nor leave out part of one thing: func_800C0AC0 plays a keyframed animation, the checkered flags over the start line
+// among them, from a state whose time (0x80138A44) was saved and whose keyframe and the rest (0x80138A4C-0x80138A5C)
+// were not, so while Rewind was held the time went back and the keyframe kept going, and the flags juddered.
 //
 // A copy of that memory (the shadow) holds it as of the last frame saved. Each frame, the 64-byte pieces that changed
 // since are stored with their old contents as that frame's record, and the shadow is updated. A frame while Rewind is
@@ -25,8 +28,6 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
-#include <string>
-#include <cstdlib>
 #include <vector>
 
 #include "recomp.h"
@@ -61,7 +62,6 @@ constexpr Range not_saved[] = {
     { 0x80125338, 0x80126128 },  // matrices for the display list
     { 0x8012A0E8, 0x8012AC28 },  // the same
     { 0x8012E608, 0x8012E6D4 },
-    { 0x80138A4C, 0x80138A5C },
     { 0x8013FED0, 0x8013FED4 },
     { 0x801403C0, 0x80140414 },
     { 0x80142728, 0x80143CF8 },  // the sound thread, its queues, command pool and tables
@@ -96,6 +96,7 @@ std::vector<Range> saved;      // what is saved, as offsets into RDRAM
 std::vector<uint8_t> shadow;   // the saved memory as of the last frame saved, indexed like RDRAM
 bool have_shadow = false;
 uint32_t shadow_sounds = 0;    // the sound count as of the shadow
+uint32_t stepped_sounds = 0;   // the sound count as of the last step back
 struct Frame {
     std::vector<uint8_t> changes;  // { offset, length, old contents } for each piece that changed
     uint32_t sounds;               // the sound count as of those old contents
@@ -181,6 +182,7 @@ void save_frame(uint8_t* rdram) {
 
 void step_back(uint8_t* rdram) {
     for_each_change(rdram, [&](uint32_t p, uint32_t n) { memcpy(rdram + p, shadow.data() + p, n); });
+    stepped_sounds = read_word(rdram, sound_count_addr);
     if (history.empty()) {
         return;  // as far back as it goes: stay there
     }
@@ -204,27 +206,49 @@ void step_back(uint8_t* rdram) {
 // end by themselves, but a loop plays or waits for a voice for the rest of the race, owner or not, and the race starts
 // another when it gets there again: with Rewind used a lot they filled the manager's 80 sounds, and the next sound the
 // race started (func_80092278 takes one off the free list unchecked) crashed. The manager's count of sounds started
-// isn't saved, and each frame saved keeps its value, so when Rewind is let go every loop started since the frame it
-// went back to is made one that times out, and the sound thread frees it at its next update. Only flags change, no
-// links, so it doesn't matter where the sound thread was stopped.
-int release_orphaned_sounds(uint8_t* rdram) {
-    constexpr uint32_t lists[] = { 0x80144028, 0x80144C58 };  // playing, and waiting for a voice
+// isn't saved, and each frame saved keeps its value, so when Rewind is let go every loop started between the frame it
+// went back to and the last step back is ended; those the ticks since started are the race's again.
+//
+// One waiting for a voice is made one that times out, and the sound thread frees it at its next update: only flags
+// change, no links, so it doesn't matter where the sound thread was stopped. One that has a voice is stopped the way
+// the race stops a sound (func_80091C04, which queues the sound thread a command that stops the voice and frees the
+// sound): the sound thread counts a timeout only while a sound waits, and frees a playing one only when its voice
+// ends, which a looping voice never does, so a tire squeal started while Rewind was held played to the end of the race.
+// The IDs are gathered first: the stop waits for the sound manager's lock, and the sound thread can change the lists
+// while it waits.
+int release_orphaned_sounds(uint8_t* rdram, recomp_context* ctx) {
+    constexpr uint32_t playing = 0x80144028, waiting = 0x80144C58;
     const uint32_t shift = read_word(rdram, sound_shift_addr) & 31;
-    const uint32_t now = read_word(rdram, sound_count_addr);
+    std::vector<uint32_t> to_stop;
     int released = 0;
-    for (uint32_t head : lists) {
+    for (uint32_t head : { playing, waiting }) {
         for (uint32_t node = read_word(rdram, head), n = 0; node != 0 && n < 256; node = read_word(rdram, node), n++) {
-            const uint32_t started = read_word(rdram, node + 0xC) >> shift;
+            const uint32_t id = read_word(rdram, node + 0xC);
+            const uint32_t started = id >> shift;
             // The count goes back to 1 when it runs out, which takes days of play.
-            const bool after = now >= shadow_sounds ? started >= shadow_sounds && started <= now
-                                                    : started >= shadow_sounds || started <= now;
-            if (after && rdram[(node + 0x19 - 0x80000000u) ^ 3] != 0) {
+            const bool lost = stepped_sounds >= shadow_sounds ? started >= shadow_sounds && started < stepped_sounds
+                                                              : started >= shadow_sounds || started < stepped_sounds;
+            if (!lost || rdram[(node + 0x19 - 0x80000000u) ^ 3] == 0) {
+                continue;
+            }
+            if (head == playing) {
+                to_stop.push_back(id);
+            } else {
                 rdram[(node + 0x19 - 0x80000000u) ^ 3] = 0;
                 const float expired = -100.0f;  // past the -10 at which the sound thread frees a sound that timed out
                 memcpy(rdram + (node + 0x20 - 0x80000000u), &expired, 4);
-                released++;
             }
+            released++;
         }
+    }
+    if (!to_stop.empty()) {
+        // As a call from the frame loop at this point: the callee may change any register the hook's function holds.
+        const recomp_context saved = *ctx;
+        for (uint32_t id : to_stop) {
+            ctx->r4 = (gpr)(int32_t)id;
+            LOOKUP_FUNC(0x80091C04)(rdram, ctx);
+        }
+        *ctx = saved;
     }
     return released;
 }
@@ -249,7 +273,7 @@ extern "C" void rush2049_rewind_frame_begin(uint8_t* rdram) {
     }
 }
 
-extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram) {
+extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) {
     if (read_word(rdram, game_state_addr) != 0x00400000) {
         return;  // menus draw here too
     }
@@ -266,14 +290,6 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram) {
         if (saved.empty()) {
             uint32_t lo = saved_lo;
             for (Range r : not_saved) {
-                if (const char* e = std::getenv("REWIND_EXTRA")) {  // TEMP: save these too
-                    char hex[16];
-                    snprintf(hex, sizeof(hex), "%08X", r.lo);
-                    if (strstr(e, hex)) {
-                        fprintf(stderr, "[trace] saving %08X-%08X too\n", r.lo, r.hi);
-                        continue;
-                    }
-                }
                 saved.push_back({ lo - 0x80000000u, r.lo - 0x80000000u });
                 lo = r.hi;
             }
@@ -292,65 +308,12 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram) {
     if (read_word(rdram, race_clock_addr) == read_word(shadow.data(), race_clock_addr)) {
         return;  // no race time has passed
     }
-    if (std::getenv("REWIND_TRACE")) {  // TEMP diagnostic
-        static std::vector<uint8_t> prev;
-        static int frame = 0;
-        static bool was_held = false;
-        bool held = rewind_held();
-        if (held != was_held) {
-            frame = 0;
-            was_held = held;
-        }
-        std::vector<Range> unsaved = { { 0x80000000, 0x80000400 }, { 0x8002C5E0, 0x80086A50 } };
-        for (Range r : not_saved) {
-            if (r.lo < 0x801613F0) unsaved.push_back(r);
-        }
-        if (prev.empty()) prev.assign(rdram, rdram + 0x00800000);
-        if (const char* dir = std::getenv("REWIND_DUMP")) {
-            static int idle_dumps = 0, held_dumps = 0;
-            float clock;
-            memcpy(&clock, rdram + (race_clock_addr - 0x80000000u), 4);
-            const char* kind = nullptr;
-            int k = 0;
-            if (!held && clock > 12.29f && idle_dumps < 14) kind = "idle", k = idle_dumps++;
-            if (held && clock < 12.56f && held_dumps < 14) kind = "held", k = held_dumps++;
-            if (kind) {
-                char path[512];
-                snprintf(path, sizeof(path), "%s/%s%d.bin", dir, kind, k);
-                if (FILE* f = fopen(path, "wb")) {
-                    fwrite(rdram, 1, 0x00800000, f);
-                    fclose(f);
-                }
-                fprintf(stderr, "[trace] dumped %s clock %f\n", path, clock);
-            }
-        }
-        if (frame++ < 4) {
-            fprintf(stderr, "[trace] %s frame %d clock %08X\n", held ? "HELD" : "race", frame, read_word(rdram, race_clock_addr));
-            for (Range r : unsaved) {
-                std::string line;
-                int n = 0;
-                for (uint32_t a = r.lo; a < r.hi; a += 4) {
-                    uint32_t o = a - 0x80000000u;
-                    uint32_t now = *(uint32_t*)(rdram + o), was = *(uint32_t*)(prev.data() + o);
-                    if (now != was) {
-                        if (n++ < 12) {
-                            char b[64];
-                            snprintf(b, sizeof(b), " %08X:%08X->%08X", a, was, now);
-                            line += b;
-                        }
-                    }
-                }
-                if (n > 0) fprintf(stderr, "[trace]  %08X-%08X %d words%s\n", r.lo, r.hi, n, line.c_str());
-            }
-        }
-        memcpy(prev.data(), rdram, 0x00800000);
-    }
     if (rewind_held()) {
         step_back(rdram);
         return;
     }
     if (frames_back > 0) {
-        int released = release_orphaned_sounds(rdram);
+        int released = release_orphaned_sounds(rdram, ctx);
         fprintf(stderr, "[rewind] back %u frames, %zu frames (%zu MB) left, %d lost sounds released\n", frames_back,
             history.size(), history_bytes >> 20, released);
         frames_back = 0;
