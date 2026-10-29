@@ -267,7 +267,9 @@ The defaults use about 4% of that card. Every interpolated frame is a full rende
 144 Hz monitor is 2.4 times the work of 60. On a weak GPU lower Resolution first.
 
 Draw Distance and Level of Detail at their defaults draw about 30% more a frame than at Original (770 draws instead
-of 590), most of it for Draw Distance; both at Original take about a fifth off drawing the geometry.
+of 590), most of it for Draw Distance; both at Original take about a fifth off drawing the geometry. Scenery Culling
+at its default (Off) draws about 2.6 times as many calls again in the attract race (1980 instead of 750), as every
+building and wall of the track is drawn wherever you are; on a weak GPU, Original takes that back.
 
 Nearly a third of the default frame's cost stays even at Resolution Original: mostly drawing the game's geometry
 (about 500 to 800 draws a frame), which costs about the same at any resolution, and drawing the finished frame into the
