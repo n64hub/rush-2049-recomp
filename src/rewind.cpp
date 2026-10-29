@@ -94,6 +94,7 @@ std::vector<Range> saved;      // what is saved, as offsets into RDRAM
 std::vector<uint8_t> shadow;   // the saved memory as of the last frame saved, indexed like RDRAM
 bool have_shadow = false;
 uint32_t shadow_sounds = 0;    // the sound count as of the shadow
+uint32_t stepped_sounds = 0;   // the sound count as of the last step back
 struct Frame {
     std::vector<uint8_t> changes;  // { offset, length, old contents } for each piece that changed
     uint32_t sounds;               // the sound count as of those old contents
@@ -179,6 +180,7 @@ void save_frame(uint8_t* rdram) {
 
 void step_back(uint8_t* rdram) {
     for_each_change(rdram, [&](uint32_t p, uint32_t n) { memcpy(rdram + p, shadow.data() + p, n); });
+    stepped_sounds = read_word(rdram, sound_count_addr);
     if (history.empty()) {
         return;  // as far back as it goes: stay there
     }
@@ -202,27 +204,49 @@ void step_back(uint8_t* rdram) {
 // end by themselves, but a loop plays or waits for a voice for the rest of the race, owner or not, and the race starts
 // another when it gets there again: with Rewind used a lot they filled the manager's 80 sounds, and the next sound the
 // race started (func_80092278 takes one off the free list unchecked) crashed. The manager's count of sounds started
-// isn't saved, and each frame saved keeps its value, so when Rewind is let go every loop started since the frame it
-// went back to is made one that times out, and the sound thread frees it at its next update. Only flags change, no
-// links, so it doesn't matter where the sound thread was stopped.
-int release_orphaned_sounds(uint8_t* rdram) {
-    constexpr uint32_t lists[] = { 0x80144028, 0x80144C58 };  // playing, and waiting for a voice
+// isn't saved, and each frame saved keeps its value, so when Rewind is let go every loop started between the frame it
+// went back to and the last step back is ended; those the ticks since started are the race's again.
+//
+// One waiting for a voice is made one that times out, and the sound thread frees it at its next update: only flags
+// change, no links, so it doesn't matter where the sound thread was stopped. One that has a voice is stopped the way
+// the race stops a sound (func_80091C04, which queues the sound thread a command that stops the voice and frees the
+// sound): the sound thread counts a timeout only while a sound waits, and frees a playing one only when its voice
+// ends, which a looping voice never does, so a tire squeal started while Rewind was held played to the end of the race.
+// The IDs are gathered first: the stop waits for the sound manager's lock, and the sound thread can change the lists
+// while it waits.
+int release_orphaned_sounds(uint8_t* rdram, recomp_context* ctx) {
+    constexpr uint32_t playing = 0x80144028, waiting = 0x80144C58;
     const uint32_t shift = read_word(rdram, sound_shift_addr) & 31;
-    const uint32_t now = read_word(rdram, sound_count_addr);
+    std::vector<uint32_t> to_stop;
     int released = 0;
-    for (uint32_t head : lists) {
+    for (uint32_t head : { playing, waiting }) {
         for (uint32_t node = read_word(rdram, head), n = 0; node != 0 && n < 256; node = read_word(rdram, node), n++) {
-            const uint32_t started = read_word(rdram, node + 0xC) >> shift;
+            const uint32_t id = read_word(rdram, node + 0xC);
+            const uint32_t started = id >> shift;
             // The count goes back to 1 when it runs out, which takes days of play.
-            const bool after = now >= shadow_sounds ? started >= shadow_sounds && started <= now
-                                                    : started >= shadow_sounds || started <= now;
-            if (after && rdram[(node + 0x19 - 0x80000000u) ^ 3] != 0) {
+            const bool lost = stepped_sounds >= shadow_sounds ? started >= shadow_sounds && started < stepped_sounds
+                                                              : started >= shadow_sounds || started < stepped_sounds;
+            if (!lost || rdram[(node + 0x19 - 0x80000000u) ^ 3] == 0) {
+                continue;
+            }
+            if (head == playing) {
+                to_stop.push_back(id);
+            } else {
                 rdram[(node + 0x19 - 0x80000000u) ^ 3] = 0;
                 const float expired = -100.0f;  // past the -10 at which the sound thread frees a sound that timed out
                 memcpy(rdram + (node + 0x20 - 0x80000000u), &expired, 4);
-                released++;
             }
+            released++;
         }
+    }
+    if (!to_stop.empty()) {
+        // As a call from the frame loop at this point: the callee may change any register the hook's function holds.
+        const recomp_context saved = *ctx;
+        for (uint32_t id : to_stop) {
+            ctx->r4 = (gpr)(int32_t)id;
+            LOOKUP_FUNC(0x80091C04)(rdram, ctx);
+        }
+        *ctx = saved;
     }
     return released;
 }
@@ -247,7 +271,7 @@ extern "C" void rush2049_rewind_frame_begin(uint8_t* rdram) {
     }
 }
 
-extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram) {
+extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) {
     if (read_word(rdram, game_state_addr) != 0x00400000) {
         return;  // menus draw here too
     }
@@ -287,7 +311,7 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram) {
         return;
     }
     if (frames_back > 0) {
-        int released = release_orphaned_sounds(rdram);
+        int released = release_orphaned_sounds(rdram, ctx);
         fprintf(stderr, "[rewind] back %u frames, %zu frames (%zu MB) left, %d lost sounds released\n", frames_back,
             history.size(), history_bytes >> 20, released);
         frames_back = 0;
