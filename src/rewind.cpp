@@ -266,6 +266,14 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram) {
         if (saved.empty()) {
             uint32_t lo = saved_lo;
             for (Range r : not_saved) {
+                if (const char* e = std::getenv("REWIND_EXTRA")) {  // TEMP: save these too
+                    char hex[16];
+                    snprintf(hex, sizeof(hex), "%08X", r.lo);
+                    if (strstr(e, hex)) {
+                        fprintf(stderr, "[trace] saving %08X-%08X too\n", r.lo, r.hi);
+                        continue;
+                    }
+                }
                 saved.push_back({ lo - 0x80000000u, r.lo - 0x80000000u });
                 lo = r.hi;
             }
