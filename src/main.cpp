@@ -67,7 +67,7 @@
 #include "SDL_syswm.h"
 #endif
 
-const std::string version_string = "0.1.26";
+const std::string version_string = "0.1.27";
 
 template<typename... Ts>
 void exit_error(const char* str, Ts ...args) {
@@ -717,8 +717,9 @@ int main(int argc, char** argv) {
 #endif
     rush2049::register_mod_exports();
 
-    // Until the config loads; the Controllers option sets it then (src/config.cpp).
-    recompinput::players::set_single_player_mode(true);
+    // The Controllers option's default, Per Player (src/config.cpp): its change callback sets it when a settings file
+    // loads, and with none yet, on the first launch, no callback runs.
+    recompinput::players::set_single_player_mode(false);
 
     rush2049::init_config();
 
