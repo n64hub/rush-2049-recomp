@@ -148,6 +148,18 @@ namespace {
     };
     const std::string level_of_detail_option = "level_of_detail";
 
+    // src/draw_distance.cpp says what the game culls by.
+    enum class SceneryCulling {
+        Original,
+        Off,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> scenery_culling_options = {
+        {SceneryCulling::Original, "Original", "Original"},
+        {SceneryCulling::Off, "Off", "Off"},
+    };
+    const std::string scenery_culling_option = "scenery_culling";
+
     enum class SplitScreenRatio {
         Expand,
         Original,
@@ -468,6 +480,24 @@ void rush2049::init_config() {
         [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             static constexpr float scale[] = { 1.0f, 4.0f, 1e30f };
             rush2049::set_level_of_detail(scale[std::get<uint32_t>(cur_value)]);
+        });
+
+    graphics.add_enum_option(
+        scenery_culling_option,
+        "Scenery Culling",
+        "The original game leaves out the scenery it reckons can't be seen from the stretch of road you are on, so "
+        "buildings, signs and roadside pieces pop in and out as you drive from one stretch into the next, some of "
+        "them close to the car."
+        "<br/>"
+        "<b>Off:</b> all of the track's scenery is drawn wherever you are, and only <recomp-color primary>Draw "
+        "Distance</recomp-color> decides how far.",
+        scenery_culling_options,
+        SceneryCulling::Off
+    );
+    // Called on load too, and while the menu previews a change.
+    graphics.add_option_change_callback(scenery_culling_option,
+        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            rush2049::set_scenery_culling(static_cast<SceneryCulling>(std::get<uint32_t>(cur_value)) == SceneryCulling::Original);
         });
 
     graphics.add_enum_option(

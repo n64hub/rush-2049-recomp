@@ -50,6 +50,9 @@ option has an Original value that runs the game as it shipped.
   backdrops of far hills and buildings stay at their own distance instead of cutting into the scenery in front of
   them, and models keep their detailed versions four times as far out, so curves stay round and small details stay
   in view.
+- **No scenery culling**: the whole track's scenery is drawn wherever you are. The game left out what it reckoned
+  couldn't be seen from the stretch of road you were on, so buildings, walls and signs popped in and out as you
+  drove from one stretch into the next, some of them a few car lengths away.
 - **Enhanced audio**: MusyX music and sound effects are mixed at 44.1 kHz with a better interpolator instead of the
   game's 22.05 kHz mix, loud peaks are softly limited instead of clipping, and playback no longer skips or drops
   out when the audio output falls behind.
@@ -89,6 +92,7 @@ shipped, set every Original value:
 | Widescreen menus | Menu Aspect Ratio | `graphics.json` `menu_ratio` | `"Expand"` (up to about 21:9; needs Aspect Ratio at Expand) | `"Original"` (4:3, pillarboxed) |
 | Draw distance | Draw Distance | `graphics.json` `draw_distance` | `"Far"` (4×; `"Farthest"` is 16×) | `"Original"` |
 | Model detail | Level of Detail | `graphics.json` `level_of_detail` | `"High"` (4× the distances; `"Highest"`: always the most detailed) | `"Original"` |
+| No scenery culling | Scenery Culling | `graphics.json` `scenery_culling` | `"Off"` | `"Original"` |
 | Rendering resolution | Resolution | `graphics.json` `res_option` | `"Auto"` (window size) | `"Original"` (320×240) |
 | Anti-aliasing | MS Anti-Aliasing | `graphics.json` `msaa_option` | `"MSAA2X"` | `"None"` |
 | Hi-res menu and HUD text | Hi-res Font | `graphics.json` `hires_font` | `"On"` | `"Off"` |
