@@ -8,6 +8,9 @@ What has been tried or measured and dropped, with why.
 - Fixing the street lamp drawn behind the sailboats' sails at Track 1's start. One scenery display list draws the lamps
   (a textured quad each) and then the boats, all in render mode C8104A50 (Z compare, no Z update), so a sail drawn
   after a lamp passes its depth test and covers the pole. That is the game's own order, and an N64 does the same.
+- Drawing every scenery object from everywhere (each track's visibility table, func_8009EBC0) against pop-in: the
+  table hides only what can't be seen from the camera's stretch of road, and frames held at 78 crossings on tracks 1-6
+  look the same with it off. `src/draw_distance.cpp` has the table and what else does and doesn't hide scenery.
 - Caching texture hashes while TMEM is untouched: only 8% of hashes repeat without a TMEM change.
 - Merging or batching RT64's draws to cut the 240p floor (`start_gpu_profiler`'s table in `src/main.cpp`). Only ~5% of
   draws repeat the one before exactly; merging every run that shares a pipeline (wrong textures, timing only) halves
