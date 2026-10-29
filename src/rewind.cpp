@@ -25,6 +25,8 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <string>
+#include <cstdlib>
 #include <vector>
 
 #include "recomp.h"
@@ -281,6 +283,41 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram) {
     }
     if (read_word(rdram, race_clock_addr) == read_word(shadow.data(), race_clock_addr)) {
         return;  // no race time has passed
+    }
+    if (std::getenv("REWIND_TRACE")) {  // TEMP diagnostic
+        static std::vector<uint8_t> prev;
+        static int frame = 0;
+        static bool was_held = false;
+        bool held = rewind_held();
+        if (held != was_held) {
+            frame = 0;
+            was_held = held;
+        }
+        std::vector<Range> unsaved = { { 0x80000000, 0x80000400 }, { 0x8002C5E0, 0x80086A50 } };
+        for (Range r : not_saved) {
+            if (r.lo < 0x801613F0) unsaved.push_back(r);
+        }
+        if (prev.empty()) prev.assign(rdram, rdram + 0x00800000);
+        if (frame++ < 4) {
+            fprintf(stderr, "[trace] %s frame %d clock %08X\n", held ? "HELD" : "race", frame, read_word(rdram, race_clock_addr));
+            for (Range r : unsaved) {
+                std::string line;
+                int n = 0;
+                for (uint32_t a = r.lo; a < r.hi; a += 4) {
+                    uint32_t o = a - 0x80000000u;
+                    uint32_t now = *(uint32_t*)(rdram + o), was = *(uint32_t*)(prev.data() + o);
+                    if (now != was) {
+                        if (n++ < 12) {
+                            char b[64];
+                            snprintf(b, sizeof(b), " %08X:%08X->%08X", a, was, now);
+                            line += b;
+                        }
+                    }
+                }
+                if (n > 0) fprintf(stderr, "[trace]  %08X-%08X %d words%s\n", r.lo, r.hi, n, line.c_str());
+            }
+        }
+        memcpy(prev.data(), rdram, 0x00800000);
     }
     if (rewind_held()) {
         step_back(rdram);
