@@ -22,4 +22,5 @@ rt64-0005              every slot of the texture set holds a live texture: the b
                        and an evicted texture's, which eviction marks changed (a tile whose texture missed the cache
                        read slot 0, never written or left on a deleted texture)
 rt64-0006              a fill rect's clear clamped to its target (a rect ending on the scissor's edge is a pixel wider)
+rt64-0007              the workload queue's size set by the game (WORKLOAD_QUEUE_SIZE on the rt64 target); the page's is 16
 ```
