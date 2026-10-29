@@ -18,11 +18,14 @@ the game.
 RT64's render to RAM (each frame drawn again at the N64's resolution and read back into RDRAM) is off by default, on the
 desktop too: the Copy Frames to RAM option in `src/config.cpp` says why, `headless/main.cpp` what it costs.
 
-Scenery Culling isn't offered in a browser, which keeps the game's culling (`src/config.cpp`): with it off, the page
-ran out of its 1536 MB heap (N64Recomp-browser's `frontend/CMakeLists.txt`, `INITIAL_MEMORY`, never grown) as the
-attract race handed over to the title screen. With the culling on, the heap already goes from about 700 MB in the race
-to about 1180 MB at that hand-over; with it off it climbed about 300 MB a second from there. The desktop game holds
-steady through it either way.
+RT64 keeps a queue of workloads (one per RSP task the game ends a frame with), each holding the buffers its biggest
+frame took, and on WebGPU every upload buffer has a copy of its own in the heap. The web forks keep 64 for games that
+draw a frame in many; this game draws a race frame in one and the title screen's in up to 4, so its page keeps 16
+(`CMakeLists.txt`, `runtime-patches/rt64-0007`). With 64 the attract race took the heap from about 700 MB to about
+1180 MB, and with Scenery Culling Off to about 2270 MB, past the page's 1536 MB (N64Recomp-browser's
+`frontend/CMakeLists.txt`, `INITIAL_MEMORY`, never grown); with 16, about 790 and 1070 MB (`tools/heap_probe.js`,
+Chrome uncapped at 3840x2000). Off also draws about a third fewer frames a second on the page (155-167 presents
+against Original's 233 on an RTX 2070, uncapped at 3840x2000), so a browser starts the option at Original.
 
 In a browser, Game Frame Rate's 60 holds the game to 30 while the device can't keep 60 up, and tries 60 again now and
 then: on a phone that gave every frame two drawn, where 60 drew few between them. `src/frame_rate.cpp`'s header says

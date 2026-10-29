@@ -93,6 +93,11 @@ if (EMSCRIPTEN)
 endif()
 
 target_include_directories(rt64 PRIVATE ${CMAKE_BINARY_DIR}/rt64/src)
+if (EMSCRIPTEN)
+    # RT64's queue of workloads on the page: 16, not the 64 the web forks keep for games that draw a frame in many
+    # (runtime-patches/rt64-0007, docs/web.md). The game draws a race frame in one and the title screen's in up to 4.
+    target_compile_definitions(rt64 PUBLIC WORKLOAD_QUEUE_SIZE=16)
+endif()
 
 # RecompiledFuncs: N64Recomp's output (run it on us.toml first).
 add_library(RecompiledFuncs STATIC)

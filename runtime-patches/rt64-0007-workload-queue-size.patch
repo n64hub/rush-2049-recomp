@@ -1,0 +1,16 @@
+diff --git a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
+index d00667f..267ae47 100644
+--- a/src/hle/rt64_workload_queue.h
++++ b/src/hle/rt64_workload_queue.h
+@@ -25,7 +25,10 @@
+ #   include "render/rt64_raytracing_shader_cache.h"
+ #endif
+ 
+-#if RT64_GAME_FRAME_WORKLOADS
++#if defined(WORKLOAD_QUEUE_SIZE)
++// Set by the game on the rt64 target, PUBLIC so that everything including this header agrees: a game that draws each
++// frame in one workload needs far fewer than the 64 below.
++#elif RT64_GAME_FRAME_WORKLOADS
+ // A game frame of several workloads is drawn once it has ended, and the one before it stays out of the writer's reach
+ // until then (WorkloadQueue::renderThreadLoop): the queue holds the frame before, the frame and the game's next one.
+ // A game can draw a frame in several, as Jet Force Gemini draws each of its frames in two (its shadows, then the
