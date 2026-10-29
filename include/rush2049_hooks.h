@@ -51,6 +51,9 @@ void rush2049_far_matrix_end(uint8_t* rdram, gpr matrix);
 float rush2049_far_clamp_distance(float d);
 void rush2049_far_clamp_fit(recomp_context* ctx);
 
+/* Scenery Culling (src/draw_distance.cpp, us.toml): a word of the scenery visibility mask func_8009EBC0 tests. */
+gpr rush2049_scenery_mask(gpr mask);
+
 /* In busy-wait loops (us.toml): let the next ready game thread run, whatever its priority (src/spin_yield.cpp). */
 void rush2049_spin_yield(uint8_t* rdram);
 
