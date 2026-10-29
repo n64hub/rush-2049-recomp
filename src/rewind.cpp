@@ -11,6 +11,9 @@
 // animates a scene node from the frame's logic, stepping its model number (0x80130EA8) through the animation and to
 // none (0xFFFF) at its end; with that word not saved, a rewind put the node back in the scene with no model, and
 // drawing it (func_8009C8F0) read the model table out of bounds and crashed.
+// Nor leave out part of one thing: func_800C0AC0 plays a keyframed animation, the checkered flags over the start line
+// among them, from a state whose time (0x80138A44) was saved and whose keyframe and the rest (0x80138A4C-0x80138A5C)
+// were not, so while Rewind was held the time went back and the keyframe kept going, and the flags juddered.
 //
 // A copy of that memory (the shadow) holds it as of the last frame saved. Each frame, the 64-byte pieces that changed
 // since are stored with their old contents as that frame's record, and the shadow is updated. A frame while Rewind is
@@ -59,7 +62,6 @@ constexpr Range not_saved[] = {
     { 0x80125338, 0x80126128 },  // matrices for the display list
     { 0x8012A0E8, 0x8012AC28 },  // the same
     { 0x8012E608, 0x8012E6D4 },
-    { 0x80138A4C, 0x80138A5C },
     { 0x8013FED0, 0x8013FED4 },
     { 0x801403C0, 0x80140414 },
     { 0x80142728, 0x80143CF8 },  // the sound thread, its queues, command pool and tables
