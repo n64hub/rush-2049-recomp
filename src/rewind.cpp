@@ -306,6 +306,24 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram) {
             if (r.lo < 0x801613F0) unsaved.push_back(r);
         }
         if (prev.empty()) prev.assign(rdram, rdram + 0x00800000);
+        if (const char* dir = std::getenv("REWIND_DUMP")) {
+            static int idle_dumps = 0, held_dumps = 0;
+            float clock;
+            memcpy(&clock, rdram + (race_clock_addr - 0x80000000u), 4);
+            const char* kind = nullptr;
+            int k = 0;
+            if (!held && clock > 12.29f && idle_dumps < 14) kind = "idle", k = idle_dumps++;
+            if (held && clock < 12.56f && held_dumps < 14) kind = "held", k = held_dumps++;
+            if (kind) {
+                char path[512];
+                snprintf(path, sizeof(path), "%s/%s%d.bin", dir, kind, k);
+                if (FILE* f = fopen(path, "wb")) {
+                    fwrite(rdram, 1, 0x00800000, f);
+                    fclose(f);
+                }
+                fprintf(stderr, "[trace] dumped %s clock %f\n", path, clock);
+            }
+        }
         if (frame++ < 4) {
             fprintf(stderr, "[trace] %s frame %d clock %08X\n", held ? "HELD" : "race", frame, read_word(rdram, race_clock_addr));
             for (Range r : unsaved) {
