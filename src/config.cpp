@@ -482,6 +482,7 @@ void rush2049::init_config() {
             rush2049::set_level_of_detail(scale[std::get<uint32_t>(cur_value)]);
         });
 
+#ifndef __EMSCRIPTEN__
     graphics.add_enum_option(
         scenery_culling_option,
         "Scenery Culling",
@@ -499,6 +500,11 @@ void rush2049::init_config() {
         [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             rush2049::set_scenery_culling(static_cast<SceneryCulling>(std::get<uint32_t>(cur_value)) == SceneryCulling::Original);
         });
+#else
+    // Not offered in a browser, which keeps the game's culling: with it off the page ran out of its 1536 MB heap as
+    // the attract race handed over to the title screen (docs/web.md).
+    rush2049::set_scenery_culling(true);
+#endif
 
     graphics.add_enum_option(
         split_screen_ratio_option,

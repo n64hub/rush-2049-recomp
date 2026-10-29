@@ -18,6 +18,12 @@ the game.
 RT64's render to RAM (each frame drawn again at the N64's resolution and read back into RDRAM) is off by default, on the
 desktop too: the Copy Frames to RAM option in `src/config.cpp` says why, `headless/main.cpp` what it costs.
 
+Scenery Culling isn't offered in a browser, which keeps the game's culling (`src/config.cpp`): with it off, the page
+ran out of its 1536 MB heap (N64Recomp-browser's `frontend/CMakeLists.txt`, `INITIAL_MEMORY`, never grown) as the
+attract race handed over to the title screen. With the culling on, the heap already goes from about 700 MB in the race
+to about 1180 MB at that hand-over; with it off it climbed about 300 MB a second from there. The desktop game holds
+steady through it either way.
+
 In a browser, Game Frame Rate's 60 holds the game to 30 while the device can't keep 60 up, and tries 60 again now and
 then: on a phone that gave every frame two drawn, where 60 drew few between them. `src/frame_rate.cpp`'s header says
 how and what it measured.

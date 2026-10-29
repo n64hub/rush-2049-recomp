@@ -55,7 +55,7 @@
 // which is what a player reported on Track 1 (GitHub #267): scenery close to the car coming and going as they roll
 // back and forth over one spot. Off (us.toml, at 0x8009EFEC) treats every bit as set, so every object is drawn from
 // every stretch and the limits alone decide. While the byte at 0x8014061A is set, the function disables every object
-// whatever its bit; that is kept.
+// whatever its bit; that is kept. A browser keeps the table: Off ran the page out of its heap (docs/web.md).
 //
 // Besides these limits and that table, func_8009DD88 skips a node only by its per-camera hidden bit (0x100 << camera
 // in its flags, func_8009DD18: hidden unless a child is visible) and its disable bit. The game sets and clears them
@@ -73,10 +73,11 @@
 
 namespace {
 
-// Set from the settings menu, read on the game thread.
-std::atomic<float> distance_scale{ 1.0f };
-std::atomic<float> detail_scale{ 1.0f };
-std::atomic<bool> scenery_culling{ true };
+// Set from the settings menu, read on the game thread. They start at the options' defaults (config.cpp): with no
+// settings file yet, the first launch saves the defaults and calls no option's change callback.
+std::atomic<float> distance_scale{ 4.0f };
+std::atomic<float> detail_scale{ 4.0f };
+std::atomic<bool> scenery_culling{ false };
 
 // What func_8009D99C or func_8009D45C divided the node's offset by, from the start of the call to its end.
 int matrix_divisor = 1;
