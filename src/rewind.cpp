@@ -58,6 +58,7 @@ constexpr uint32_t game_state_addr = 0x801174B4;  // the frame loop's state bits
 constexpr uint32_t race_clock_addr = 0x801543CC;  // float, written by the tick
 constexpr uint32_t sound_count_addr = 0x80110254; // the sound manager's count of sounds started (not saved)
 constexpr uint32_t sound_shift_addr = 0x801460F8; // a sound's ID is that count shifted left by this, or a slot
+constexpr uint32_t car_sounds_addr = 0x80140420;  // each car's looping sounds, 0x54 bytes a car (func_800E0050)
 constexpr uint32_t ticks_addr = 0x8002EB64;       // the timer's count of 60ths of a second, always running
 constexpr uint32_t deadline_addr = 0x8002EB9C;    // the count at which its countdown runs out
 constexpr uint32_t start_addr = 0x8002EBA0;       // the count its game time is measured from
@@ -248,19 +249,40 @@ void step_back(uint8_t* rdram) {
     frames_back++;
 }
 
+// Each car's engine, two loops (samples 102 and 115) whose volumes cross-fade with its speed, is kept in four slots of
+// { ID, volume, pitch, ... } after a word of its own, and func_800E0050 hands a slot's sound a new volume or pitch
+// only when it differs from the one the slot kept. Those copies are the race's and go back with it, but the sound
+// keeps what a tick while Rewind was held gave it: a layer the replayed stretch turned up stayed at that volume when
+// the rewound race had it at 0, as the race, its copy already 0, never sent the 0. After a step back every slot in
+// use gets the copies the game gives a slot that hasn't sent yet (-2.0), so the next tick sends the rewound race's
+// volume and pitch.
+void resend_car_sounds(uint8_t* rdram) {
+    constexpr uint32_t unsent = 0xC0000000;  // -2.0f
+    for (uint32_t car = 0; car < 8; car++) {
+        for (uint32_t slot = car_sounds_addr + car * 0x54 + 4, n = 0; n < 4; slot += 0x14, n++) {
+            if (read_word(rdram, slot) != 0xFFFFFFFF) {
+                write_word(rdram, slot + 4, unsent);
+                write_word(rdram, slot + 8, unsent);
+            }
+        }
+    }
+}
+
 // The sound manager stays live, and the race knows its sounds only by the ID the manager handed out. A sound started
-// in the stretch that was rewound, or by a tick while Rewind was held, is one the race no longer knows of. One-shots
-// end by themselves, but a loop plays or waits for a voice for the rest of the race, owner or not, and the race starts
-// another when it gets there again: with Rewind used a lot they filled the manager's 80 sounds, and the next sound the
-// race started (func_80092278 takes one off the free list unchecked) crashed. The manager's count of sounds started
-// isn't saved, and each frame saved keeps its value, so when Rewind is let go every loop started between the frame it
-// went back to and the last step back is ended; those the ticks since started are the race's again.
+// in the stretch that was rewound, or by a tick while Rewind was held, is one the race no longer knows of. Some end by
+// themselves, but a loop plays or waits for a voice for the rest of the race, owner or not, and so does a sound the
+// race ends itself: the squeal of a skid (sample 36) isn't a loop by the flag at +0x19, which comes from the sample's
+// entry in the table at 0x8011F5CC, yet one started while Rewind was held played on through the race and the menus
+// after it. With Rewind used a lot they filled the manager's 80 sounds, and the next sound the race started
+// (func_80092278 takes one off the free list unchecked) crashed. The manager's count of sounds started isn't saved,
+// and each frame saved keeps its value, so when Rewind is let go every sound started between the frame it went back
+// to and the last step back is ended; those the ticks since started are the race's again.
 //
 // One waiting for a voice is made one that times out, and the sound thread frees it at its next update: only flags
 // change, no links, so it doesn't matter where the sound thread was stopped. One that has a voice is stopped the way
 // the race stops a sound (func_80091C04, which queues the sound thread a command that stops the voice and frees the
 // sound): the sound thread counts a timeout only while a sound waits, and frees a playing one only when its voice
-// ends, which a looping voice never does, so a tire squeal started while Rewind was held played to the end of the race.
+// ends, which a looping voice never does.
 // The IDs are gathered first: the stop waits for the sound manager's lock, and the sound thread can change the lists
 // while it waits.
 int release_orphaned_sounds(uint8_t* rdram, recomp_context* ctx) {
@@ -275,7 +297,7 @@ int release_orphaned_sounds(uint8_t* rdram, recomp_context* ctx) {
             // The count goes back to 1 when it runs out, which takes days of play.
             const bool lost = stepped_sounds >= shadow_sounds ? started >= shadow_sounds && started < stepped_sounds
                                                               : started >= shadow_sounds || started < stepped_sounds;
-            if (!lost || rdram[(node + 0x19 - 0x80000000u) ^ 3] == 0) {
+            if (!lost) {
                 continue;
             }
             if (head == playing) {
@@ -367,6 +389,7 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     }
     if (rewind_held()) {
         step_back(rdram);
+        resend_car_sounds(rdram);
         return;
     }
     if (frames_back > 0) {
