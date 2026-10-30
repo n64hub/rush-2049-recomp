@@ -3,9 +3,9 @@
 // every element of its s15.16 matrix but the translation divided by the same number; a node past the reach is left to
 // the game's own test. The far builder's depth clamp reaches 1600 times the setting, and an offset it leaves 2048 or more
 // out is divided down with the rotation's scale and w. A prim depth moves as the far plane moves a vertex's depth.
-// Scenery Culling's Reduced ORs a stretch's visibility mask with its neighbours', wrapping at the ends.
+// Scenery Culling's Reduced ORs the visibility masks of the stretches whose boxes are near the camera, numbered as the
+// game's list numbers them.
 
-#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -157,37 +157,55 @@ int main() {
     check(rush2049_draw_distance_prim_depth(0xFFFF) == 0xFFFF, "4x: a depth past 15 bits is left alone",
         (float)rush2049_draw_distance_prim_depth(0xFFFF));
 
-    // Scenery Culling: a table of 6 stretches whose records each let through only their own object (bit i of the first
-    // word), and the stack func_8009EBC0 leaves at 0x8009EF88: the stretch at 0x78, the last stretch's at 0x84.
-    constexpr uint32_t table_addr = 0x80001400, stack_addr = 0x80001800;
-    auto ram_word = [&rdram](uint32_t addr) -> uint32_t& {
-        return *reinterpret_cast<uint32_t*>(rdram.data() + (addr - 0x80000000));
+    // Scenery Culling: four boxes 200 units square, centred along x at 0, 800, 400 and 1200, listed in the order 0, 2,
+    // 1, 3 (so the list numbers them by x), and a table whose record n lets through only object n.
+    std::vector<uint8_t> ram(0x150000);
+    auto ram_word = [&ram](uint32_t addr) -> uint32_t& {
+        return *reinterpret_cast<uint32_t*>(ram.data() + (addr - 0x80000000));
     };
-    for (int i = 0; i < 6; i++) {
+    auto ram_float = [&ram_word](uint32_t addr, float f) { std::memcpy(&ram_word(addr), &f, 4); };
+    constexpr uint32_t boxes_addr = 0x80010000, table_addr = 0x80011000, stack_addr = 0x80012000,
+        camera_addr = 0x80013000;
+    const float centre[] = { 0.0f, 800.0f, 400.0f, 1200.0f };
+    const int16_t next[] = { 2, 3, 1, -1 };
+    ram_word(0x80149B80) = boxes_addr;
+    for (int i = 0; i < 4; i++) {
+        uint32_t box = boxes_addr + 0x68 * i;
+        ram_float(box + 0x34, centre[i]);
+        ram_float(box + 0x3C, 0.0f);
+        ram_float(box + 0x50, -100.0f);
+        ram_float(box + 0x5C, 100.0f);
+        ram_float(box + 0x58, -100.0f);
+        ram_float(box + 0x64, 100.0f);
+        ram_word(box + 0x44) = (uint32_t)(uint16_t)next[i] << 16;
         for (int w = 0; w < 4; w++) {
             ram_word(table_addr + 16 * i + 4 * w) = w == 0 ? 1u << i : 0;
         }
     }
-    // The first word of the mask the game then tests, or 0xDEAD if its second word is not 0.
-    auto shown = [&](int reach, int32_t stretch, int32_t last) {
+    // The first word of the mask the game then tests for a camera at x, in stretch `stretch`; 0xDEAD if the second
+    // word isn't 0.
+    auto shown = [&](float reach, float x, int32_t stretch) {
         rush2049::set_scenery_culling(reach);
+        ram_float(camera_addr, x);
+        ram_float(camera_addr + 8, 0.0f);
+        rush2049_scenery_camera(ram.data(), (gpr)(int32_t)camera_addr);
         recomp_context ctx{};
         ctx.r29 = (gpr)(int32_t)stack_addr;
-        ctx.r10 = (gpr)(int32_t)(table_addr + 16 * std::max(stretch, 0));
+        ctx.r10 = (gpr)(int32_t)(stretch < 0 ? table_addr : table_addr + 16 * stretch);
         ram_word(stack_addr + 0x78) = (uint32_t)stretch;
-        ram_word(stack_addr + 0x84) = (uint32_t)last;
-        rush2049_scenery_stretch(rdram.data(), &ctx);
+        rush2049_scenery_stretch(ram.data(), &ctx);
         uint32_t first = (uint32_t)rush2049_scenery_mask((gpr)(int32_t)ram_word((uint32_t)ctx.r10), 0);
         uint32_t second = (uint32_t)rush2049_scenery_mask(0, 4);
         return second ? 0xDEADu : first;
     };
-    check(shown(0, 2, 5) == 0x04, "Original: a stretch's own mask", shown(0, 2, 5));
-    check(shown(2, 2, 5) == 0x1F, "Reduced: two stretches either side", shown(2, 2, 5));
-    check(shown(2, 0, 5) == 0x37, "Reduced: the ends wrap", shown(2, 0, 5));
-    check(shown(2, -1, 5) == 0x01, "Reduced: no stretch holds the camera, the game's mask", shown(2, -1, 5));
-    check(shown(2, 0, 0) == 0x01, "Reduced: one stretch, its own mask", shown(2, 0, 0));
-    check(shown(2, 1, 2) == 0x07, "Reduced: three stretches, each once", shown(2, 1, 2));
-    rush2049::set_scenery_culling(-1);
+    check(shown(0.0f, 0.0f, 0) == 0x1, "Original: the stretch's own mask", shown(0.0f, 0.0f, 0));
+    check(shown(500.0f, 0.0f, 0) == 0x3, "Reduced: the stretches within 500 units, numbered by the list",
+        shown(500.0f, 0.0f, 0));
+    check(shown(500.0f, 550.0f, 1) == 0x7, "Reduced: to the edge of each box", shown(500.0f, 550.0f, 1));
+    check(shown(500.0f, 3000.0f, 3) == 0x8, "Reduced: none near, the stretch's own mask", shown(500.0f, 3000.0f, 3));
+    check(shown(500.0f, 0.0f, -1) == 0x1, "Reduced: no stretch holds the camera, the game's mask",
+        shown(500.0f, 0.0f, -1));
+    rush2049::set_scenery_culling(-1.0f);
     check(rush2049_scenery_mask(0, 0) == (gpr)(int32_t)-1, "Off: every bit set", 0);
 
     printf(failures ? "%d failed\n" : "all passed\n", failures);

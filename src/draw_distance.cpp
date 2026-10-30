@@ -58,14 +58,19 @@
 // whatever its bit; that is kept. In a browser the option starts at Original: Off costs the page a third of its frames
 // (docs/web.md).
 //
-// Reduced, between them, ORs the stretch's mask with those of the two stretches before it and the two after it along
-// the road, so what pops in as you cross into a stretch was let through two stretches back. A track has as many
-// stretches as scenery objects (117 on Track 1), and its records are in road order: the masks of neighbouring
-// stretches share about 60% of their objects, those half a lap apart about 2%. Its stretch is the box's place in the
-// list (0x78 on the stack; the last one's at 0x84), and its record the one func_8009EBC0 has picked (t2, at 0x8009EF88,
-// us.toml); the ends wrap, as a lap does. Off the table (no box holds the camera, or a track with one record),
-// Reduced leaves the mask alone. Averaged over Track 1's stretches it lets through 44 objects where Original lets
-// through 24.
+// Reduced, between them, also lets through what every stretch within 500 units of the camera (in x and z, to the edge
+// of its box) lets through, so what pops in as you cross into a stretch was let in 500 units before you got there. A
+// track has as many stretches as scenery objects (117 on Track 1), and object n mostly sits by stretch n: 109 of Track
+// 1's records let their own object through. On the camera's path through attract races on Tracks 1 and 2, with each
+// object put at its own stretch's box, Original let 12 and 3 objects in within 300 units of the camera and Reduced
+// none, while it let through 46 and 33 objects a frame where Original lets through 26 and 22 and Off all 117. The
+// boxes are the list func_8009EBC0 walks (a box's centre at +0x34, +0x3C, its extent around that from +0x50 to +0x5C
+// in x and +0x58 to +0x64 in z, +0x44 the next box's index), whose order numbers the records, and the camera's
+// position is the one it is given (a1, us.toml); the record it picked is t2 at 0x8009EF88. The list's order is not
+// the road's: a car crosses three to six boxes' numbers at a time, and the list jumps between parts of the track, so
+// "the next few stretches" is not a fixed distance along the road. Where no box holds the camera, or the table is off,
+// Reduced leaves the mask alone. In the attract race at 1600x1200 it drew 840 calls a frame where Original drew 670
+// and Off 1690, and held 59 fps where Off dropped to 45 (README, Performance).
 //
 // Besides these limits and that table, func_8009DD88 skips a node only by its per-camera hidden bit (0x100 << camera
 // in its flags, func_8009DD18: hidden unless a child is visible) and its disable bit. The game sets and clears them
@@ -75,9 +80,7 @@
 // (the node walker, the model draw and the matrix builders compare only distances), and the G_CULLDL the walker emits
 // with each node's bounding box is a no-op in RT64, so at a wide aspect ratio nothing is missing at the sides.
 
-#include <algorithm>
 #include <atomic>
-#include <cstdlib>
 #include <cmath>
 #include <cstring>
 
@@ -122,7 +125,6 @@ void rush2049::set_level_of_detail(float scale) {
 }
 
 void rush2049::set_scenery_culling(float reach) {
-    if (reach > 0.0f && getenv("RUSH2049_SCENERY_R")) reach = (float)atof(getenv("RUSH2049_SCENERY_R"));
     scenery_reach.store(reach, std::memory_order_relaxed);
 }
 
@@ -151,8 +153,6 @@ extern "C" gpr rush2049_draw_distance_prim_depth(gpr z) {
 extern "C" float rush2049_draw_distance_cull(float cull) {
     return cull * distance();
 }
-
-extern "C" void rush2049_scenery_log(uint8_t* rdram, recomp_context* ctx);
 
 extern "C" void rush2049_scenery_camera(uint8_t* rdram, gpr position) {
     const float* p = reinterpret_cast<const float*>(rdram + ((uint32_t)position - 0x80000000));
@@ -194,7 +194,6 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
         box = boxes + 0x68 * next;
     }
     reduced_valid = true;
-    rush2049_scenery_log(rdram, ctx);
 }
 
 extern "C" gpr rush2049_scenery_mask(gpr mask, gpr offset) {
@@ -265,42 +264,3 @@ extern "C" void rush2049_far_matrix_end(uint8_t* rdram, gpr matrix) {
     }
 }
 
-// TEMPORARY measurement: the boxes and scenery nodes of each track, then the camera and the stretch every call.
-#include <cstdio>
-#include <cstdlib>
-extern "C" void rush2049_scenery_log(uint8_t* rdram, recomp_context* ctx) {
-    static FILE* out = fopen("C:/Users/Alek/AppData/Local/Temp/hs-scratch/17933393936420000/path.txt", "a");
-    static uint32_t dumped = 0;
-    static int calls = 0;
-    if (!out) return;
-    auto word = [rdram](uint32_t addr) { return *reinterpret_cast<const uint32_t*>(rdram + (addr - 0x80000000)); };
-    auto value = [&word](uint32_t addr) { uint32_t w = word(addr); float f; std::memcpy(&f, &w, 4); return f; };
-    int32_t stretch = (int32_t)word((uint32_t)ctx->r29 + 0x78);
-    uint32_t table = (uint32_t)ctx->r10 - 16 * stretch;
-    int track = (int)(int8_t)rdram[(0x8014978C ^ 3) - 0x80000000];
-    uint32_t boxes = word(0x80149B80);
-    if (boxes != dumped || calls % 600 == 0) {
-        dumped = boxes;
-        fprintf(out, "track %d table %08X\n", track, table);
-        uint32_t box = boxes;
-        for (int n = 0; n < 128; n++) {
-            fprintf(out, "box %d %.1f %.1f %.1f  %.1f %.1f %.1f %.1f %.1f %.1f\n", n, value(box + 0x34), value(box + 0x38),
-                value(box + 0x3C), value(box + 0x50), value(box + 0x54), value(box + 0x58), value(box + 0x5C),
-                value(box + 0x60), value(box + 0x64));
-            int16_t next = (int16_t)(word((box + 0x44) & ~3u) >> 16);
-            if (next < 0) break;
-            box = boxes + 0x68 * next;
-        }
-        int first = (int16_t)(word(0x80149D90) >> 16);
-        for (int j = 0; j < 128 && j < (int)rdram[((0x8011E748 + track) ^ 3) - 0x80000000]; j++) {
-            uint32_t node = 0x8012E700 + 0x44 * (first + j);
-            fprintf(out, "node %d", j);
-            for (int k = 0; k < 0x44; k += 4) fprintf(out, " %08X", word(node + k));
-            fprintf(out, "\n");
-        }
-    }
-    calls++;
-    fprintf(out, "cam %d %.1f %.1f %d\n", calls, camera_x, camera_z, stretch);
-    fflush(out);
-}
-static int stdout_unbuffered = (setvbuf(stdout, nullptr, _IONBF, 0), 0);
