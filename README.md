@@ -269,10 +269,10 @@ The defaults use about 4% of that card. Every interpolated frame is a full rende
 
 Draw Distance and Level of Detail at their defaults draw about 30% more a frame than at Original (770 draws instead
 of 590), most of it for Draw Distance; both at Original take about a fifth off drawing the geometry. Scenery Culling
-at its default (Off) draws about 2.5 times as many calls again in the attract race (1690 instead of 670), as every
-building and wall of the track is drawn wherever you are, and that is work for the CPU as much as the GPU: on a busy
-6-core PC the attract race drops from 60 fps to 45 with it. Reduced draws about a quarter more than Original (840
-calls) and kept 59 fps there, so on a weaker PC it is the one to try before Original.
+at its default (Off) draws every building and wall of the track that is in view wherever you are (what is behind the
+camera or off the sides is skipped, as on an N64): in the attract race about 840 calls a frame against Original's
+490, and 58 fps against 60 on a busy 6-core PC. That is work for the CPU as much as the GPU, so on a weaker PC that
+loses frames with Off, try Reduced (570 calls, 59 fps there) before Original.
 
 Nearly a third of the default frame's cost stays even at Resolution Original: mostly drawing the game's geometry
 (about 500 to 800 draws a frame), which costs about the same at any resolution, and drawing the finished frame into the
