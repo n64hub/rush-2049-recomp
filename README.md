@@ -54,10 +54,11 @@ option has an Original value that runs the game as it shipped.
   couldn't be seen from the stretch of road you were on, so buildings, walls and signs popped in and out as you
   drove from one stretch into the next, some of them a few car lengths away. On a weaker PC, Reduced draws only what
   can be seen from the stretches around you, so scenery comes in well ahead of the car for a fraction of the cost.
-- **See-through scenery in order**: trees, lamps, sails, glass and smoke are see-through pictures that the game draws
-  wherever they come in its list, so scenery behind one that happened to be drawn after it painted over it: a tree
-  vanished in front of some buildings and not others, and a boat's sail covered the street lamp in front of it. They
-  are now drawn after the rest of the scene, the farthest first.
+- **See-through scenery in order**: trees, lamps, sails and glass are see-through pictures that the game draws
+  wherever they come in its list, so solid scenery behind one that happened to be drawn after it painted over it: the
+  tree by the sculpture on Track 1 was half see-through against the track behind it. See-through scenery is now drawn
+  after the rest of the scene, so it shows over whatever solid is behind it. Two see-through things still cover each
+  other as the game drew them, so a boat's sail at Track 1's start still covers the street lamp in front of it.
 - **Enhanced audio**: MusyX music and sound effects are mixed at 44.1 kHz with a better interpolator instead of the
   game's 22.05 kHz mix, loud peaks are softly limited instead of clipping, and playback no longer skips or drops
   out when the audio output falls behind.

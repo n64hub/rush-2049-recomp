@@ -170,7 +170,7 @@ namespace {
 
     // RT64's see-through order (runtime-patches/rt64-0009, sortTranslucentCalls in its rt64_state.cpp). Sorted moves
     // the see-through draws made two display lists deep: the game's root list calls a list per scene node, which calls
-    // the node's model, while its effects (the player's car, flames, shadows, smoke) are called from the root list.
+    // the node's model, while its effects (the player's car, its flame, smoke) are called from the root list.
     enum class SeeThroughOrder {
         Original,
         Sorted,
@@ -540,12 +540,13 @@ void rush2049::init_config() {
     graphics.add_enum_option(
         see_through_order_option,
         "See-Through Order",
-        "Trees, lamps, sails, glass and smoke are see-through pictures, and the original game draws each one "
-        "wherever it comes in its list, so scenery behind one that is drawn after it covers it: a tree goes missing "
-        "in front of some buildings and not others, and a sail covers a street lamp in front of it."
+        "Trees, lamps, sails and glass are see-through pictures, and the original game draws each one wherever it "
+        "comes in its list, so solid scenery behind one that is drawn after it covers it: a tree goes missing in front "
+        "of some walls and not others."
         "<br/>"
-        "<b>Sorted:</b> see-through pictures are drawn after the rest of the scene, the farthest first, so each "
-        "shows in front of whatever is behind it.",
+        "<b>Sorted:</b> see-through scenery is drawn after the rest of the scene, so it shows over whatever solid is "
+        "behind it. Two see-through pictures still cover each other as in the original, and your car's flame and "
+        "the smoke are drawn as they were.",
         see_through_order_options,
         SeeThroughOrder::Sorted
     );

@@ -5,6 +5,14 @@ What has been tried or measured and dropped, with why.
 - AI upsampling (AudioSR) of the MusyX mix: inaudible in a headphone A/B. The mix is close to mono (L/R correlate
   0.99).
 - A headphone fold of the surround channel: the game only offers Stereo and Mono, and the channel reads 0.
+- Fixing the street lamp drawn behind the sailboats' sails at Track 1's start. One scenery display list draws the lamps
+  (a textured quad each) and then the boats, all in render mode C8104A50 (Z compare, no Z update), so a sail drawn
+  after a lamp passes its depth test and covers the pole; See-Through Order keeps two see-through draws in the game's
+  order, so it stays. Sorting the see-through draws by depth instead (each call by its triangles' mean screen depth,
+  and the triangles inside a call) turned the layers of an effect over: the exhaust flame's glow went under its core.
+  Moving the see-through draws that the root display list calls itself (the player's car, its flame and the flame's
+  trail, smoke and the other effects) took the flame's soft glow away and showed a hard dark quad under the car, so only those two
+  lists deep (scene nodes) move.
 - Caching texture hashes while TMEM is untouched: only 8% of hashes repeat without a TMEM change.
 - Merging or batching RT64's draws to cut the 240p floor (`start_gpu_profiler`'s table in `src/main.cpp`). Only ~5% of
   draws repeat the one before exactly; merging every run that shares a pipeline (wrong textures, timing only) halves
