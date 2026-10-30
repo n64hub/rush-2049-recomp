@@ -506,7 +506,7 @@ void rush2049::init_config() {
     // Called on load too, and while the menu previews a change.
     graphics.add_option_change_callback(scenery_culling_option,
         [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            static constexpr int reach[] = { 0, 2, -1 };
+            static constexpr float reach[] = { 0.0f, 500.0f, -1.0f };
             rush2049::set_scenery_culling(reach[std::get<uint32_t>(cur_value)]);
         });
 

@@ -77,7 +77,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <cmath>
+#include <cstring>
 
 #include "rush2049_game.h"
 #include "rush2049_hooks.h"
@@ -89,12 +91,13 @@ namespace {
 std::atomic<float> distance_scale{ 4.0f };
 std::atomic<float> detail_scale{ 4.0f };
 #ifdef __EMSCRIPTEN__
-std::atomic<int> scenery_reach{ 0 };
+std::atomic<float> scenery_reach{ 0.0f };
 #else
-std::atomic<int> scenery_reach{ -1 };
+std::atomic<float> scenery_reach{ -1.0f };
 #endif
 
-// Reduced: the mask of the stretch the camera is in, with its neighbours', while reduced_valid.
+// Reduced: where the camera is (x, z), and the masks of every stretch within reach of it, while reduced_valid.
+float camera_x = 0.0f, camera_z = 0.0f;
 uint32_t reduced_mask[4];
 bool reduced_valid = false;
 
@@ -118,7 +121,8 @@ void rush2049::set_level_of_detail(float scale) {
     detail_scale.store(scale, std::memory_order_relaxed);
 }
 
-void rush2049::set_scenery_culling(int reach) {
+void rush2049::set_scenery_culling(float reach) {
+    if (reach > 0.0f && getenv("RUSH2049_SCENERY_R")) reach = (float)atof(getenv("RUSH2049_SCENERY_R"));
     scenery_reach.store(reach, std::memory_order_relaxed);
 }
 
@@ -148,35 +152,57 @@ extern "C" float rush2049_draw_distance_cull(float cull) {
     return cull * distance();
 }
 
+extern "C" void rush2049_scenery_log(uint8_t* rdram, recomp_context* ctx);
+
+extern "C" void rush2049_scenery_camera(uint8_t* rdram, gpr position) {
+    const float* p = reinterpret_cast<const float*>(rdram + ((uint32_t)position - 0x80000000));
+    camera_x = p[0];
+    camera_z = p[2];
+}
+
 extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
     reduced_valid = false;
-    int reach = scenery_reach.load(std::memory_order_relaxed);
+    float reach = scenery_reach.load(std::memory_order_relaxed);
     auto word = [rdram](uint32_t addr) { return *reinterpret_cast<const uint32_t*>(rdram + (addr - 0x80000000)); };
+    auto value = [&word](uint32_t addr) { uint32_t w = word(addr); float f; std::memcpy(&f, &w, 4); return f; };
     int32_t stretch = (int32_t)word((uint32_t)ctx->r29 + 0x78);
-    int32_t count = (int32_t)word((uint32_t)ctx->r29 + 0x84) + 1;
-    if (reach <= 0 || stretch < 0 || stretch >= count || count < 2) {
+    uint32_t boxes = word(0x80149B80);
+    if (reach <= 0.0f || stretch < 0 || boxes == 0) {
         return;
     }
-    uint32_t table = (uint32_t)ctx->r10 - 16 * stretch;
-    reach = std::min(reach, (count - 1) / 2);
+    uint32_t record = (uint32_t)ctx->r10;
+    uint32_t table = record - 16 * stretch;
     for (int w = 0; w < 4; w++) {
-        reduced_mask[w] = 0;
+        reduced_mask[w] = word(record + 4 * w);
     }
-    for (int i = stretch - reach; i <= stretch + reach; i++) {
-        uint32_t record = table + 16 * ((i + count) % count);
-        for (int w = 0; w < 4; w++) {
-            reduced_mask[w] |= word(record + 4 * w);
+    // The boxes in the game's order, which numbers the records; each is its centre (+0x34, +0x3C) and its extent
+    // around it (+0x50 to +0x5C in x, +0x58 to +0x64 in z), and +0x44 the next box's index, negative for the last.
+    uint32_t box = boxes;
+    for (int n = 0; n < 128; n++) {
+        float dx = camera_x - value(box + 0x34), dz = camera_z - value(box + 0x3C);
+        float ex = std::fmax(0.0f, std::fmax(value(box + 0x50) - dx, dx - value(box + 0x5C)));
+        float ez = std::fmax(0.0f, std::fmax(value(box + 0x58) - dz, dz - value(box + 0x64)));
+        if (ex * ex + ez * ez <= reach * reach) {
+            for (int w = 0; w < 4; w++) {
+                reduced_mask[w] |= word(table + 16 * n + 4 * w);
+            }
         }
+        int16_t next = (int16_t)(word((box + 0x44) & ~3u) >> 16);
+        if (next < 0) {
+            break;
+        }
+        box = boxes + 0x68 * next;
     }
     reduced_valid = true;
+    rush2049_scenery_log(rdram, ctx);
 }
 
 extern "C" gpr rush2049_scenery_mask(gpr mask, gpr offset) {
-    int reach = scenery_reach.load(std::memory_order_relaxed);
-    if (reach < 0) {
+    float reach = scenery_reach.load(std::memory_order_relaxed);
+    if (reach < 0.0f) {
         return (gpr)(int32_t)-1;
     }
-    if (reach > 0 && reduced_valid) {
+    if (reach > 0.0f && reduced_valid) {
         return (gpr)(int32_t)reduced_mask[((uint32_t)offset >> 2) & 3];
     }
     return mask;
@@ -238,3 +264,43 @@ extern "C" void rush2049_far_matrix_end(uint8_t* rdram, gpr matrix) {
         frac = (frac & ~(0xFFFFu << shift)) | (((uint32_t)value & 0xFFFF) << shift);
     }
 }
+
+// TEMPORARY measurement: the boxes and scenery nodes of each track, then the camera and the stretch every call.
+#include <cstdio>
+#include <cstdlib>
+extern "C" void rush2049_scenery_log(uint8_t* rdram, recomp_context* ctx) {
+    static FILE* out = fopen("C:/Users/Alek/AppData/Local/Temp/hs-scratch/17933393936420000/path.txt", "a");
+    static uint32_t dumped = 0;
+    static int calls = 0;
+    if (!out) return;
+    auto word = [rdram](uint32_t addr) { return *reinterpret_cast<const uint32_t*>(rdram + (addr - 0x80000000)); };
+    auto value = [&word](uint32_t addr) { uint32_t w = word(addr); float f; std::memcpy(&f, &w, 4); return f; };
+    int32_t stretch = (int32_t)word((uint32_t)ctx->r29 + 0x78);
+    uint32_t table = (uint32_t)ctx->r10 - 16 * stretch;
+    int track = (int)(int8_t)rdram[(0x8014978C ^ 3) - 0x80000000];
+    uint32_t boxes = word(0x80149B80);
+    if (boxes != dumped || calls % 600 == 0) {
+        dumped = boxes;
+        fprintf(out, "track %d table %08X\n", track, table);
+        uint32_t box = boxes;
+        for (int n = 0; n < 128; n++) {
+            fprintf(out, "box %d %.1f %.1f %.1f  %.1f %.1f %.1f %.1f %.1f %.1f\n", n, value(box + 0x34), value(box + 0x38),
+                value(box + 0x3C), value(box + 0x50), value(box + 0x54), value(box + 0x58), value(box + 0x5C),
+                value(box + 0x60), value(box + 0x64));
+            int16_t next = (int16_t)(word((box + 0x44) & ~3u) >> 16);
+            if (next < 0) break;
+            box = boxes + 0x68 * next;
+        }
+        int first = (int16_t)(word(0x80149D90) >> 16);
+        for (int j = 0; j < 128 && j < (int)rdram[((0x8011E748 + track) ^ 3) - 0x80000000]; j++) {
+            uint32_t node = 0x8012E700 + 0x44 * (first + j);
+            fprintf(out, "node %d", j);
+            for (int k = 0; k < 0x44; k += 4) fprintf(out, " %08X", word(node + k));
+            fprintf(out, "\n");
+        }
+    }
+    calls++;
+    fprintf(out, "cam %d %.1f %.1f %d\n", calls, camera_x, camera_z, stretch);
+    fflush(out);
+}
+static int stdout_unbuffered = (setvbuf(stdout, nullptr, _IONBF, 0), 0);

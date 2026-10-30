@@ -51,8 +51,10 @@ void rush2049_far_matrix_end(uint8_t* rdram, gpr matrix);
 float rush2049_far_clamp_distance(float d);
 void rush2049_far_clamp_fit(recomp_context* ctx);
 
-/* Scenery Culling (src/draw_distance.cpp, us.toml): func_8009EBC0 has picked the stretch's record; then a word of the
-   scenery visibility mask it tests, the word's byte offset in the record beside it. */
+/* Scenery Culling (src/draw_distance.cpp, us.toml): func_8009EBC0 is given the camera's position, has picked the
+   stretch's record, and then tests a word of the scenery visibility mask, the word's byte offset in the record beside
+   it. */
+void rush2049_scenery_camera(uint8_t* rdram, gpr position);
 void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx);
 gpr rush2049_scenery_mask(gpr mask, gpr offset);
 
