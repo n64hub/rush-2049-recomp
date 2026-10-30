@@ -362,6 +362,13 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
         return;
     }
     if (read_word(rdram, race_clock_addr) == read_word(shadow.data(), race_clock_addr)) {
+        if (history.empty() && frames_back == 0) {
+            // The race hasn't started: the shadow follows it, so the oldest frame is the last one before its clock
+            // first moves (see the top of the file).
+            for_each_change(rdram, [&](uint32_t p, uint32_t n) { memcpy(shadow.data() + p, rdram + p, n); });
+            shadow_sounds = read_word(rdram, sound_count_addr);
+            shadow_timer = read_timer(rdram);
+        }
         return;  // no race time has passed
     }
     if (std::getenv("REWIND_TRACE")) {  // TEMP diagnostic: unsaved words that change on most held frames
@@ -376,7 +383,8 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
                 if (r.lo != 0x8017AEC0 && r.lo != 0x807BB000) unsaved.push_back(r);
             }
         }
-        bool held = rewind_held();
+        const bool at_start = std::getenv("REWIND_TRACE")[0] == '2';
+        bool held = rewind_held() && (!at_start || history.empty());
         if (prev.empty()) {
             prev.assign(rdram, rdram + 0x00800000);
             count.assign(0x00200000, 0);
@@ -388,7 +396,7 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
                 for (Range r : unsaved) {
                     for (uint32_t a = r.lo; a < r.hi; a += 4) {
                         uint32_t w = (a - 0x80000000u) / 4;
-                        if (count[w] * 4 >= (uint32_t)frames * 3 && shown++ < 200) {
+                        if (count[w] * (at_start ? 3 : 4) >= (uint32_t)frames * (at_start ? 1 : 3) && shown++ < 300) {
                             uint32_t f = *(uint32_t*)(first.data() + w * 4), l = *(uint32_t*)(rdram + w * 4);
                             float ff, lf;
                             memcpy(&ff, &f, 4);
