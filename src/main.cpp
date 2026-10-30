@@ -1,7 +1,8 @@
 // San Francisco Rush 2049: Recompiled - entry point.
 //
-// Structure follows BanjoRecomp's src/main/main.cpp (GPL-3.0), trimmed to what this project uses so far:
-// no custom launcher. Mod support (patches library, exports) is in register_patches.cpp and mod_exports.cpp.
+// Structure follows BanjoRecomp's src/main/main.cpp (GPL-3.0), trimmed to what this project uses so far: RecompFrontend's
+// launcher with the project's own artwork (assets/launcher/, made by tools/launcher_art.py). Mod support (patches
+// library, exports) is in register_patches.cpp and mod_exports.cpp.
 
 #include <algorithm>
 #include <array>
@@ -60,6 +61,10 @@
 #include "musyx_hle.h"
 #include "rom_finder.h"
 
+#if defined(__linux__)
+#include "rush2049_icon_bmp.h"
+#endif
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -67,7 +72,7 @@
 #include "SDL_syswm.h"
 #endif
 
-const std::string version_string = "0.1.33";
+const std::string version_string = "0.1.34";
 
 template<typename... Ts>
 void exit_error(const char* str, Ts ...args) {
@@ -223,6 +228,15 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
     if (window == nullptr) {
         exit_error("Failed to create window: %s\n", SDL_GetError());
     }
+
+#if defined(__linux__)
+    // On Windows SDL gives the window the executable's icon (icon/rush2049.rc), in every size it holds. Elsewhere the
+    // window has none until it is given one: icon/rush2049.bmp, built in (CMakeLists.txt).
+    if (SDL_Surface* icon = SDL_LoadBMP_RW(SDL_RWFromConstMem(rush2049_icon_bmp, (int)rush2049_icon_bmp_size), 1)) {
+        SDL_SetWindowIcon(window, icon);
+        SDL_FreeSurface(icon);
+    }
+#endif
 
     SDL_SysWMinfo wmInfo;
     SDL_VERSION(&wmInfo.version);
@@ -471,6 +485,20 @@ void on_launcher_init(recompui::LauncherMenu* menu) {
     if (!recomp::is_rom_valid(game.game_id) && rush2049::find_rom(game.game_id, game.internal_name)) {
         recomp::check_all_stored_roms();
     }
+
+    // The project's own artwork (tools/launcher_art.py) instead of RecompFrontend's flat background and the program's
+    // name in Header1 text, which barely fits a 4:3 window. The wordmark is sized by the window's height, 27% of it,
+    // centred where that title was, a quarter of the way down, so it stays clear of the menu below the middle.
+    menu->remove_default_title();
+    menu->set_launcher_background_svg("launcher/background.svg");
+    recompui::Element* title = recompui::get_current_context().create_element<recompui::Svg>(
+        menu->get_background_container(), "launcher/title.svg");
+    title->set_position(recompui::Position::Absolute);
+    title->set_top(25.0f, recompui::Unit::Percent);
+    title->set_left(50.0f, recompui::Unit::Percent);
+    title->set_height(27.0f, recompui::Unit::Percent);
+    title->set_width_auto();
+    title->set_translate_2D(-50.0f, -50.0f, recompui::Unit::Percent);
 
     auto game_options_menu = menu->init_game_options_menu(
         supported_games[0].game_id,

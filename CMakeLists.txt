@@ -260,6 +260,9 @@ if (WIN32)
             $<TARGET_FILE_DIR:Rush2049Recompiled>)
 
     target_link_libraries(Rush2049Recompiled PRIVATE SDL2 Winmm.lib)
+    # The executable's icon, which SDL also gives the window (icon/, made by tools/launcher_art.py).
+    enable_language(RC)
+    target_sources(Rush2049Recompiled PRIVATE ${CMAKE_SOURCE_DIR}/icon/rush2049.rc)
     # A window program, so no console window opens behind the game; main() stays the entry point. The log still
     # reaches a redirect (iterate.sh's run.log), and --show-console opens a console for it (main.cpp).
     target_link_options(Rush2049Recompiled PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
@@ -274,6 +277,13 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
     set(THREADS_PREFER_PTHREAD_FLAG TRUE)
     find_package(Threads REQUIRED)
     target_link_libraries(Rush2049Recompiled PRIVATE ${FREETYPE_LIBRARIES} SDL2::SDL2 "-latomic -static-libstdc++" ${CMAKE_DL_LIBS} Threads::Threads)
+    # The window's icon, built in (SDL_SetWindowIcon in main.cpp).
+    add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/rush2049_icon_bmp.c ${CMAKE_CURRENT_BINARY_DIR}/rush2049_icon_bmp.h
+        COMMAND file_to_c ${CMAKE_SOURCE_DIR}/icon/rush2049.bmp rush2049_icon_bmp
+            ${CMAKE_CURRENT_BINARY_DIR}/rush2049_icon_bmp.c ${CMAKE_CURRENT_BINARY_DIR}/rush2049_icon_bmp.h
+        DEPENDS ${CMAKE_SOURCE_DIR}/icon/rush2049.bmp file_to_c
+    )
+    target_sources(Rush2049Recompiled PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/rush2049_icon_bmp.c)
     # Export the recompiled functions' names, so the crash handler's backtrace can print them.
     target_link_options(Rush2049Recompiled PRIVATE -rdynamic)
 endif()
