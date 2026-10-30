@@ -54,8 +54,10 @@ namespace rush2049 {
     // distances, as multiples of the game's own; 1 is Original.
     void set_draw_distance(float scale);
     void set_level_of_detail(float scale);
-    // Scenery Culling (src/draw_distance.cpp): false draws every scenery object from every stretch of the road.
-    void set_scenery_culling(bool on);
+    // Scenery Culling (src/draw_distance.cpp): 0 is Original, each stretch of road's own visibility mask; a reach
+    // above 0 also lets through what every stretch within that many units of the camera lets through (Reduced); a
+    // negative one draws every scenery object from every stretch (Off).
+    void set_scenery_culling(float reach);
 }
 
 #endif
