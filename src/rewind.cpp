@@ -15,6 +15,12 @@
 // among them, from a state whose time (0x80138A44) was saved and whose keyframe and the rest (0x80138A4C-0x80138A5C)
 // were not, so while Rewind was held the time went back and the keyframe kept going, and the flags juddered.
 //
+// The game's timer (func_80001350 to func_800015BC) lies below the saved memory: a count of 60ths of a second that
+// always runs (0x8002EB64), the count its game time is measured from, and the count at which its countdown runs out,
+// a Ghost Race's time limit (func_80001578 is the time left). Each frame keeps how far the count is from those two,
+// and a step back puts them that far from the count again, as the game's own pause moves them along with it. Left
+// out, the countdown kept counting down while Rewind was held.
+//
 // A copy of that memory (the shadow) holds it as of the last frame saved. Each frame, the 64-byte pieces that changed
 // since are stored with their old contents as that frame's record, and the shadow is updated. A frame while Rewind is
 // held first puts back everything that changed since the shadow (the tick that ran from the restored state), then
@@ -296,6 +302,27 @@ extern "C" void rush2049_rewind_tick_end(uint8_t* rdram) {
 }
 
 extern "C" void rush2049_rewind_frame_begin(uint8_t* rdram) {
+    if (std::getenv("REWIND_FAKE_FINISH")) {  // TEMP: the first Ghost Race lasts 12 s and counts as finished
+        static uint8_t limits[24];
+        static int stage = 0;  // 0 before, 1 faked, 2 limits put back
+        if (read_word(rdram, game_state_addr) != 0x00400000) {
+            if (stage == 0) {
+                static bool kept = false;
+                if (!kept) memcpy(limits, rdram + (0x80111754 - 0x80000000u), 24), kept = true;
+                const float limit = 12.0f;
+                for (uint32_t i = 0; i < 6; i++) memcpy(rdram + (0x80111754 + 4 * i - 0x80000000u), &limit, 4);
+            } else if (stage == 1) {
+                memcpy(rdram + (0x80111754 - 0x80000000u), limits, 24);
+                stage = 2;
+            }
+        } else if (stage < 2 && read_word(rdram, 0x8014A110) == 2 && read_word(rdram, race_clock_addr) > 0x40A00000 &&
+                   (int32_t)(read_word(rdram, deadline_addr) - read_word(rdram, ticks_addr)) < 30) {
+            rdram[(0x80152818 + 0xEF - 0x80000000u) ^ 3] = 1;
+            const float t = 11.5f;
+            memcpy(rdram + (0x80152818 + 0xF0 - 0x80000000u), &t, 4);
+            stage = 1;
+        }
+    }
     if (read_word(rdram, game_state_addr) != 0x00400000 && have_shadow) {
         forget();
     }
