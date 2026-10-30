@@ -290,6 +290,21 @@ void dump_sounds(const uint8_t* rdram, const char* tag) {
         }
         fprintf(stderr, " ]");
     }
+    fprintf(stderr, "\n[slot]");
+    for (uint32_t a = 0x80140414; a < 0x8014044C; a += 4) {
+        fprintf(stderr, " %08X", read_word(rdram, a));
+    }
+    for (uint32_t head : { 0x80144028u, 0x80144C58u }) {
+        for (uint32_t node = read_word(rdram, head), n = 0; node != 0 && n < 256; node = read_word(rdram, node), n++) {
+            const uint32_t id = read_word(rdram, node + 0xC);
+            if (id == read_word(rdram, 0x80140424) || id == read_word(rdram, 0x80140438)) {
+                fprintf(stderr, " |%c%u", head == 0x80144028u ? 'P' : 'W', id >> shift);
+                for (uint32_t o = 0x10; o < 0x48; o += 4) {
+                    fprintf(stderr, " %08X", read_word(rdram, node + o));
+                }
+            }
+        }
+    }
     fprintf(stderr, "\n");
 }
 
