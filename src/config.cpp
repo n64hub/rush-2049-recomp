@@ -151,11 +151,13 @@ namespace {
     // src/draw_distance.cpp says what the game culls by.
     enum class SceneryCulling {
         Original,
+        Reduced,
         Off,
         OptionCount
     };
     const std::vector<recomp::config::ConfigOptionEnumOption> scenery_culling_options = {
         {SceneryCulling::Original, "Original", "Original"},
+        {SceneryCulling::Reduced, "Reduced", "Reduced"},
         {SceneryCulling::Off, "Off", "Off"},
     };
     const std::string scenery_culling_option = "scenery_culling";
@@ -489,8 +491,10 @@ void rush2049::init_config() {
         "buildings, signs and roadside pieces pop in and out as you drive from one stretch into the next, some of "
         "them close to the car."
         "<br/>"
-        "<b>Off:</b> all of the track's scenery is drawn wherever you are, and only <recomp-color primary>Draw "
-        "Distance</recomp-color> decides how far.",
+        "<b>Reduced:</b> what can be seen from the stretches of road around you is drawn too, so scenery comes in "
+        "well before you reach it, for much less than Off costs. <b>Off:</b> all of the track's "
+        "scenery is drawn wherever you are, and only <recomp-color primary>Draw Distance</recomp-color> decides how "
+        "far.",
         scenery_culling_options,
 #ifdef __EMSCRIPTEN__
         // Off costs a page about a third of its frames (docs/web.md), so a browser starts at Original.
@@ -502,7 +506,8 @@ void rush2049::init_config() {
     // Called on load too, and while the menu previews a change.
     graphics.add_option_change_callback(scenery_culling_option,
         [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            rush2049::set_scenery_culling(static_cast<SceneryCulling>(std::get<uint32_t>(cur_value)) == SceneryCulling::Original);
+            static constexpr float reach[] = { 0.0f, 500.0f, -1.0f };
+            rush2049::set_scenery_culling(reach[std::get<uint32_t>(cur_value)]);
         });
 
     graphics.add_enum_option(
