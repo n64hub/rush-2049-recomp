@@ -23,4 +23,6 @@ rt64-0005              every slot of the texture set holds a live texture: the b
                        read slot 0, never written or left on a deleted texture)
 rt64-0006              a fill rect's clear clamped to its target (a rect ending on the scissor's edge is a pixel wider)
 rt64-0007              the workload queue's size set by the game (WORKLOAD_QUEUE_SIZE on the rt64 target); the page's is 16
+rt64-0008              G_CULLDL: a display list whose bounding box lies wholly off one side of the view (as RT64 widens
+                       it, and a quarter more each way) or behind the camera ends there, as on an N64; RT64 drew it all
 ```

@@ -69,16 +69,21 @@
 // position is the one it is given (a1, us.toml); the record it picked is t2 at 0x8009EF88. The list's order is not
 // the road's: a car crosses three to six boxes' numbers at a time, and the list jumps between parts of the track, so
 // "the next few stretches" is not a fixed distance along the road. Where no box holds the camera, or the table is off,
-// Reduced leaves the mask alone. In the attract race at 1600x1200 it drew 840 calls a frame where Original drew 670
-// and Off 1690, and held 59 fps where Off dropped to 45 (README, Performance).
+// Reduced leaves the mask alone. In the attract race at 1600x1200, with the view test below, it draws 570 calls a
+// frame where Original draws 490 and Off 840 (README, Performance).
 //
 // Besides these limits and that table, func_8009DD88 skips a node only by its per-camera hidden bit (0x100 << camera
 // in its flags, func_8009DD18: hidden unless a child is visible) and its disable bit. The game sets and clears them
 // with func_8008AE8C and func_8008B0D8, and in five minutes of attract races every such call was on a car's parts
 // (wheels, its body in the in-car view) or the pool of sparks and smoke func_8008EA10 places around the cars: about 300
-// nodes, none of them scenery. Nor does the game test a node against the view: nothing on the CPU culls by direction
-// (the node walker, the model draw and the matrix builders compare only distances), and the G_CULLDL the walker emits
-// with each node's bounding box is a no-op in RT64, so at a wide aspect ratio nothing is missing at the sides.
+// nodes, none of them scenery. Nor does the game test a node against the view on the CPU: the node walker, the model
+// draw and the matrix builders compare only distances. The walker leaves that to the RSP: each node's list loads the
+// node's bounding box (8 vertices) and a G_CULLDL, which ends the list when the box lies off one side of the view.
+// Upstream RT64 treats it as a no-op and draws every node in reach; runtime-patches/rt64-0008 runs it, against the view as RT64 widens it and a quarter more each way, so at a wide aspect
+// ratio nothing is missing at the sides. Through two attract races, at 16:9 and 4:3, none of the 80 million triangles
+// it skipped would have been in view without that quarter. In the attract race at 1600x1200 it takes Original from
+// 670 draws a frame to 490 and Off from 1960 to 840, and Off from 43 fps to 58 on a busy 6-core PC, where RT64's
+// thread was the limit (README, Performance).
 
 #include <atomic>
 #include <cmath>
