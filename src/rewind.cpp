@@ -14,6 +14,15 @@
 // Nor leave out part of one thing: func_800C0AC0 plays a keyframed animation, the checkered flags over the start line
 // among them, from a state whose time (0x80138A44) was saved and whose keyframe and the rest (0x80138A4C-0x80138A5C)
 // were not, so while Rewind was held the time went back and the keyframe kept going, and the flags juddered.
+// The display lists are the frame's drawing, not the race: two of 0x4B00 bytes from 0x80124FE8, the frame loop
+// building one (func_800A4934 picks it by the index at 0x8012E6C0) before the hook. Only the parts seen written were
+// left out at first, and a Ghost Race's HUD draws past them: a step back put an older frame's commands into the list
+// being drawn, so the radar flickered, and at the start of the race the menus' commands drew a garbled box.
+// The other way, the race's words lie between the sound side's: the lap box's timers and times (0x80142740 and
+// 0x80142770, one per car) and each car's lap start (0x80142AC8), which func_800D2458 sets when a car makes a lap and
+// takes from the time of the next. Left out, the tick that ran from a frame just before the line while Rewind was held
+// made the lap again and moved its start up to the line, and crossing the line again counted a lap of a few
+// milliseconds.
 //
 // The game's timer (func_80001350 to func_800015BC) lies below the saved memory: a count of 60ths of a second that
 // always runs (0x8002EB64), the count its game time is measured from, and the count at which its countdown runs out,
@@ -26,13 +35,14 @@
 // held first puts back everything that changed since the shadow (the tick that ran from the restored state), then
 // applies the newest record, which takes RAM and the shadow one frame further back. The records are capped at
 // history_cap bytes, the oldest dropped first. A frame in which no race time passed (paused, or no tick since the last
-// frame above 60 fps) is neither saved nor stepped back, so the race rewinds at the speed it was played.
+// frame above 60 fps) is neither saved nor stepped back, so the race rewinds at the speed it was played. Until the
+// race clock first moves (the fly-by and the count), the shadow follows the race and nothing is recorded, so the
+// oldest frame Rewind reaches is the green light, not the fly-by's first frame.
 
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>  // TEMP trace
 #include <cstring>
 #include <deque>
 #include <vector>
@@ -73,7 +83,10 @@ constexpr Range not_saved[] = {
     { 0x8012E608, 0x8012E6D4 },
     { 0x8013FED0, 0x8013FED4 },
     { 0x801403C0, 0x80140414 },
-    { 0x80142728, 0x80143CF8 },  // the sound thread, its queues, command pool and tables
+    { 0x80142728, 0x80142740 },  // the sound manager's lock, a message queue
+    { 0x80142768, 0x8014276C },  // and its message, among the lap box's words
+    { 0x801427A8, 0x80142AC8 },  // the sound thread's command queue and tables
+    { 0x80142AD8, 0x80143CF8 },  // its command pool and tables
     { 0x80143F58, 0x80143F68 },  // the sound manager's table of sounds wanting a voice
     { 0x80143FFC, 0x80144E00 },  // its lists of free, playing and waiting sounds, then the controllers and paks
     { 0x801460C8, 0x80146200 },  // queues
@@ -302,27 +315,6 @@ extern "C" void rush2049_rewind_tick_end(uint8_t* rdram) {
 }
 
 extern "C" void rush2049_rewind_frame_begin(uint8_t* rdram) {
-    if (std::getenv("REWIND_FAKE_FINISH")) {  // TEMP: the first Ghost Race lasts 12 s and counts as finished
-        static uint8_t limits[24];
-        static int stage = 0;  // 0 before, 1 faked, 2 limits put back
-        if (read_word(rdram, game_state_addr) != 0x00400000) {
-            if (stage == 0) {
-                static bool kept = false;
-                if (!kept) memcpy(limits, rdram + (0x80111754 - 0x80000000u), 24), kept = true;
-                const float limit = 12.0f;
-                for (uint32_t i = 0; i < 6; i++) memcpy(rdram + (0x80111754 + 4 * i - 0x80000000u), &limit, 4);
-            } else if (stage == 1) {
-                memcpy(rdram + (0x80111754 - 0x80000000u), limits, 24);
-                stage = 2;
-            }
-        } else if (stage < 2 && read_word(rdram, 0x8014A110) == 2 && read_word(rdram, race_clock_addr) > 0x40A00000 &&
-                   (int32_t)(read_word(rdram, deadline_addr) - read_word(rdram, ticks_addr)) < 30) {
-            rdram[(0x80152818 + 0xEF - 0x80000000u) ^ 3] = 1;
-            const float t = 11.5f;
-            memcpy(rdram + (0x80152818 + 0xF0 - 0x80000000u), &t, 4);
-            stage = 1;
-        }
-    }
     if (read_word(rdram, game_state_addr) != 0x00400000 && have_shadow) {
         forget();
     }
@@ -359,7 +351,6 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
         shadow_sounds = read_word(rdram, sound_count_addr);
         shadow_timer = read_timer(rdram);
         start_clock = read_word(rdram, race_clock_addr);
-        fprintf(stderr, "[rewind] TEMP start clock %08X\n", start_clock);
         have_shadow = true;
         return;
     }
@@ -373,56 +364,6 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     }
     if (read_word(rdram, race_clock_addr) == read_word(shadow.data(), race_clock_addr)) {
         return;  // no race time has passed
-    }
-    if (std::getenv("REWIND_TRACE")) {  // TEMP diagnostic: unsaved words that change on most held frames
-        static std::vector<uint8_t> prev, first;
-        static std::vector<uint32_t> count;
-        static int frames = 0;
-        static bool was_held = false;
-        static std::vector<Range> unsaved;
-        if (unsaved.empty()) {
-            unsaved.push_back({ 0x8002C5E0, 0x80086A50 });
-            for (Range r : not_saved) {
-                if (r.lo != 0x8017AEC0 && r.lo != 0x807BB000) unsaved.push_back(r);
-            }
-        }
-        const bool at_start = std::getenv("REWIND_TRACE")[0] == '2';
-        bool held = rewind_held() && (!at_start || history.empty());
-        if (prev.empty()) {
-            prev.assign(rdram, rdram + 0x00800000);
-            count.assign(0x00200000, 0);
-        }
-        if (held != was_held) {
-            if (frames > 20) {
-                fprintf(stderr, "[trace] %s ended after %d frames\n", was_held ? "HELD" : "race", frames);
-                int shown = 0;
-                for (Range r : unsaved) {
-                    for (uint32_t a = r.lo; a < r.hi; a += 4) {
-                        uint32_t w = (a - 0x80000000u) / 4;
-                        if (count[w] * (at_start ? 3 : 4) >= (uint32_t)frames * (at_start ? 1 : 3) && !(at_start && a < 0x80100000) && shown++ < 300) {
-                            uint32_t f = *(uint32_t*)(first.data() + w * 4), l = *(uint32_t*)(rdram + w * 4);
-                            float ff, lf;
-                            memcpy(&ff, &f, 4);
-                            memcpy(&lf, &l, 4);
-                            fprintf(stderr, "[trace]  %08X %u/%d %08X->%08X (%g->%g)\n", a, count[w], frames, f, l, ff, lf);
-                        }
-                    }
-                }
-            }
-            std::fill(count.begin(), count.end(), 0);
-            first.assign(rdram, rdram + 0x00800000);
-            frames = 0;
-            was_held = held;
-        }
-        if (first.empty()) first.assign(rdram, rdram + 0x00800000);
-        frames++;
-        for (Range r : unsaved) {
-            for (uint32_t a = r.lo; a < r.hi; a += 4) {
-                uint32_t o = a - 0x80000000u;
-                if (*(uint32_t*)(rdram + o) != *(uint32_t*)(prev.data() + o)) count[o / 4]++;
-            }
-        }
-        memcpy(prev.data(), rdram, 0x00800000);
     }
     if (rewind_held()) {
         step_back(rdram);

@@ -66,4 +66,8 @@ an RTX 2070 are beside `start_gpu_profiler` in `src/main.cpp`.
   developer profile name only). To end a race in seconds, write a small float (12.0) into the track's time limit in the
   table at `0x80111754` before it starts, and at its end (`func_800D510C` at 0x800D5208, `v0` the car's result) set
   the finished byte +0xEF and a time below the limit at +0xF0: it then counts as finished inside the limit.
+- To make a lap in seconds, give player 1's car (`0x8014A250`, the next car 0x808 on) the finish as its next
+  checkpoint a few seconds into the race: the halfword +0x7E2 (checkpoint) to the last one, +0x7E4 (next) to the
+  finish, and the byte +0x7DC to 1 (`func_800D24C8` steps them; the track's table is at `0x80151CE8`, the finish at
+  +4 and the count at +8). The car makes the lap a few seconds on, the lap box shows its time and the HUD lap 2.
 - Every port reports a controller with a pak; a port nobody plays reads as a pad left alone.
