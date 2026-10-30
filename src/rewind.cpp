@@ -14,13 +14,30 @@
 // Nor leave out part of one thing: func_800C0AC0 plays a keyframed animation, the checkered flags over the start line
 // among them, from a state whose time (0x80138A44) was saved and whose keyframe and the rest (0x80138A4C-0x80138A5C)
 // were not, so while Rewind was held the time went back and the keyframe kept going, and the flags juddered.
+// The display lists are the frame's drawing, not the race: two of 0x4B00 bytes from 0x80124FE8, the frame loop
+// building one (func_800A4934 picks it by the index at 0x8012E6C0) before the hook. Only the parts seen written were
+// left out at first, and a Ghost Race's HUD draws past them: a step back put an older frame's commands into the list
+// being drawn, so the radar flickered, and at the start of the race the menus' commands drew a garbled box.
+// The other way, the race's words lie between the sound side's: the lap box's timers and times (0x80142740 and
+// 0x80142770, one per car) and each car's lap start (0x80142AC8), which func_800D2458 sets when a car makes a lap and
+// takes from the time of the next. Left out, the tick that ran from a frame just before the line while Rewind was held
+// made the lap again and moved its start up to the line, and crossing the line again counted a lap of a few
+// milliseconds.
+//
+// The game's timer (func_80001350 to func_800015BC) lies below the saved memory: a count of 60ths of a second that
+// always runs (0x8002EB64), the count its game time is measured from, and the count at which its countdown runs out,
+// a Ghost Race's time limit (func_80001578 is the time left). Each frame keeps how far the count is from those two,
+// and a step back puts them that far from the count again, as the game's own pause moves them along with it. Left
+// out, the countdown kept counting down while Rewind was held.
 //
 // A copy of that memory (the shadow) holds it as of the last frame saved. Each frame, the 64-byte pieces that changed
 // since are stored with their old contents as that frame's record, and the shadow is updated. A frame while Rewind is
 // held first puts back everything that changed since the shadow (the tick that ran from the restored state), then
 // applies the newest record, which takes RAM and the shadow one frame further back. The records are capped at
 // history_cap bytes, the oldest dropped first. A frame in which no race time passed (paused, or no tick since the last
-// frame above 60 fps) is neither saved nor stepped back, so the race rewinds at the speed it was played.
+// frame above 60 fps) is neither saved nor stepped back, so the race rewinds at the speed it was played. Until the
+// race clock first moves (the fly-by and the count), the shadow follows the race and nothing is recorded, so the
+// oldest frame Rewind reaches is the green light, not the fly-by's first frame.
 
 #include <algorithm>
 #include <atomic>
@@ -41,6 +58,9 @@ constexpr uint32_t game_state_addr = 0x801174B4;  // the frame loop's state bits
 constexpr uint32_t race_clock_addr = 0x801543CC;  // float, written by the tick
 constexpr uint32_t sound_count_addr = 0x80110254; // the sound manager's count of sounds started (not saved)
 constexpr uint32_t sound_shift_addr = 0x801460F8; // a sound's ID is that count shifted left by this, or a slot
+constexpr uint32_t ticks_addr = 0x8002EB64;       // the timer's count of 60ths of a second, always running
+constexpr uint32_t deadline_addr = 0x8002EB9C;    // the count at which its countdown runs out
+constexpr uint32_t start_addr = 0x8002EBA0;       // the count its game time is measured from
 constexpr uint32_t saved_lo = 0x8010FD80;         // the end of the main code segment
 constexpr uint32_t saved_hi = 0x80800000;
 constexpr size_t history_cap = 128 * 1024 * 1024;
@@ -59,12 +79,14 @@ constexpr Range not_saved[] = {
     { 0x80118E30, 0x80118E34 },
     { 0x8011EACC, 0x8011EAD0 },
     { 0x80124EE0, 0x80124F90 },  // timing, with the tick's timestamp at 0x80124F70
-    { 0x80125338, 0x80126128 },  // matrices for the display list
-    { 0x8012A0E8, 0x8012AC28 },  // the same
+    { 0x80124FE8, 0x8012E5E8 },  // the two display lists, 0x4B00 bytes each (func_800A4934)
     { 0x8012E608, 0x8012E6D4 },
     { 0x8013FED0, 0x8013FED4 },
     { 0x801403C0, 0x80140414 },
-    { 0x80142728, 0x80143CF8 },  // the sound thread, its queues, command pool and tables
+    { 0x80142728, 0x80142740 },  // the sound manager's lock, a message queue
+    { 0x80142768, 0x8014276C },  // and its message, among the lap box's words
+    { 0x801427A8, 0x80142AC8 },  // the sound thread's command queue and tables
+    { 0x80142AD8, 0x80143CF8 },  // its command pool and tables
     { 0x80143F58, 0x80143F68 },  // the sound manager's table of sounds wanting a voice
     { 0x80143FFC, 0x80144E00 },  // its lists of free, playing and waiting sounds, then the controllers and paks
     { 0x801460C8, 0x80146200 },  // queues
@@ -97,9 +119,15 @@ std::vector<uint8_t> shadow;   // the saved memory as of the last frame saved, i
 bool have_shadow = false;
 uint32_t shadow_sounds = 0;    // the sound count as of the shadow
 uint32_t stepped_sounds = 0;   // the sound count as of the last step back
+struct Timer {
+    uint32_t since_start, to_deadline;  // in the timer's 60ths, from its count
+};
+Timer shadow_timer{};          // the timer as of the shadow
+uint32_t start_clock = 0;      // the race clock in the first race frame
 struct Frame {
     std::vector<uint8_t> changes;  // { offset, length, old contents } for each piece that changed
     uint32_t sounds;               // the sound count as of those old contents
+    Timer timer;                   // and the timer
 };
 std::deque<Frame> history;     // newest last
 size_t history_bytes = 0;
@@ -107,6 +135,21 @@ uint32_t frames_back = 0;     // frames stepped back since Rewind was pressed
 
 uint32_t read_word(const uint8_t* mem, uint32_t addr) {
     return *(const uint32_t*)(mem + (addr - 0x80000000u));
+}
+
+void write_word(uint8_t* mem, uint32_t addr, uint32_t value) {
+    *(uint32_t*)(mem + (addr - 0x80000000u)) = value;
+}
+
+Timer read_timer(const uint8_t* rdram) {
+    const uint32_t now = read_word(rdram, ticks_addr);
+    return { now - read_word(rdram, start_addr), read_word(rdram, deadline_addr) - now };
+}
+
+void write_timer(uint8_t* rdram, Timer t) {
+    const uint32_t now = read_word(rdram, ticks_addr);
+    write_word(rdram, start_addr, now - t.since_start);
+    write_word(rdram, deadline_addr, now + t.to_deadline);
 }
 
 bool rewind_held() {
@@ -172,8 +215,9 @@ void save_frame(uint8_t* rdram) {
     });
     record.shrink_to_fit();
     history_bytes += record.size();
-    history.push_back({ std::move(record), shadow_sounds });
+    history.push_back({ std::move(record), shadow_sounds, shadow_timer });
     shadow_sounds = read_word(rdram, sound_count_addr);
+    shadow_timer = read_timer(rdram);
     while (history_bytes > history_cap) {
         history_bytes -= history.front().changes.size();
         history.pop_front();
@@ -183,6 +227,7 @@ void save_frame(uint8_t* rdram) {
 void step_back(uint8_t* rdram) {
     for_each_change(rdram, [&](uint32_t p, uint32_t n) { memcpy(rdram + p, shadow.data() + p, n); });
     stepped_sounds = read_word(rdram, sound_count_addr);
+    write_timer(rdram, shadow_timer);
     if (history.empty()) {
         return;  // as far back as it goes: stay there
     }
@@ -197,6 +242,8 @@ void step_back(uint8_t* rdram) {
     }
     history_bytes -= record.size();
     shadow_sounds = history.back().sounds;
+    shadow_timer = history.back().timer;
+    write_timer(rdram, shadow_timer);
     history.pop_back();
     frames_back++;
 }
@@ -302,7 +349,17 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
             memcpy(shadow.data() + r.lo, rdram + r.lo, r.hi - r.lo);
         }
         shadow_sounds = read_word(rdram, sound_count_addr);
+        shadow_timer = read_timer(rdram);
+        start_clock = read_word(rdram, race_clock_addr);
         have_shadow = true;
+        return;
+    }
+    if (history.empty() && frames_back == 0 && read_word(shadow.data(), race_clock_addr) == start_clock) {
+        // The race hasn't started: the shadow follows it, so the oldest frame is the first one with time on the
+        // clock (see the top of the file).
+        for_each_change(rdram, [&](uint32_t p, uint32_t n) { memcpy(shadow.data() + p, rdram + p, n); });
+        shadow_sounds = read_word(rdram, sound_count_addr);
+        shadow_timer = read_timer(rdram);
         return;
     }
     if (read_word(rdram, race_clock_addr) == read_word(shadow.data(), race_clock_addr)) {
