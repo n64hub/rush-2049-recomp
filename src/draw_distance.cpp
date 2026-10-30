@@ -58,6 +58,15 @@
 // whatever its bit; that is kept. In a browser the option starts at Original: Off costs the page a third of its frames
 // (docs/web.md).
 //
+// Reduced, between them, ORs the stretch's mask with those of the two stretches before it and the two after it along
+// the road, so what pops in as you cross into a stretch was let through two stretches back. A track has as many
+// stretches as scenery objects (117 on Track 1), and its records are in road order: the masks of neighbouring
+// stretches share about 60% of their objects, those half a lap apart about 2%. Its stretch is the box's place in the
+// list (0x78 on the stack; the last one's at 0x84), and its record the one func_8009EBC0 has picked (t2, at 0x8009EF88,
+// us.toml); the ends wrap, as a lap does. Off the table (no box holds the camera, or a track with one record),
+// Reduced leaves the mask alone. Averaged over Track 1's stretches it lets through 44 objects where Original lets
+// through 24.
+//
 // Besides these limits and that table, func_8009DD88 skips a node only by its per-camera hidden bit (0x100 << camera
 // in its flags, func_8009DD18: hidden unless a child is visible) and its disable bit. The game sets and clears them
 // with func_8008AE8C and func_8008B0D8, and in five minutes of attract races every such call was on a car's parts
@@ -66,6 +75,7 @@
 // (the node walker, the model draw and the matrix builders compare only distances), and the G_CULLDL the walker emits
 // with each node's bounding box is a no-op in RT64, so at a wide aspect ratio nothing is missing at the sides.
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 
@@ -79,10 +89,14 @@ namespace {
 std::atomic<float> distance_scale{ 4.0f };
 std::atomic<float> detail_scale{ 4.0f };
 #ifdef __EMSCRIPTEN__
-std::atomic<bool> scenery_culling{ true };
+std::atomic<int> scenery_reach{ 0 };
 #else
-std::atomic<bool> scenery_culling{ false };
+std::atomic<int> scenery_reach{ -1 };
 #endif
+
+// Reduced: the mask of the stretch the camera is in, with its neighbours', while reduced_valid.
+uint32_t reduced_mask[4];
+bool reduced_valid = false;
 
 // What func_8009D99C or func_8009D45C divided the node's offset by, from the start of the call to its end.
 int matrix_divisor = 1;
@@ -104,8 +118,8 @@ void rush2049::set_level_of_detail(float scale) {
     detail_scale.store(scale, std::memory_order_relaxed);
 }
 
-void rush2049::set_scenery_culling(bool on) {
-    scenery_culling.store(on, std::memory_order_relaxed);
+void rush2049::set_scenery_culling(int reach) {
+    scenery_reach.store(reach, std::memory_order_relaxed);
 }
 
 extern "C" float rush2049_draw_distance_lod(float limit) {
@@ -134,8 +148,38 @@ extern "C" float rush2049_draw_distance_cull(float cull) {
     return cull * distance();
 }
 
-extern "C" gpr rush2049_scenery_mask(gpr mask) {
-    return scenery_culling.load(std::memory_order_relaxed) ? mask : (gpr)(int32_t)-1;
+extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
+    reduced_valid = false;
+    int reach = scenery_reach.load(std::memory_order_relaxed);
+    auto word = [rdram](uint32_t addr) { return *reinterpret_cast<const uint32_t*>(rdram + (addr - 0x80000000)); };
+    int32_t stretch = (int32_t)word((uint32_t)ctx->r29 + 0x78);
+    int32_t count = (int32_t)word((uint32_t)ctx->r29 + 0x84) + 1;
+    if (reach <= 0 || stretch < 0 || stretch >= count || count < 2) {
+        return;
+    }
+    uint32_t table = (uint32_t)ctx->r10 - 16 * stretch;
+    reach = std::min(reach, (count - 1) / 2);
+    for (int w = 0; w < 4; w++) {
+        reduced_mask[w] = 0;
+    }
+    for (int i = stretch - reach; i <= stretch + reach; i++) {
+        uint32_t record = table + 16 * ((i + count) % count);
+        for (int w = 0; w < 4; w++) {
+            reduced_mask[w] |= word(record + 4 * w);
+        }
+    }
+    reduced_valid = true;
+}
+
+extern "C" gpr rush2049_scenery_mask(gpr mask, gpr offset) {
+    int reach = scenery_reach.load(std::memory_order_relaxed);
+    if (reach < 0) {
+        return (gpr)(int32_t)-1;
+    }
+    if (reach > 0 && reduced_valid) {
+        return (gpr)(int32_t)reduced_mask[((uint32_t)offset >> 2) & 3];
+    }
+    return mask;
 }
 
 extern "C" void rush2049_far_matrix_begin(recomp_context* ctx) {

@@ -51,8 +51,10 @@ void rush2049_far_matrix_end(uint8_t* rdram, gpr matrix);
 float rush2049_far_clamp_distance(float d);
 void rush2049_far_clamp_fit(recomp_context* ctx);
 
-/* Scenery Culling (src/draw_distance.cpp, us.toml): a word of the scenery visibility mask func_8009EBC0 tests. */
-gpr rush2049_scenery_mask(gpr mask);
+/* Scenery Culling (src/draw_distance.cpp, us.toml): func_8009EBC0 has picked the stretch's record; then a word of the
+   scenery visibility mask it tests, the word's byte offset in the record beside it. */
+void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx);
+gpr rush2049_scenery_mask(gpr mask, gpr offset);
 
 /* In busy-wait loops (us.toml): let the next ready game thread run, whatever its priority (src/spin_yield.cpp). */
 void rush2049_spin_yield(uint8_t* rdram);
