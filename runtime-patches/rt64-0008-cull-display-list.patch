@@ -1,0 +1,89 @@
+diff --git a/src/gbi/rt64_gbi_f3dex.cpp b/src/gbi/rt64_gbi_f3dex.cpp
+index 4eabdee..7691bd9 100644
+--- a/src/gbi/rt64_gbi_f3dex.cpp
++++ b/src/gbi/rt64_gbi_f3dex.cpp
+@@ -39,7 +39,7 @@ namespace RT64 {
+         }
+ 
+         void cullDl(State *state, DisplayList **dl) {
+-            // TODO
++            state->rsp->cullDl((*dl)->p0(0, 16) / 2, (*dl)->p1(0, 16) / 2, dl);
+         }
+ 
+         void branchZ(State *state, DisplayList **dl) {
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index 38face3..cdd8e27 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -13,6 +13,7 @@
+ #include "shared/rt64_rsp_fog.h"
+ 
+ #include "rt64_interpreter.h"
++#include "rt64_shared_queue_resources.h"
+ #include "rt64_state.h"
+ 
+ //#define LOG_SPECIAL_MATRIX_OPERATIONS
+@@ -860,6 +861,51 @@ namespace RT64 {
+         }
+     }
+ 
++    // G_CULLDL ends the display list when vertices vstart to vend (a bounding box the game loaded) all lie outside one
++    // side of the view: past the left, right, top or bottom edge, or behind the near plane. Each side is a plane in clip
++    // space, so a box whose corners are all beyond one holds nothing in view, even with corners behind the camera. Sideways the view is the one RT64 shows, not the game's: Aspect Ratio widens the
++    // projection after the game's 4:3 one, so x is tested against the window's width (or a set ratio) over 4:3. Every
++    // side is a quarter wider than that, so an object at the edge is still drawn in the frames interpolated between two
++    // of the game's, where the camera has moved on.
++    void RSP::cullDl(uint32_t vstart, uint32_t vend, DisplayList **dl) {
++        if ((vstart > vend) || (vend >= RSP_MAX_VERTICES)) {
++            return;
++        }
++
++        const UserConfiguration &userConfig = *state->ext.userConfig;
++        float aspect = 4.0f / 3.0f;
++        if (userConfig.aspectRatio == UserConfiguration::AspectRatio::Manual) {
++            aspect = std::max(aspect, float(userConfig.aspectTarget));
++        }
++        else if (userConfig.aspectRatio == UserConfiguration::AspectRatio::Expand) {
++            const SharedQueueResources *shared = state->ext.sharedQueueResources;
++            if ((shared->swapChainWidth > 0) && (shared->swapChainHeight > 0)) {
++                aspect = std::max(aspect, float(shared->swapChainWidth) / float(shared->swapChainHeight));
++            }
++        }
++
++        const float Margin = 1.25f;
++        const float xBound = Margin * aspect * 0.75f;
++        const float yBound = Margin;
++        const Workload &workload = state->ext.workloadQueue->workloads[state->ext.workloadQueue->writeCursor];
++        uint32_t outside = 0x1F;
++        for (uint32_t i = vstart; (i <= vend) && (outside != 0); i++) {
++            const hlslpp::float4 &p = workload.drawData.posTransformed[indices[i]];
++            const float x = p[0], y = p[1], z = p[2], w = p[3];
++            uint32_t sides = 0;
++            sides |= (x < -xBound * w) ? 0x1 : 0x0;
++            sides |= (x > xBound * w) ? 0x2 : 0x0;
++            sides |= (y < -yBound * w) ? 0x4 : 0x0;
++            sides |= (y > yBound * w) ? 0x8 : 0x0;
++            sides |= (z < -w) ? 0x10 : 0x0;
++            outside &= sides;
++        }
++
++        if (outside != 0) {
++            *dl = state->popReturnAddress();
++        }
++    }
++
+     void RSP::setGeometryMode(uint32_t mask) {
+         geometryModeStack[geometryModeStackSize - 1] |= mask;
+         state->updateDrawStatusAttribute(DrawAttribute::GeometryMode);
+diff --git a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
+index 8f9db10..04985e2 100644
+--- a/src/hle/rt64_rsp.h
++++ b/src/hle/rt64_rsp.h
+@@ -284,6 +284,7 @@ namespace RT64 {
+         void setFog(int16_t mul, int16_t offset);
+         void branchZ(uint32_t branchDl, uint16_t vtxIndex, uint32_t zValue, DisplayList **dl);
+         void branchW(uint32_t branchDl, uint16_t vtxIndex, uint32_t wValue, DisplayList **dl);
++        void cullDl(uint32_t vstart, uint32_t vend, DisplayList **dl);
+         void setTexture(uint8_t tile, uint8_t level, uint8_t on, uint16_t sc, uint16_t tc);
+         void setOtherMode(uint32_t high, uint32_t low);
+         void pushOtherMode();
