@@ -17,6 +17,11 @@
 #include "util/file.h"
 #include "ultramodern/ultramodern.hpp"
 
+// runtime-patches/rt64-0009: see-through surfaces after the rest of their view, the farthest first.
+namespace RT64 {
+    void setTranslucentSort(bool enabled);
+}
+
 namespace {
     enum class Accessory {
         ControllerPak,
@@ -161,6 +166,18 @@ namespace {
         {SceneryCulling::Off, "Off", "Off"},
     };
     const std::string scenery_culling_option = "scenery_culling";
+
+    // RT64's see-through sort (runtime-patches/rt64-0009, sortTranslucentCalls in its rt64_state.cpp).
+    enum class SeeThroughOrder {
+        Original,
+        Sorted,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> see_through_order_options = {
+        {SeeThroughOrder::Original, "Original", "Original"},
+        {SeeThroughOrder::Sorted, "Sorted", "Sorted"},
+    };
+    const std::string see_through_order_option = "see_through_order";
 
     enum class SplitScreenRatio {
         Expand,
@@ -515,6 +532,23 @@ void rush2049::init_config() {
     on_apply(graphics, scenery_culling_option, [](uint32_t value) {
         static constexpr float reach[] = { 0.0f, 500.0f, -1.0f };
         rush2049::set_scenery_culling(reach[value]);
+    });
+
+    graphics.add_enum_option(
+        see_through_order_option,
+        "See-Through Order",
+        "Trees, lamps, sails, glass and smoke are see-through pictures, and the original game draws each one "
+        "wherever it comes in its list, so scenery behind one that is drawn after it covers it: a tree goes missing "
+        "in front of some buildings and not others, and a sail covers a street lamp in front of it."
+        "<br/>"
+        "<b>Sorted:</b> see-through pictures are drawn after the rest of the scene, the farthest first, so each "
+        "shows in front of whatever is behind it.",
+        see_through_order_options,
+        SeeThroughOrder::Sorted
+    );
+    // Called on load too.
+    on_apply(graphics, see_through_order_option, [](uint32_t value) {
+        RT64::setTranslucentSort(value == (uint32_t)SeeThroughOrder::Sorted);
     });
 
     graphics.add_enum_option(

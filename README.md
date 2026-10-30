@@ -54,6 +54,10 @@ option has an Original value that runs the game as it shipped.
   couldn't be seen from the stretch of road you were on, so buildings, walls and signs popped in and out as you
   drove from one stretch into the next, some of them a few car lengths away. On a weaker PC, Reduced draws only what
   can be seen from the stretches around you, so scenery comes in well ahead of the car for a fraction of the cost.
+- **See-through scenery in order**: trees, lamps, sails, glass and smoke are see-through pictures that the game draws
+  wherever they come in its list, so scenery behind one that happened to be drawn after it painted over it: a tree
+  vanished in front of some buildings and not others, and a boat's sail covered the street lamp in front of it. They
+  are now drawn after the rest of the scene, the farthest first.
 - **Enhanced audio**: MusyX music and sound effects are mixed at 44.1 kHz with a better interpolator instead of the
   game's 22.05 kHz mix, loud peaks are softly limited instead of clipping, and playback no longer skips or drops
   out when the audio output falls behind.
@@ -94,6 +98,7 @@ shipped, set every Original value:
 | Draw distance | Draw Distance | `graphics.json` `draw_distance` | `"Far"` (4×; `"Farthest"` is 16×) | `"Original"` |
 | Model detail | Level of Detail | `graphics.json` `level_of_detail` | `"High"` (4× the distances; `"Highest"`: always the most detailed) | `"Original"` |
 | No scenery culling | Scenery Culling | `graphics.json` `scenery_culling` | `"Off"` (`"Original"` in a browser; `"Reduced"`: what can be seen from the stretches around you) | `"Original"` |
+| See-through scenery in order | See-Through Order | `graphics.json` `see_through_order` | `"Sorted"` | `"Original"` |
 | Rendering resolution | Resolution | `graphics.json` `res_option` | `"Auto"` (window size) | `"Original"` (320×240) |
 | Anti-aliasing | MS Anti-Aliasing | `graphics.json` `msaa_option` | `"MSAA2X"` | `"None"` |
 | Hi-res menu and HUD text | Hi-res Font | `graphics.json` `hires_font` | `"On"` | `"Off"` |
