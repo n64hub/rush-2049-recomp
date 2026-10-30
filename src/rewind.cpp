@@ -26,6 +26,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>  // TEMP trace
 #include <cstring>
 #include <deque>
 #include <vector>
@@ -307,6 +308,55 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     }
     if (read_word(rdram, race_clock_addr) == read_word(shadow.data(), race_clock_addr)) {
         return;  // no race time has passed
+    }
+    if (std::getenv("REWIND_TRACE")) {  // TEMP diagnostic: unsaved words that change on most held frames
+        static std::vector<uint8_t> prev, first;
+        static std::vector<uint32_t> count;
+        static int frames = 0;
+        static bool was_held = false;
+        static std::vector<Range> unsaved;
+        if (unsaved.empty()) {
+            unsaved.push_back({ 0x8002C5E0, 0x80086A50 });
+            for (Range r : not_saved) {
+                if (r.lo != 0x8017AEC0 && r.lo != 0x807BB000) unsaved.push_back(r);
+            }
+        }
+        bool held = rewind_held();
+        if (prev.empty()) {
+            prev.assign(rdram, rdram + 0x00800000);
+            count.assign(0x00200000, 0);
+        }
+        if (held != was_held) {
+            if (frames > 20) {
+                fprintf(stderr, "[trace] %s ended after %d frames\n", was_held ? "HELD" : "race", frames);
+                int shown = 0;
+                for (Range r : unsaved) {
+                    for (uint32_t a = r.lo; a < r.hi; a += 4) {
+                        uint32_t w = (a - 0x80000000u) / 4;
+                        if (count[w] * 4 >= (uint32_t)frames * 3 && shown++ < 200) {
+                            uint32_t f = *(uint32_t*)(first.data() + w * 4), l = *(uint32_t*)(rdram + w * 4);
+                            float ff, lf;
+                            memcpy(&ff, &f, 4);
+                            memcpy(&lf, &l, 4);
+                            fprintf(stderr, "[trace]  %08X %u/%d %08X->%08X (%g->%g)\n", a, count[w], frames, f, l, ff, lf);
+                        }
+                    }
+                }
+            }
+            std::fill(count.begin(), count.end(), 0);
+            first.assign(rdram, rdram + 0x00800000);
+            frames = 0;
+            was_held = held;
+        }
+        if (first.empty()) first.assign(rdram, rdram + 0x00800000);
+        frames++;
+        for (Range r : unsaved) {
+            for (uint32_t a = r.lo; a < r.hi; a += 4) {
+                uint32_t o = a - 0x80000000u;
+                if (*(uint32_t*)(rdram + o) != *(uint32_t*)(prev.data() + o)) count[o / 4]++;
+            }
+        }
+        memcpy(prev.data(), rdram, 0x00800000);
     }
     if (rewind_held()) {
         step_back(rdram);
