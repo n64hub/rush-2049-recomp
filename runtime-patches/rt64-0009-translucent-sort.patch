@@ -1,0 +1,198 @@
+diff --git a/src/hle/rt64_draw_call.h b/src/hle/rt64_draw_call.h
+index 26a7e04..16ed567 100644
+--- a/src/hle/rt64_draw_call.h
++++ b/src/hle/rt64_draw_call.h
+@@ -97,6 +97,10 @@ namespace RT64 {
+         uint8_t textureLevels;
+         bool NoN;
+ 
++        // Rush 2049 patch: how many display lists deep the shallowest of the call's RSP triangles was drawn
++        // (UINT8_MAX for none), for the see-through order (sortTranslucentCalls in rt64_state.cpp).
++        uint8_t minListDepth;
++
+         // RSP specific parameters.
+         uint32_t geometryMode;
+         uint32_t objRenderMode;
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index cdd8e27..f950b35 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -1253,6 +1253,9 @@ namespace RT64 {
+         }
+ 
+         drawCall.triangleCount++;
++
++        // Rush 2049 patch: the list depth the triangle was drawn at, for the see-through order.
++        drawCall.minListDepth = uint8_t(std::min<size_t>(drawCall.minListDepth, std::min<size_t>(state->returnAddressStack.size(), UINT8_MAX - 1)));
+     }
+ 
+     void RSP::drawIndexedTri(uint32_t a, uint32_t b, uint32_t c) {
+diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
+index 7cbc85a..45010cb 100644
+--- a/src/hle/rt64_state.h
++++ b/src/hle/rt64_state.h
+@@ -40,6 +40,11 @@ namespace RT64 {
+     
+     const uint32_t RDRAMSize = 0x7FFFFF;
+ 
++    // Rush 2049 patch: a 3D view's see-through surfaces drawn at least minListDepth display lists deep are drawn after
++    // the rest of it, 0 for none (sortTranslucentCalls in rt64_state.cpp). Set by the game from its options, read with
++    // each workload.
++    void setTranslucentSort(uint32_t minListDepth);
++
+     struct State {
+         struct External {
+             Application *app;
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+index 4a8bf75..3c607d7 100644
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -35,6 +35,86 @@
+ #define MI_INTR_SP          0x00000001
+ 
+ namespace RT64 {
++    static std::atomic<uint32_t> translucentSortDepth{ 0 };
++
++    void setTranslucentSort(uint32_t minListDepth) {
++        translucentSortDepth.store(minListDepth, std::memory_order_relaxed);
++    }
++
++    // Rush 2049 patch: a game that draws see-through surfaces (blended, Z compare without Z update) in among the rest of
++    // its scene leaves them to whatever is drawn after: on a console as here, a surface drawn later and farther away
++    // passes the depth test where the see-through one is and paints over it, since the see-through one wrote no depth.
++    // Rush 2049 draws its scenery node by node, a model's see-through parts beside its solid ones, so a tree of
++    // see-through leaves goes missing wherever a building behind it is drawn after it. With translucentSortDepth set,
++    // each perspective projection's see-through calls drawn at least that many display lists deep are drawn after its
++    // other calls, in the order the game drew them, so they blend over everything solid behind them and are hidden by
++    // everything solid in front. Their order among themselves is kept, so two see-through surfaces still cover each
++    // other as the game drew them: sorting them by depth turned an exhaust flame's layers over.
++    // The depth is what keeps this to scenery. Rush 2049's root list calls a list per scene node, which calls the
++    // node's model, so the track's scenery and the other cars are two lists deep; its effects (the player's car and its
++    // flame, the flame's trail, shadows, smoke) are lists the root list calls itself, one deep, and are built from
++    // see-through and solid layers drawn in an order they depend on, which moving their see-through layers broke.
++    // Left in place as well: a call inside a VertexTestZ pair, whose draws depend on the test before them, and a call
++    // sampling a framebuffer copy, which must come after the draws it copies.
++    static bool isTranslucentCall(const Workload &workload, const GameCall &call, uint32_t minListDepth) {
++        const DrawCall &desc = call.callDesc;
++        if ((desc.minListDepth == UINT8_MAX) || (desc.minListDepth < minListDepth)) {
++            return false;
++        }
++
++        const interop::OtherMode &otherMode = desc.otherMode;
++        const uint32_t cycleType = otherMode.cycleType();
++        if ((desc.extendedType != DrawExtendedType::None) || (desc.triangleCount == 0) || (cycleType == G_CYC_FILL) ||
++            (cycleType == G_CYC_COPY) || !otherMode.zCmp() || otherMode.zUpd() || (otherMode.zMode() != ZMODE_XLU) ||
++            !otherMode.forceBlend())
++        {
++            return false;
++        }
++
++        for (uint32_t t = 0; t < desc.tileCount; t++) {
++            if (workload.drawData.callTiles[desc.tileIndex + t].tileCopyUsed) {
++                return false;
++            }
++        }
++
++        return true;
++    }
++
++    static void sortTranslucentCalls(Workload &workload, Projection &proj, uint32_t minListDepth) {
++        if ((proj.type != Projection::Type::Perspective) || (proj.gameCallCount < 2)) {
++            return;
++        }
++
++        thread_local std::vector<GameCall> solid;
++        thread_local std::vector<GameCall> translucent;
++        solid.clear();
++        translucent.clear();
++        bool insideTestZ = false;
++        for (uint32_t d = 0; d < proj.gameCallCount; d++) {
++            const GameCall &call = proj.gameCalls[d];
++            if (call.callDesc.extendedType == DrawExtendedType::VertexTestZ) {
++                insideTestZ = true;
++            }
++            else if (call.callDesc.extendedType == DrawExtendedType::EndVertexTestZ) {
++                insideTestZ = false;
++            }
++
++            if (!insideTestZ && isTranslucentCall(workload, call, minListDepth)) {
++                translucent.emplace_back(call);
++            }
++            else {
++                solid.emplace_back(call);
++            }
++        }
++
++        if (translucent.empty() || solid.empty()) {
++            return;
++        }
++
++        std::copy(solid.begin(), solid.end(), proj.gameCalls.begin());
++        std::copy(translucent.begin(), translucent.end(), proj.gameCalls.begin() + solid.size());
++    }
++
+     const float ShiftScaleMap[] = {
+         1.0f,
+         1.0f / 2.0f,
+@@ -141,6 +221,7 @@ namespace RT64 {
+         drawCall.cullBothMask = 0;
+         drawCall.shadingSmoothMask = 0;
+         drawCall.NoN = false;
++        drawCall.minListDepth = UINT8_MAX;
+         drawCall.extendedType = DrawExtendedType::None;
+         drawCall.extendedFlags = {};
+         drawCall.drawStatusChanges = 0;
+@@ -561,6 +642,7 @@ namespace RT64 {
+         drawCall.minWorldMatrix = USHRT_MAX;
+         drawCall.maxWorldMatrix = 0;
+         drawCall.triangleCount = 0;
++        drawCall.minListDepth = UINT8_MAX;
+     }
+     
+     void State::submitFramebufferPair(FramebufferPair::FlushReason flushReason) {
+@@ -803,10 +885,26 @@ namespace RT64 {
+             }
+         };
+ 
++        // Rush 2049 patch: the loads and tile samples are replayed with cursors, so each call's tiles are sampled from TMEM
++        // as its own loads left it only if the calls come in the order they were made. sortTranslucentCalls draws some of
++        // a projection's calls later, so they are walked here by callIndex, the order they were made in. Walked as drawn,
++        // a moved call's tiles would be sampled along with the next call's, after that call's loads, and a tile sampled
++        // from raw TMEM (a texture larger than TMEM) would show the next texture's data.
++        thread_local std::vector<const GameCall *> madeOrder;
+         for (uint32_t p = 0; p < fbPair.projectionCount; p++) {
+             const Projection &proj = fbPair.projections[p];
++            madeOrder.clear();
+             for (uint32_t d = 0; d < proj.gameCallCount; d++) {
+-                const GameCall &gameCall = proj.gameCalls[d];
++                madeOrder.emplace_back(&proj.gameCalls[d]);
++            }
++
++            auto madeBefore = [](const GameCall *a, const GameCall *b) { return a->callDesc.callIndex < b->callDesc.callIndex; };
++            if (!std::is_sorted(madeOrder.begin(), madeOrder.end(), madeBefore)) {
++                std::sort(madeOrder.begin(), madeOrder.end(), madeBefore);
++            }
++
++            for (const GameCall *madeCall : madeOrder) {
++                const GameCall &gameCall = *madeCall;
+ 
+                 // Perform all load operations.
+                 if (gameCall.callDesc.loadCount > 0) {
+@@ -1357,6 +1455,17 @@ namespace RT64 {
+             }
+         }
+ 
++        // Rush 2049 patch: see-through surfaces after the rest of their view (sortTranslucentCalls).
++        const uint32_t sortDepth = translucentSortDepth.load(std::memory_order_relaxed);
++        if (sortDepth > 0) {
++            for (uint32_t f = 0; f < workload.fbPairCount; f++) {
++                auto &fbPair = workload.fbPairs[f];
++                for (uint32_t p = 0; p < fbPair.projectionCount; p++) {
++                    sortTranslucentCalls(workload, fbPair.projections[p], sortDepth);
++                }
++            }
++        }
++
+         // Ensure there's as many GPU tiles as call tiles available in the vector.
+         workload.drawData.gpuTiles.resize(workload.drawData.callTiles.size());
+ 

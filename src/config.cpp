@@ -17,6 +17,12 @@
 #include "util/file.h"
 #include "ultramodern/ultramodern.hpp"
 
+// runtime-patches/rt64-0009: see-through surfaces drawn this many display lists deep go after the rest of their
+// view, 0 for none.
+namespace RT64 {
+    void setTranslucentSort(uint32_t minListDepth);
+}
+
 namespace {
     enum class Accessory {
         ControllerPak,
@@ -161,6 +167,20 @@ namespace {
         {SceneryCulling::Off, "Off", "Off"},
     };
     const std::string scenery_culling_option = "scenery_culling";
+
+    // RT64's see-through order (runtime-patches/rt64-0009, sortTranslucentCalls in its rt64_state.cpp). Sorted moves
+    // the see-through draws made two display lists deep: the game's root list calls a list per scene node, which calls
+    // the node's model, while its effects (the player's car, its flame, smoke) are called from the root list.
+    enum class SeeThroughOrder {
+        Original,
+        Sorted,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> see_through_order_options = {
+        {SeeThroughOrder::Original, "Original", "Original"},
+        {SeeThroughOrder::Sorted, "Sorted", "Sorted"},
+    };
+    const std::string see_through_order_option = "see_through_order";
 
     enum class SplitScreenRatio {
         Expand,
@@ -515,6 +535,24 @@ void rush2049::init_config() {
     on_apply(graphics, scenery_culling_option, [](uint32_t value) {
         static constexpr float reach[] = { 0.0f, 500.0f, -1.0f };
         rush2049::set_scenery_culling(reach[value]);
+    });
+
+    graphics.add_enum_option(
+        see_through_order_option,
+        "See-Through Order",
+        "Trees, lamps, sails and glass are see-through pictures, and the original game draws each one wherever it "
+        "comes in its list, so solid scenery behind one that is drawn after it covers it: a tree goes missing in front "
+        "of some walls and not others."
+        "<br/>"
+        "<b>Sorted:</b> see-through scenery is drawn after the rest of the scene, so it shows over whatever solid is "
+        "behind it. Two see-through pictures still cover each other as in the original, and your car's flame and "
+        "the smoke are drawn as they were.",
+        see_through_order_options,
+        SeeThroughOrder::Sorted
+    );
+    // Called on load too.
+    on_apply(graphics, see_through_order_option, [](uint32_t value) {
+        RT64::setTranslucentSort(value == (uint32_t)SeeThroughOrder::Sorted ? 2 : 0);
     });
 
     graphics.add_enum_option(
