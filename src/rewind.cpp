@@ -69,8 +69,7 @@ constexpr Range not_saved[] = {
     { 0x80118E30, 0x80118E34 },
     { 0x8011EACC, 0x8011EAD0 },
     { 0x80124EE0, 0x80124F90 },  // timing, with the tick's timestamp at 0x80124F70
-    { 0x80125338, 0x80126128 },  // matrices for the display list
-    { 0x8012A0E8, 0x8012AC28 },  // the same
+    { 0x80124FE8, 0x8012E5E8 },  // the two display lists, 0x4B00 bytes each (func_800A4934)
     { 0x8012E608, 0x8012E6D4 },
     { 0x8013FED0, 0x8013FED4 },
     { 0x801403C0, 0x80140414 },
