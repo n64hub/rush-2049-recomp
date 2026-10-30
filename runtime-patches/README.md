@@ -26,5 +26,6 @@ rt64-0007              the workload queue's size set by the game (WORKLOAD_QUEUE
 rt64-0008              G_CULLDL: a display list whose bounding box lies wholly off one side of the view (as RT64 widens
                        it, and a quarter more each way) or behind the camera ends there, as on an N64; RT64 drew it all
 rt64-0009              see-through surfaces (blended, Z compare without Z update) drawn at least the game's number of
-                       display lists deep go after the rest of their 3D view, in their own order (See-Through Order)
+                       display lists deep go after the rest of their 3D view, in their own order (See-Through Order),
+                       with each call's textures still taken from TMEM as the calls before it in the game's order left it
 ```

@@ -44,7 +44,7 @@ index 7cbc85a..45010cb 100644
          struct External {
              Application *app;
 diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
-index 4a8bf75..c0e9e52 100644
+index 4a8bf75..3c607d7 100644
 --- a/src/hle/rt64_state.cpp
 +++ b/src/hle/rt64_state.cpp
 @@ -35,6 +35,86 @@
@@ -150,7 +150,35 @@ index 4a8bf75..c0e9e52 100644
      }
      
      void State::submitFramebufferPair(FramebufferPair::FlushReason flushReason) {
-@@ -1357,6 +1439,17 @@ namespace RT64 {
+@@ -803,10 +885,26 @@ namespace RT64 {
+             }
+         };
+ 
++        // Rush 2049 patch: the loads and tile samples are replayed with cursors, so each call's tiles are sampled from TMEM
++        // as its own loads left it only if the calls come in the order they were made. sortTranslucentCalls draws some of
++        // a projection's calls later, so they are walked here by callIndex, the order they were made in. Walked as drawn,
++        // a moved call's tiles would be sampled along with the next call's, after that call's loads, and a tile sampled
++        // from raw TMEM (a texture larger than TMEM) would show the next texture's data.
++        thread_local std::vector<const GameCall *> madeOrder;
+         for (uint32_t p = 0; p < fbPair.projectionCount; p++) {
+             const Projection &proj = fbPair.projections[p];
++            madeOrder.clear();
+             for (uint32_t d = 0; d < proj.gameCallCount; d++) {
+-                const GameCall &gameCall = proj.gameCalls[d];
++                madeOrder.emplace_back(&proj.gameCalls[d]);
++            }
++
++            auto madeBefore = [](const GameCall *a, const GameCall *b) { return a->callDesc.callIndex < b->callDesc.callIndex; };
++            if (!std::is_sorted(madeOrder.begin(), madeOrder.end(), madeBefore)) {
++                std::sort(madeOrder.begin(), madeOrder.end(), madeBefore);
++            }
++
++            for (const GameCall *madeCall : madeOrder) {
++                const GameCall &gameCall = *madeCall;
+ 
+                 // Perform all load operations.
+                 if (gameCall.callDesc.loadCount > 0) {
+@@ -1357,6 +1455,17 @@ namespace RT64 {
              }
          }
  

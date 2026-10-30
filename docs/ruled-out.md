@@ -11,8 +11,8 @@ What has been tried or measured and dropped, with why.
   order, so it stays. Sorting the see-through draws by depth instead (each call by its triangles' mean screen depth,
   and the triangles inside a call) turned the layers of an effect over: the exhaust flame's glow went under its core.
   Moving the see-through draws that the root display list calls itself (the player's car, its flame and the flame's
-  trail, smoke and the other effects) took the flame's soft glow away and showed a hard dark quad under the car, so only those two
-  lists deep (scene nodes) move.
+  trail, smoke and the other effects) as well draws the orange flame over its nozzle's glow, so only those two lists
+  deep (scene nodes) move.
 - Caching texture hashes while TMEM is untouched: only 8% of hashes repeat without a TMEM change.
 - Merging or batching RT64's draws to cut the 240p floor (`start_gpu_profiler`'s table in `src/main.cpp`). Only ~5% of
   draws repeat the one before exactly; merging every run that shares a pipeline (wrong textures, timing only) halves
