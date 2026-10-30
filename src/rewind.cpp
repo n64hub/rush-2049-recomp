@@ -269,13 +269,24 @@ void step_back(uint8_t* rdram) {
 // TEMP (to be removed): the sound lists, for the stuck squeal.
 void dump_sounds(const uint8_t* rdram, const char* tag) {
     const uint32_t shift = read_word(rdram, sound_shift_addr) & 31;
-    fprintf(stderr, "[snd] %s count %u shadow %u stepped %u back %u clock %08X:", tag, read_word(rdram, sound_count_addr),
-        shadow_sounds, stepped_sounds, frames_back, read_word(rdram, race_clock_addr));
+    fprintf(stderr, "[snd] %.2f %s count %u shadow %u stepped %u back %u clock %08X:",         rush2049_now(), tag, read_word(rdram, sound_count_addr), shadow_sounds, stepped_sounds, frames_back, read_word(rdram, race_clock_addr));
     for (uint32_t head : { 0x80144028u, 0x80144C58u }) {
         fprintf(stderr, head == 0x80144028u ? " P[" : " W[");
         for (uint32_t node = read_word(rdram, head), n = 0; node != 0 && n < 256; node = read_word(rdram, node), n++) {
-            fprintf(stderr, " %u/s%u/l%u", read_word(rdram, node + 0xC) >> shift, read_word(rdram, node + 0x34),
-                rdram[(node + 0x19 - 0x80000000u) ^ 3]);
+            const uint32_t id = read_word(rdram, node + 0xC);
+            fprintf(stderr, " %u/s%u/l%u", id >> shift, read_word(rdram, node + 0x34), rdram[(node + 0x19 - 0x80000000u) ^ 3]);
+            if (rdram[(node + 0x19 - 0x80000000u) ^ 3] != 0) {
+                int found = 0;
+                for (uint32_t a = 0x8010FD80; a < 0x80800000 && found < 3; a += 4) {
+                    if ((a >= 0x801A6000 && a < 0x80218A00) || (a >= 0x80142728 && a < 0x80144E00)) {
+                        continue;
+                    }
+                    if (read_word(rdram, a) == id) {
+                        fprintf(stderr, "@%08X", a);
+                        found++;
+                    }
+                }
+            }
         }
         fprintf(stderr, " ]");
     }
