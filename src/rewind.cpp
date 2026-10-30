@@ -42,6 +42,9 @@ constexpr uint32_t game_state_addr = 0x801174B4;  // the frame loop's state bits
 constexpr uint32_t race_clock_addr = 0x801543CC;  // float, written by the tick
 constexpr uint32_t sound_count_addr = 0x80110254; // the sound manager's count of sounds started (not saved)
 constexpr uint32_t sound_shift_addr = 0x801460F8; // a sound's ID is that count shifted left by this, or a slot
+constexpr uint32_t ticks_addr = 0x8002EB64;       // the timer's count of 60ths of a second, always running
+constexpr uint32_t deadline_addr = 0x8002EB9C;    // the count at which its countdown runs out
+constexpr uint32_t start_addr = 0x8002EBA0;       // the count its game time is measured from
 constexpr uint32_t saved_lo = 0x8010FD80;         // the end of the main code segment
 constexpr uint32_t saved_hi = 0x80800000;
 constexpr size_t history_cap = 128 * 1024 * 1024;
@@ -98,9 +101,14 @@ std::vector<uint8_t> shadow;   // the saved memory as of the last frame saved, i
 bool have_shadow = false;
 uint32_t shadow_sounds = 0;    // the sound count as of the shadow
 uint32_t stepped_sounds = 0;   // the sound count as of the last step back
+struct Timer {
+    uint32_t since_start, to_deadline;  // in the timer's 60ths, from its count
+};
+Timer shadow_timer{};          // the timer as of the shadow
 struct Frame {
     std::vector<uint8_t> changes;  // { offset, length, old contents } for each piece that changed
     uint32_t sounds;               // the sound count as of those old contents
+    Timer timer;                   // and the timer
 };
 std::deque<Frame> history;     // newest last
 size_t history_bytes = 0;
@@ -108,6 +116,21 @@ uint32_t frames_back = 0;     // frames stepped back since Rewind was pressed
 
 uint32_t read_word(const uint8_t* mem, uint32_t addr) {
     return *(const uint32_t*)(mem + (addr - 0x80000000u));
+}
+
+void write_word(uint8_t* mem, uint32_t addr, uint32_t value) {
+    *(uint32_t*)(mem + (addr - 0x80000000u)) = value;
+}
+
+Timer read_timer(const uint8_t* rdram) {
+    const uint32_t now = read_word(rdram, ticks_addr);
+    return { now - read_word(rdram, start_addr), read_word(rdram, deadline_addr) - now };
+}
+
+void write_timer(uint8_t* rdram, Timer t) {
+    const uint32_t now = read_word(rdram, ticks_addr);
+    write_word(rdram, start_addr, now - t.since_start);
+    write_word(rdram, deadline_addr, now + t.to_deadline);
 }
 
 bool rewind_held() {
@@ -173,8 +196,9 @@ void save_frame(uint8_t* rdram) {
     });
     record.shrink_to_fit();
     history_bytes += record.size();
-    history.push_back({ std::move(record), shadow_sounds });
+    history.push_back({ std::move(record), shadow_sounds, shadow_timer });
     shadow_sounds = read_word(rdram, sound_count_addr);
+    shadow_timer = read_timer(rdram);
     while (history_bytes > history_cap) {
         history_bytes -= history.front().changes.size();
         history.pop_front();
@@ -184,6 +208,7 @@ void save_frame(uint8_t* rdram) {
 void step_back(uint8_t* rdram) {
     for_each_change(rdram, [&](uint32_t p, uint32_t n) { memcpy(rdram + p, shadow.data() + p, n); });
     stepped_sounds = read_word(rdram, sound_count_addr);
+    write_timer(rdram, shadow_timer);
     if (history.empty()) {
         return;  // as far back as it goes: stay there
     }
@@ -198,6 +223,8 @@ void step_back(uint8_t* rdram) {
     }
     history_bytes -= record.size();
     shadow_sounds = history.back().sounds;
+    shadow_timer = history.back().timer;
+    write_timer(rdram, shadow_timer);
     history.pop_back();
     frames_back++;
 }
@@ -303,6 +330,7 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
             memcpy(shadow.data() + r.lo, rdram + r.lo, r.hi - r.lo);
         }
         shadow_sounds = read_word(rdram, sound_count_addr);
+        shadow_timer = read_timer(rdram);
         have_shadow = true;
         return;
     }
