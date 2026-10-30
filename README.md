@@ -324,7 +324,9 @@ cd mod_template && ../build/RecompModTool mod.toml build   # writes build/rush20
   in from `N64Recomp-browser`, which is what turns a recomp into a page; see
   [N64Recomp-browser](https://github.com/n64hub/N64Recomp-browser). `runtime-patches/`: this game's fixes on top of them.
 - `headless/`: a build without the frontend: the browser test page, or with no graphics at all.
-- `assets/`: the menus' fonts, icons and stylesheet, and the hi-res title's patch, shipped beside the executable.
+- `assets/`: the menus' fonts, icons and stylesheet, the launcher's artwork, and the hi-res title's patch, shipped
+  beside the executable. `icon/`: the program's icon. The artwork and the icon are this project's own, drawn by
+  `tools/launcher_art.py` from shapes and the Inter font; neither is the game's logo or box art.
 - `syms/`: the symbol files N64Recomp and mods use; `names.toml` holds the function names worked out so far.
 - `tools/`: ROM extraction, symbol generation, the build-and-boot loop, the release script and the CI checks.
 - `releases/`: each release's notes, as published on the Releases page.

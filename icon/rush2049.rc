@@ -1,0 +1,3 @@
+// The executable's icon (tools/launcher_art.py makes it). Explorer and the taskbar show the first icon resource, and
+// SDL gives it to the game's window too.
+1 ICON "rush2049.ico"

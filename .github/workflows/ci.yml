@@ -192,7 +192,7 @@ jobs:
         shell: bash
         run: |
           objs=$(ninja -C build -t targets all |
-            grep -oE '^CMakeFiles/Rush2049Recompiled\.dir/[^:]+\.obj' | grep -vE 'register_overlays|/rsp/')
+            grep -oE '^CMakeFiles/Rush2049Recompiled\.dir/[^:]+\.(obj|res)' | grep -vE 'register_overlays|/rsp/')
           [ -n "$objs" ] || { echo "no object targets found"; exit 1; }
           echo "$objs"
           ninja -C build $objs
