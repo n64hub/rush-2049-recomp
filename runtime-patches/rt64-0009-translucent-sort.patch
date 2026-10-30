@@ -1,31 +1,23 @@
 diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
-index 7cbc85a..d160391 100644
+index 7cbc85a..fb88502 100644
 --- a/src/hle/rt64_state.h
 +++ b/src/hle/rt64_state.h
 @@ -40,6 +40,10 @@ namespace RT64 {
      
      const uint32_t RDRAMSize = 0x7FFFFF;
  
-+    // Rush 2049 patch: whether a 3D view's see-through surfaces are drawn after the rest of it, the farthest first
-+    // (sortTranslucentCalls in rt64_state.cpp). Set by the game from its options, read with each workload.
++    // Rush 2049 patch: whether a 3D view's see-through surfaces are drawn after the rest of it (sortTranslucentCalls in
++    // rt64_state.cpp). Set by the game from its options, read with each workload.
 +    void setTranslucentSort(bool enabled);
 +
      struct State {
          struct External {
              Application *app;
 diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
-index 4a8bf75..98c2a9d 100644
+index 4a8bf75..1c660c1 100644
 --- a/src/hle/rt64_state.cpp
 +++ b/src/hle/rt64_state.cpp
-@@ -5,6 +5,7 @@
- #include "rt64_state.h"
- 
- #include <cassert>
-+#include <cfloat>
- #include <cinttypes>
- 
- #include <algorithm>
-@@ -35,6 +36,118 @@
+@@ -35,6 +35,78 @@
  #define MI_INTR_SP          0x00000001
  
  namespace RT64 {
@@ -39,19 +31,31 @@ index 4a8bf75..98c2a9d 100644
 +    // its scene leaves them to whatever is drawn after: on a console as here, a surface drawn later and farther away
 +    // passes the depth test where the see-through one is and paints over it, since the see-through one wrote no depth.
 +    // Rush 2049 draws its scenery node by node, a model's see-through parts beside its solid ones, so a tree of
-+    // see-through leaves goes missing wherever a building behind it is drawn after it, and the sail of a boat drawn after
-+    // a street lamp in the same list covers the lamp's pole. With translucentSort set, each perspective projection's
-+    // see-through calls are drawn after its other calls, the farthest first, and each such call's triangles are put in
-+    // the same order, by the mean screen depth of their vertices (a vertex behind the camera counts as nearest). A
-+    // homogeneous matrix divided through (Rush 2049's Draw Distance) leaves that depth as it was. Every other call keeps
-+    // its place and its order, and so does a call inside a VertexTestZ pair, whose draws depend on the test before them.
-+    static bool isTranslucentCall(const GameCall &call) {
++    // see-through leaves goes missing wherever a building behind it is drawn after it. With translucentSort set, each
++    // perspective projection's see-through calls are drawn after its other calls, in the order the game drew them, so
++    // they blend over everything solid behind them and are hidden by everything solid in front. Their order among
++    // themselves is kept: an effect drawn in layers (an exhaust flame's glow over its core) depends on it, and sorting
++    // them by depth turned such layers over. So two see-through surfaces still cover each other as the game drew them.
++    // Left in place: a call inside a VertexTestZ pair, whose draws depend on the test before them, and a call sampling
++    // a framebuffer copy, which must come after the draws it copies.
++    static bool isTranslucentCall(const Workload &workload, const GameCall &call) {
 +        const DrawCall &desc = call.callDesc;
 +        const interop::OtherMode &otherMode = desc.otherMode;
 +        const uint32_t cycleType = otherMode.cycleType();
-+        return (desc.extendedType == DrawExtendedType::None) && (desc.triangleCount > 0) && (cycleType != G_CYC_FILL) &&
-+            (cycleType != G_CYC_COPY) && otherMode.zCmp() && !otherMode.zUpd() && (otherMode.zMode() == ZMODE_XLU) &&
-+            otherMode.forceBlend();
++        if ((desc.extendedType != DrawExtendedType::None) || (desc.triangleCount == 0) || (cycleType == G_CYC_FILL) ||
++            (cycleType == G_CYC_COPY) || !otherMode.zCmp() || otherMode.zUpd() || (otherMode.zMode() != ZMODE_XLU) ||
++            !otherMode.forceBlend())
++        {
++            return false;
++        }
++
++        for (uint32_t t = 0; t < desc.tileCount; t++) {
++            if (workload.drawData.callTiles[desc.tileIndex + t].tileCopyUsed) {
++                return false;
++            }
++        }
++
++        return true;
 +    }
 +
 +    static void sortTranslucentCalls(Workload &workload, Projection &proj) {
@@ -59,28 +63,10 @@ index 4a8bf75..98c2a9d 100644
 +            return;
 +        }
 +
-+        std::vector<uint32_t> &faceIndices = workload.drawData.faceIndices;
-+        const std::vector<hlslpp::float4> &posTransformed = workload.drawData.posTransformed;
-+        const std::vector<hlslpp::float3> &posScreen = workload.drawData.posScreen;
-+        thread_local std::vector<std::pair<float, uint32_t>> order;
-+        thread_local std::vector<uint32_t> faceCopy;
-+        thread_local std::vector<GameCall> sorted;
-+        auto triangleDepth = [&](uint32_t start) {
-+            float sum = 0.0f;
-+            for (uint32_t i = 0; i < 3; i++) {
-+                const uint32_t v = faceIndices[start + i];
-+                const float w = posTransformed[v][3];
-+                if (!(w > 0.0f)) {
-+                    return -FLT_MAX;
-+                }
-+
-+                sum += posScreen[v][2];
-+            }
-+
-+            return sum / 3.0f;
-+        };
-+
-+        std::vector<std::pair<float, uint32_t>> deferred;
++        thread_local std::vector<GameCall> solid;
++        thread_local std::vector<GameCall> translucent;
++        solid.clear();
++        translucent.clear();
 +        bool insideTestZ = false;
 +        for (uint32_t d = 0; d < proj.gameCallCount; d++) {
 +            const GameCall &call = proj.gameCalls[d];
@@ -91,64 +77,30 @@ index 4a8bf75..98c2a9d 100644
 +                insideTestZ = false;
 +            }
 +
-+            if (insideTestZ || !isTranslucentCall(call)) {
-+                continue;
++            if (!insideTestZ && isTranslucentCall(workload, call)) {
++                translucent.emplace_back(call);
 +            }
-+
-+            const uint32_t start = call.meshDesc.faceIndicesStart;
-+            const uint32_t triangleCount = call.callDesc.triangleCount;
-+            order.clear();
-+            double sum = 0.0;
-+            for (uint32_t t = 0; t < triangleCount; t++) {
-+                const float depth = triangleDepth(start + t * 3);
-+                order.emplace_back(depth, t);
-+                sum += (depth == -FLT_MAX) ? 0.0 : depth;
++            else {
++                solid.emplace_back(call);
 +            }
-+
-+            if (triangleCount > 1) {
-+                std::stable_sort(order.begin(), order.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
-+                faceCopy.assign(faceIndices.begin() + start, faceIndices.begin() + start + triangleCount * 3);
-+                for (uint32_t t = 0; t < triangleCount; t++) {
-+                    std::copy_n(faceCopy.begin() + order[t].second * 3, 3, faceIndices.begin() + start + t * 3);
-+                }
-+            }
-+
-+            deferred.emplace_back(float(sum / triangleCount), d);
 +        }
 +
-+        if (deferred.empty()) {
++        if (translucent.empty() || solid.empty()) {
 +            return;
 +        }
 +
-+        std::stable_sort(deferred.begin(), deferred.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
-+        sorted.clear();
-+        size_t next = 0;
-+        std::vector<bool> moved(proj.gameCallCount, false);
-+        for (const auto &entry : deferred) {
-+            moved[entry.second] = true;
-+        }
-+
-+        for (uint32_t d = 0; d < proj.gameCallCount; d++) {
-+            if (!moved[d]) {
-+                sorted.emplace_back(proj.gameCalls[d]);
-+            }
-+        }
-+
-+        for (const auto &entry : deferred) {
-+            sorted.emplace_back(proj.gameCalls[entry.second]);
-+        }
-+
-+        std::copy(sorted.begin(), sorted.end(), proj.gameCalls.begin());
++        std::copy(solid.begin(), solid.end(), proj.gameCalls.begin());
++        std::copy(translucent.begin(), translucent.end(), proj.gameCalls.begin() + solid.size());
 +    }
 +
      const float ShiftScaleMap[] = {
          1.0f,
          1.0f / 2.0f,
-@@ -1357,6 +1470,16 @@ namespace RT64 {
+@@ -1357,6 +1429,16 @@ namespace RT64 {
              }
          }
  
-+        // Rush 2049 patch: see-through surfaces after the rest of their view, the farthest first (sortTranslucentCalls).
++        // Rush 2049 patch: see-through surfaces after the rest of their view (sortTranslucentCalls).
 +        if (translucentSort.load(std::memory_order_relaxed)) {
 +            for (uint32_t f = 0; f < workload.fbPairCount; f++) {
 +                auto &fbPair = workload.fbPairs[f];
