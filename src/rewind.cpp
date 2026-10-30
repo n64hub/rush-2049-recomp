@@ -52,15 +52,13 @@
 #include "rush2049_game.h"
 #include "rush2049_hooks.h"
 
-double rush2049_race_started_at = 0.0;  // TEMP
-double rush2049_now();                  // TEMP
-
 namespace {
 
 constexpr uint32_t game_state_addr = 0x801174B4;  // the frame loop's state bits; 0x00400000 in a race
 constexpr uint32_t race_clock_addr = 0x801543CC;  // float, written by the tick
 constexpr uint32_t sound_count_addr = 0x80110254; // the sound manager's count of sounds started (not saved)
 constexpr uint32_t sound_shift_addr = 0x801460F8; // a sound's ID is that count shifted left by this, or a slot
+constexpr uint32_t car_sounds_addr = 0x80140420;  // each car's looping sounds, 0x54 bytes a car (func_800E0050)
 constexpr uint32_t ticks_addr = 0x8002EB64;       // the timer's count of 60ths of a second, always running
 constexpr uint32_t deadline_addr = 0x8002EB9C;    // the count at which its countdown runs out
 constexpr uint32_t start_addr = 0x8002EBA0;       // the count its game time is measured from
@@ -251,6 +249,25 @@ void step_back(uint8_t* rdram) {
     frames_back++;
 }
 
+// Each car's looping sounds, its tires among them, are four slots of { ID, volume, pitch, ... } after a word of its
+// own, and func_800E0050 hands a slot's sound a new volume or pitch only when it differs from the one the slot kept.
+// Those copies are the race's and go back with it, but the sound keeps what a tick while Rewind was held gave it: a
+// tire squeal the replayed stretch turned up stayed loud when the race went back to quiet tires, as the race, its
+// copy already 0, never sent the 0, and it played on through the race and the menus after it. After a step back
+// every slot in use gets the copies the game gives a slot that hasn't sent yet (-2.0), so the next tick sends the
+// rewound race's volume and pitch.
+void resend_car_sounds(uint8_t* rdram) {
+    constexpr uint32_t unsent = 0xC0000000;  // -2.0f
+    for (uint32_t car = 0; car < 8; car++) {
+        for (uint32_t slot = car_sounds_addr + car * 0x54 + 4, n = 0; n < 4; slot += 0x14, n++) {
+            if (read_word(rdram, slot) != 0xFFFFFFFF) {
+                write_word(rdram, slot + 4, unsent);
+                write_word(rdram, slot + 8, unsent);
+            }
+        }
+    }
+}
+
 // The sound manager stays live, and the race knows its sounds only by the ID the manager handed out. A sound started
 // in the stretch that was rewound, or by a tick while Rewind was held, is one the race no longer knows of. One-shots
 // end by themselves, but a loop plays or waits for a voice for the rest of the race, owner or not, and the race starts
@@ -266,48 +283,6 @@ void step_back(uint8_t* rdram) {
 // ends, which a looping voice never does, so a tire squeal started while Rewind was held played to the end of the race.
 // The IDs are gathered first: the stop waits for the sound manager's lock, and the sound thread can change the lists
 // while it waits.
-// TEMP (to be removed): the sound lists, for the stuck squeal.
-void dump_sounds(const uint8_t* rdram, const char* tag) {
-    const uint32_t shift = read_word(rdram, sound_shift_addr) & 31;
-    fprintf(stderr, "[snd] %.2f %s count %u shadow %u stepped %u back %u clock %08X:",         rush2049_now(), tag, read_word(rdram, sound_count_addr), shadow_sounds, stepped_sounds, frames_back, read_word(rdram, race_clock_addr));
-    for (uint32_t head : { 0x80144028u, 0x80144C58u }) {
-        fprintf(stderr, head == 0x80144028u ? " P[" : " W[");
-        for (uint32_t node = read_word(rdram, head), n = 0; node != 0 && n < 256; node = read_word(rdram, node), n++) {
-            const uint32_t id = read_word(rdram, node + 0xC);
-            fprintf(stderr, " %u/s%u/l%u", id >> shift, read_word(rdram, node + 0x34), rdram[(node + 0x19 - 0x80000000u) ^ 3]);
-            if (rdram[(node + 0x19 - 0x80000000u) ^ 3] != 0) {
-                int found = 0;
-                for (uint32_t a = 0x8010FD80; a < 0x80800000 && found < 3; a += 4) {
-                    if ((a >= 0x801A6000 && a < 0x80218A00) || (a >= 0x80142728 && a < 0x80144E00)) {
-                        continue;
-                    }
-                    if (read_word(rdram, a) == id) {
-                        fprintf(stderr, "@%08X", a);
-                        found++;
-                    }
-                }
-            }
-        }
-        fprintf(stderr, " ]");
-    }
-    fprintf(stderr, "\n[slot]");
-    for (uint32_t a = 0x80140414; a < 0x8014044C; a += 4) {
-        fprintf(stderr, " %08X", read_word(rdram, a));
-    }
-    for (uint32_t head : { 0x80144028u, 0x80144C58u }) {
-        for (uint32_t node = read_word(rdram, head), n = 0; node != 0 && n < 256; node = read_word(rdram, node), n++) {
-            const uint32_t id = read_word(rdram, node + 0xC);
-            if (id == read_word(rdram, 0x80140424) || id == read_word(rdram, 0x80140438)) {
-                fprintf(stderr, " |%c%u", head == 0x80144028u ? 'P' : 'W', id >> shift);
-                for (uint32_t o = 0x10; o < 0x48; o += 4) {
-                    fprintf(stderr, " %08X", read_word(rdram, node + o));
-                }
-            }
-        }
-    }
-    fprintf(stderr, "\n");
-}
-
 int release_orphaned_sounds(uint8_t* rdram, recomp_context* ctx) {
     constexpr uint32_t playing = 0x80144028, waiting = 0x80144C58;
     const uint32_t shift = read_word(rdram, sound_shift_addr) & 31;
@@ -378,9 +353,6 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     if (tick_running) {
         return;
     }
-    if (rush2049_race_started_at == 0.0) {
-        rush2049_race_started_at = rush2049_now();  // TEMP
-    }
     if (!have_shadow) {
         if (saved.empty()) {
             uint32_t lo = saved_lo;
@@ -413,23 +385,16 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     if (read_word(rdram, race_clock_addr) == read_word(shadow.data(), race_clock_addr)) {
         return;  // no race time has passed
     }
-    static int after = 0;  // TEMP
     if (rewind_held()) {
         step_back(rdram);
-        dump_sounds(rdram, "step");
-        after = 0;
+        resend_car_sounds(rdram);
         return;
     }
-    if (after < 600 && (after++ % 30) == 0) {
-        dump_sounds(rdram, "after");  // TEMP
-    }
     if (frames_back > 0) {
-        dump_sounds(rdram, "release");  // TEMP
         int released = release_orphaned_sounds(rdram, ctx);
         fprintf(stderr, "[rewind] back %u frames, %zu frames (%zu MB) left, %d lost sounds released\n", frames_back,
             history.size(), history_bytes >> 20, released);
         frames_back = 0;
-        dump_sounds(rdram, "released");  // TEMP
     }
     save_frame(rdram);
 }

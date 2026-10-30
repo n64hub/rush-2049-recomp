@@ -67,7 +67,7 @@
 #include "SDL_syswm.h"
 #endif
 
-const std::string version_string = "0.1.30";
+const std::string version_string = "0.1.31";
 
 template<typename... Ts>
 void exit_error(const char* str, Ts ...args) {
@@ -129,22 +129,15 @@ static void load_input_script(const char* path) {
     fclose(f);
 }
 
-extern double rush2049_race_started_at;  // TEMP: times from 1000 up count from the race's first frame
-double rush2049_now() {
-    static const auto t0 = std::chrono::steady_clock::now();
-    return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-}
-
 static const ScriptedInput* scripted_input() {
     if (input_script.empty()) {
         return nullptr;
     }
     static const auto start = std::chrono::steady_clock::now();
     double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-    const double race_now = rush2049_race_started_at > 0.0 ? 1000.0 + rush2049_now() - rush2049_race_started_at : 0.0;
     const ScriptedInput* current = nullptr;
     for (const ScriptedInput& in : input_script) {
-        if (in.at < 1000.0 ? in.at <= now : in.at <= race_now) {
+        if (in.at <= now) {
             current = &in;
         }
     }
