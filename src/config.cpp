@@ -17,9 +17,10 @@
 #include "util/file.h"
 #include "ultramodern/ultramodern.hpp"
 
-// runtime-patches/rt64-0009: see-through surfaces after the rest of their view, the farthest first.
+// runtime-patches/rt64-0009: see-through surfaces drawn this many display lists deep go after the rest of their
+// view, 0 for none.
 namespace RT64 {
-    void setTranslucentSort(bool enabled);
+    void setTranslucentSort(uint32_t minListDepth);
 }
 
 namespace {
@@ -167,7 +168,9 @@ namespace {
     };
     const std::string scenery_culling_option = "scenery_culling";
 
-    // RT64's see-through sort (runtime-patches/rt64-0009, sortTranslucentCalls in its rt64_state.cpp).
+    // RT64's see-through order (runtime-patches/rt64-0009, sortTranslucentCalls in its rt64_state.cpp). Sorted moves
+    // the see-through draws made two display lists deep: the game's root list calls a list per scene node, which calls
+    // the node's model, while its effects (the player's car, flames, shadows, smoke) are called from the root list.
     enum class SeeThroughOrder {
         Original,
         Sorted,
@@ -548,7 +551,7 @@ void rush2049::init_config() {
     );
     // Called on load too.
     on_apply(graphics, see_through_order_option, [](uint32_t value) {
-        RT64::setTranslucentSort(value == (uint32_t)SeeThroughOrder::Sorted);
+        RT64::setTranslucentSort(value == (uint32_t)SeeThroughOrder::Sorted ? 2 : 0);
     });
 
     graphics.add_enum_option(
