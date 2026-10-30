@@ -52,6 +52,9 @@
 #include "rush2049_game.h"
 #include "rush2049_hooks.h"
 
+double rush2049_race_started_at = 0.0;  // TEMP
+double rush2049_now();                  // TEMP
+
 namespace {
 
 constexpr uint32_t game_state_addr = 0x801174B4;  // the frame loop's state bits; 0x00400000 in a race
@@ -263,6 +266,22 @@ void step_back(uint8_t* rdram) {
 // ends, which a looping voice never does, so a tire squeal started while Rewind was held played to the end of the race.
 // The IDs are gathered first: the stop waits for the sound manager's lock, and the sound thread can change the lists
 // while it waits.
+// TEMP (to be removed): the sound lists, for the stuck squeal.
+void dump_sounds(const uint8_t* rdram, const char* tag) {
+    const uint32_t shift = read_word(rdram, sound_shift_addr) & 31;
+    fprintf(stderr, "[snd] %s count %u shadow %u stepped %u back %u clock %08X:", tag, read_word(rdram, sound_count_addr),
+        shadow_sounds, stepped_sounds, frames_back, read_word(rdram, race_clock_addr));
+    for (uint32_t head : { 0x80144028u, 0x80144C58u }) {
+        fprintf(stderr, head == 0x80144028u ? " P[" : " W[");
+        for (uint32_t node = read_word(rdram, head), n = 0; node != 0 && n < 256; node = read_word(rdram, node), n++) {
+            fprintf(stderr, " %u/s%u/l%u", read_word(rdram, node + 0xC) >> shift, read_word(rdram, node + 0x34),
+                rdram[(node + 0x19 - 0x80000000u) ^ 3]);
+        }
+        fprintf(stderr, " ]");
+    }
+    fprintf(stderr, "\n");
+}
+
 int release_orphaned_sounds(uint8_t* rdram, recomp_context* ctx) {
     constexpr uint32_t playing = 0x80144028, waiting = 0x80144C58;
     const uint32_t shift = read_word(rdram, sound_shift_addr) & 31;
@@ -333,6 +352,9 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     if (tick_running) {
         return;
     }
+    if (rush2049_race_started_at == 0.0) {
+        rush2049_race_started_at = rush2049_now();  // TEMP
+    }
     if (!have_shadow) {
         if (saved.empty()) {
             uint32_t lo = saved_lo;
@@ -365,15 +387,23 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     if (read_word(rdram, race_clock_addr) == read_word(shadow.data(), race_clock_addr)) {
         return;  // no race time has passed
     }
+    static int after = 0;  // TEMP
     if (rewind_held()) {
         step_back(rdram);
+        dump_sounds(rdram, "step");
+        after = 0;
         return;
     }
+    if (after < 600 && (after++ % 30) == 0) {
+        dump_sounds(rdram, "after");  // TEMP
+    }
     if (frames_back > 0) {
+        dump_sounds(rdram, "release");  // TEMP
         int released = release_orphaned_sounds(rdram, ctx);
         fprintf(stderr, "[rewind] back %u frames, %zu frames (%zu MB) left, %d lost sounds released\n", frames_back,
             history.size(), history_bytes >> 20, released);
         frames_back = 0;
+        dump_sounds(rdram, "released");  // TEMP
     }
     save_frame(rdram);
 }
