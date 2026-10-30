@@ -209,6 +209,20 @@ namespace {
         {MusyxMix::HighQuality, "HighQuality", "High Quality"},
     };
     const std::string musyx_mix_option = "musyx_mix";
+
+    // The Graphics tab asks for Apply before it closes (its stock options remake the renderer), so its callbacks
+    // also hear every change the menu only previews, and the change undone again when the menu is closed with
+    // Discard. The game's own options there act on load and on Apply only, like the stock ones, so the Apply prompt
+    // is about changes that haven't happened yet.
+    void on_apply(recomp::config::Config& graphics, const std::string& option_id, void (*apply)(uint32_t value)) {
+        graphics.add_option_change_callback(option_id,
+            [apply](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant,
+                    recomp::config::OptionChangeContext change_context) {
+                if (change_context != recomp::config::OptionChangeContext::Temporary) {
+                    apply(std::get<uint32_t>(cur_value));
+                }
+            });
+    }
 }
 
 bool rush2049::split_screen_expand() {
@@ -398,12 +412,11 @@ void rush2049::init_config() {
         game_frame_rate_options,
         GameFrameRate::Sixty
     );
-    // Called on load too, and while the menu previews a change.
-    graphics.add_option_change_callback(game_frame_rate_option,
-        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            static constexpr uint32_t fps[] = { 30, 60, 0 };  // Original, 60, Match Framerate
-            rush2049::set_game_frame_rate(fps[std::get<uint32_t>(cur_value)]);
-        });
+    // Called on load too.
+    on_apply(graphics, game_frame_rate_option, [](uint32_t value) {
+        static constexpr uint32_t fps[] = { 30, 60, 0 };  // Original, 60, Match Framerate
+        rush2049::set_game_frame_rate(fps[value]);
+    });
 
     graphics.add_enum_option(
         input_lag_option,
@@ -415,10 +428,9 @@ void rush2049::init_config() {
         input_lag_options,
         InputLag::Reduced
     );
-    graphics.add_option_change_callback(input_lag_option,
-        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            rush2049::set_reduced_input_lag(static_cast<InputLag>(std::get<uint32_t>(cur_value)) == InputLag::Reduced);
-        });
+    on_apply(graphics, input_lag_option, [](uint32_t value) {
+        rush2049::set_reduced_input_lag(static_cast<InputLag>(value) == InputLag::Reduced);
+    });
 
     rush2049::init_hires_font();
     graphics.add_enum_option(
@@ -431,10 +443,9 @@ void rush2049::init_config() {
         hires_font_options,
         HiresFont::On
     );
-    graphics.add_option_change_callback(hires_font_option,
-        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            rush2049::set_hires_font(static_cast<HiresFont>(std::get<uint32_t>(cur_value)) == HiresFont::On);
-        });
+    on_apply(graphics, hires_font_option, [](uint32_t value) {
+        rush2049::set_hires_font(static_cast<HiresFont>(value) == HiresFont::On);
+    });
 
     graphics.add_enum_option(
         hires_title_option,
@@ -446,10 +457,9 @@ void rush2049::init_config() {
         hires_title_options,
         HiresTitle::On
     );
-    graphics.add_option_change_callback(hires_title_option,
-        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            rush2049::set_hires_title(static_cast<HiresTitle>(std::get<uint32_t>(cur_value)) == HiresTitle::On);
-        });
+    on_apply(graphics, hires_title_option, [](uint32_t value) {
+        rush2049::set_hires_title(static_cast<HiresTitle>(value) == HiresTitle::On);
+    });
 
     graphics.add_enum_option(
         draw_distance_option,
@@ -460,12 +470,11 @@ void rush2049::init_config() {
         draw_distance_options,
         DrawDistance::Far
     );
-    // Called on load too, and while the menu previews a change.
-    graphics.add_option_change_callback(draw_distance_option,
-        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            static constexpr float scale[] = { 1.0f, 4.0f, 16.0f };
-            rush2049::set_draw_distance(scale[std::get<uint32_t>(cur_value)]);
-        });
+    // Called on load too.
+    on_apply(graphics, draw_distance_option, [](uint32_t value) {
+        static constexpr float scale[] = { 1.0f, 4.0f, 16.0f };
+        rush2049::set_draw_distance(scale[value]);
+    });
 
     graphics.add_enum_option(
         level_of_detail_option,
@@ -477,12 +486,11 @@ void rush2049::init_config() {
         level_of_detail_options,
         LevelOfDetail::High
     );
-    // Called on load too, and while the menu previews a change.
-    graphics.add_option_change_callback(level_of_detail_option,
-        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            static constexpr float scale[] = { 1.0f, 4.0f, 1e30f };
-            rush2049::set_level_of_detail(scale[std::get<uint32_t>(cur_value)]);
-        });
+    // Called on load too.
+    on_apply(graphics, level_of_detail_option, [](uint32_t value) {
+        static constexpr float scale[] = { 1.0f, 4.0f, 1e30f };
+        rush2049::set_level_of_detail(scale[value]);
+    });
 
     graphics.add_enum_option(
         scenery_culling_option,
@@ -503,12 +511,11 @@ void rush2049::init_config() {
         SceneryCulling::Off
 #endif
     );
-    // Called on load too, and while the menu previews a change.
-    graphics.add_option_change_callback(scenery_culling_option,
-        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            static constexpr float reach[] = { 0.0f, 500.0f, -1.0f };
-            rush2049::set_scenery_culling(reach[std::get<uint32_t>(cur_value)]);
-        });
+    // Called on load too.
+    on_apply(graphics, scenery_culling_option, [](uint32_t value) {
+        static constexpr float reach[] = { 0.0f, 500.0f, -1.0f };
+        rush2049::set_scenery_culling(reach[value]);
+    });
 
     graphics.add_enum_option(
         split_screen_ratio_option,
@@ -522,10 +529,9 @@ void rush2049::init_config() {
         split_screen_ratio_options,
         SplitScreenRatio::Expand
     );
-    graphics.add_option_change_callback(split_screen_ratio_option,
-        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            split_screen_ratio_setting = static_cast<SplitScreenRatio>(std::get<uint32_t>(cur_value));
-        });
+    on_apply(graphics, split_screen_ratio_option, [](uint32_t value) {
+        split_screen_ratio_setting = static_cast<SplitScreenRatio>(value);
+    });
 
     graphics.add_enum_option(
         menu_ratio_option,
@@ -538,10 +544,9 @@ void rush2049::init_config() {
         menu_ratio_options,
         MenuRatio::Expand
     );
-    graphics.add_option_change_callback(menu_ratio_option,
-        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            menu_ratio_setting = static_cast<MenuRatio>(std::get<uint32_t>(cur_value));
-        });
+    on_apply(graphics, menu_ratio_option, [](uint32_t value) {
+        menu_ratio_setting = static_cast<MenuRatio>(value);
+    });
 
     // RT64's render to RAM, which draws every frame a second time at the N64's resolution and copies it into RDRAM,
     // where the console's RDP leaves it. Nothing in the game was seen reading a frame on the CPU: with page guards on
@@ -570,11 +575,10 @@ void rush2049::init_config() {
         CopyFramesToRam::Off
     );
     // Called on load too, before the render context is made.
-    graphics.add_option_change_callback(copy_frames_to_ram_option,
-        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            recompui::renderer::set_render_to_ram(
-                static_cast<CopyFramesToRam>(std::get<uint32_t>(cur_value)) == CopyFramesToRam::Original);
-        });
+    on_apply(graphics, copy_frames_to_ram_option, [](uint32_t value) {
+        recompui::renderer::set_render_to_ram(
+            static_cast<CopyFramesToRam>(value) == CopyFramesToRam::Original);
+    });
 
     recompui::config::create_controls_tab();
 
