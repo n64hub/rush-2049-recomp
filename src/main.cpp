@@ -487,7 +487,7 @@ void on_launcher_init(recompui::LauncherMenu* menu) {
     }
 
     // The project's own artwork (tools/launcher_art.py) instead of RecompFrontend's flat background and the program's
-    // name in Header1 text, which barely fits a 4:3 window. The wordmark is sized by the window's height, 30% of it,
+    // name in Header1 text, which barely fits a 4:3 window. The wordmark is sized by the window's height, 27% of it,
     // centred where that title was, a quarter of the way down, so it stays clear of the menu below the middle.
     menu->remove_default_title();
     menu->set_launcher_background_svg("launcher/background.svg");
@@ -496,7 +496,7 @@ void on_launcher_init(recompui::LauncherMenu* menu) {
     title->set_position(recompui::Position::Absolute);
     title->set_top(25.0f, recompui::Unit::Percent);
     title->set_left(50.0f, recompui::Unit::Percent);
-    title->set_height(30.0f, recompui::Unit::Percent);
+    title->set_height(27.0f, recompui::Unit::Percent);
     title->set_width_auto();
     title->set_translate_2D(-50.0f, -50.0f, recompui::Unit::Percent);
 

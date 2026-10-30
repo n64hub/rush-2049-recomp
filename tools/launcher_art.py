@@ -62,11 +62,13 @@ def background():
     rnd = random.Random(2049)
     w, h, horizon = 1600, 1200, 740
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">', "<defs>",
+           # Sky and ground are two gradients: RmlUi's SVG renderer blends across two stops at one offset.
            '<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">'
-           f'<stop offset="0" stop-color="{BG}"/><stop offset="0.3" stop-color="#0a0b2e"/>'
-           '<stop offset="0.5" stop-color="#2a0f4f"/><stop offset="0.57" stop-color="#7a1a6a"/>'
-           '<stop offset="0.617" stop-color="#ff5a3c"/><stop offset="0.617" stop-color="#140826"/>'
-           f'<stop offset="0.8" stop-color="#07061a"/><stop offset="1" stop-color="{BG}"/></linearGradient>',
+           f'<stop offset="0" stop-color="{BG}"/><stop offset="0.49" stop-color="#0a0b2e"/>'
+           '<stop offset="0.81" stop-color="#2a0f4f"/><stop offset="0.92" stop-color="#7a1a6a"/>'
+           '<stop offset="1" stop-color="#ff5a3c"/></linearGradient>',
+           '<linearGradient id="ground" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#140826"/>'
+           f'<stop offset="0.48" stop-color="#07061a"/><stop offset="1" stop-color="{BG}"/></linearGradient>',
            f'<radialGradient id="glow" cx="800" cy="{horizon}" r="700" gradientUnits="userSpaceOnUse" '
            'gradientTransform="translate(0 740) scale(1 0.32) translate(0 -740)">'
            '<stop offset="0" stop-color="#ff7a3c" stop-opacity="0.75"/><stop offset="0.45" stop-color="#d42a6e" '
@@ -80,7 +82,8 @@ def background():
            '<linearGradient id="fade2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fe0ff"/>'
            '<stop offset="1" stop-color="#3fe0ff" stop-opacity="0"/></linearGradient>',
            "</defs>",
-           f'<rect width="{w}" height="{h}" fill="url(#sky)"/>']
+           f'<rect width="{w}" height="{horizon}" fill="url(#sky)"/>',
+           f'<rect y="{horizon}" width="{w}" height="{h - horizon}" fill="url(#ground)"/>']
 
     # Stars, thinning toward the horizon.
     for _ in range(170):
