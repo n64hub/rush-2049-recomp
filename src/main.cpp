@@ -134,7 +134,70 @@ static void load_input_script(const char* path) {
     fclose(f);
 }
 
+// TEMP test driver: menus by the game's state into PRACTICE on track 1, then crash-and-rewind cycles.
+#include "debug_probe.h"
+static const ScriptedInput* test_drive() {
+    static ScriptedInput out{};
+    out = {};
+    uint8_t* rdram = rush2049::probe_get_rdram();
+    if (rdram == nullptr) {
+        return &out;
+    }
+    auto w = [&](uint32_t a) { return *(uint32_t*)(rdram + (a - 0x80000000u)); };
+    auto b = [&](uint32_t a) { return rdram[(a - 0x80000000u) ^ 3]; };
+    using clk = std::chrono::steady_clock;
+    static const auto t0 = clk::now();
+    const double now = std::chrono::duration<double>(clk::now() - t0).count();
+    const uint32_t state = w(0x801174B4);
+    static double attract_at = -1, race_at = -1;
+    if (state == 0x00400000 && attract_at >= 0 && now - attract_at > 12) {
+        if (race_at < 0) {
+            race_at = now;
+            fprintf(stderr, "[drive] race at %.1f\n", now);
+        }
+        const double t = now - race_at;
+        const double c = fmod(t, 30.0);
+        const int cycle = (int)(t / 30.0);
+        out.buttons = 0x8000;
+        if (cycle >= 5) {
+            out.buttons = 0;
+            return &out;
+        }
+        const float steer = (cycle & 1) ? -1.0f : 1.0f;
+        if (c >= 6 && c < 10) out.x = steer;
+        else if (c >= 10 && c < 13) out.x = -steer;
+        else if (c >= 16 && c < 22) out.buttons |= 0x10000;
+        static int logged_cycle = -1;
+        if (cycle != logged_cycle && c >= 16) { logged_cycle = cycle; fprintf(stderr, "[drive] cycle %d rewind at %.1f\n", cycle, t); }
+        return &out;
+    }
+    if ((state & 0x8) && attract_at < 0) {
+        attract_at = now;
+        fprintf(stderr, "[drive] attract at %.1f\n", now);
+    }
+    if (attract_at < 0 || now - attract_at < 12) {
+        return &out;
+    }
+    // A press of 150 ms every 1.2 s.
+    if (fmod(now, 1.2) > 0.15) {
+        return &out;
+    }
+    if (state & 0x40) {
+        out.buttons = (b(0x803B469F) != 1) ? 0x0400 : 0x8000;
+    } else if (state & 0x80) {
+        out.buttons = (w(0x8014978C) >> 24) != 0 ? 0x0100 : 0x8000;
+    } else if (state & 0x8) {
+        out.buttons = 0x1000;
+    } else {
+        out.buttons = 0x8000;
+    }
+    return &out;
+}
+
 static const ScriptedInput* scripted_input() {
+    if (getenv("TEST_DRIVE") != nullptr) {
+        return test_drive();
+    }
     if (input_script.empty()) {
         return nullptr;
     }
