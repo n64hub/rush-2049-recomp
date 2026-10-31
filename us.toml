@@ -241,7 +241,8 @@ text = "    rush2049_rewind_tick_end(rdram);"
 
 # The frame loop (func_800FD464, thread 7): after its wait for each frame, and before it draws a race frame. There the
 # race is between frames, so that is where it is saved, and stepped back while Rewind is held. The draw hook gets the
-# thread's context to stop the sounds a rewind left behind with the game's own stop (func_80091C04).
+# thread's context to stop the sounds a rewind left behind with the game's own stop (func_80091C04), and to start
+# again an engine a rewind left silent (func_800D5524 and func_800D5E64).
 [[patches.hook]]
 func = "func_800FD464"
 before_vram = 0x800FD524

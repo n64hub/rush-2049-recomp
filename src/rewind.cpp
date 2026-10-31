@@ -59,6 +59,10 @@ constexpr uint32_t race_clock_addr = 0x801543CC;  // float, written by the tick
 constexpr uint32_t sound_count_addr = 0x80110254; // the sound manager's count of sounds started (not saved)
 constexpr uint32_t sound_shift_addr = 0x801460F8; // a sound's ID is that count shifted left by this, or a slot
 constexpr uint32_t car_sounds_addr = 0x80140420;  // each car's looping sounds, 0x54 bytes a car (func_800E0050)
+constexpr uint32_t car_sounds_on_addr = 0x8010FFC4;  // a byte a car: its sounds are started (func_800D5E64)
+constexpr uint32_t sound_on_addr = 0x8010FFC0;    // a byte: the race plays car sounds at all
+constexpr uint32_t cars_addr = 0x8014A250;        // the cars, 0x808 bytes each
+constexpr uint32_t car_count_addr = 0x80152744;   // a byte: how many
 constexpr uint32_t ticks_addr = 0x8002EB64;       // the timer's count of 60ths of a second, always running
 constexpr uint32_t deadline_addr = 0x8002EB9C;    // the count at which its countdown runs out
 constexpr uint32_t start_addr = 0x8002EBA0;       // the count its game time is measured from
@@ -119,7 +123,6 @@ std::vector<Range> saved;      // what is saved, as offsets into RDRAM
 std::vector<uint8_t> shadow;   // the saved memory as of the last frame saved, indexed like RDRAM
 bool have_shadow = false;
 uint32_t shadow_sounds = 0;    // the sound count as of the shadow
-uint32_t stepped_sounds = 0;   // the sound count as of the last step back
 struct Timer {
     uint32_t since_start, to_deadline;  // in the timer's 60ths, from its count
 };
@@ -132,7 +135,9 @@ struct Frame {
 };
 std::deque<Frame> history;     // newest last
 size_t history_bytes = 0;
+bool rewinding = false;       // Rewind is held and the race has been stepped back
 uint32_t frames_back = 0;     // frames stepped back since Rewind was pressed
+std::vector<uint32_t> released;  // the IDs of the sounds ended since then
 
 uint32_t read_word(const uint8_t* mem, uint32_t addr) {
     return *(const uint32_t*)(mem + (addr - 0x80000000u));
@@ -140,6 +145,14 @@ uint32_t read_word(const uint8_t* mem, uint32_t addr) {
 
 void write_word(uint8_t* mem, uint32_t addr, uint32_t value) {
     *(uint32_t*)(mem + (addr - 0x80000000u)) = value;
+}
+
+uint8_t read_byte(const uint8_t* mem, uint32_t addr) {
+    return mem[(addr - 0x80000000u) ^ 3];
+}
+
+uint16_t read_half(const uint8_t* mem, uint32_t addr) {
+    return *(const uint16_t*)(mem + ((addr - 0x80000000u) ^ 2));
 }
 
 Timer read_timer(const uint8_t* rdram) {
@@ -161,6 +174,9 @@ void forget() {
     history.clear();
     history_bytes = 0;
     have_shadow = false;
+    rewinding = false;
+    frames_back = 0;
+    released.clear();
 }
 
 // Whether n bytes at a and b are the same. The web build's memcmp (musl's) compares a byte at a time, and the 6 MB
@@ -227,7 +243,6 @@ void save_frame(uint8_t* rdram) {
 
 void step_back(uint8_t* rdram) {
     for_each_change(rdram, [&](uint32_t p, uint32_t n) { memcpy(rdram + p, shadow.data() + p, n); });
-    stepped_sounds = read_word(rdram, sound_count_addr);
     write_timer(rdram, shadow_timer);
     if (history.empty()) {
         return;  // as far back as it goes: stay there
@@ -269,57 +284,101 @@ void resend_car_sounds(uint8_t* rdram) {
 }
 
 // The sound manager stays live, and the race knows its sounds only by the ID the manager handed out. A sound started
-// in the stretch that was rewound, or by a tick while Rewind was held, is one the race no longer knows of. Some end by
-// themselves, but a loop plays or waits for a voice for the rest of the race, owner or not, and so does a sound the
-// race ends itself: the squeal of a skid (sample 36) isn't a loop by the flag at +0x19, which comes from the sample's
-// entry in the table at 0x8011F5CC, yet one started while Rewind was held played on through the race and the menus
-// after it. With Rewind used a lot they filled the manager's 80 sounds, and the next sound the race started
-// (func_80092278 takes one off the free list unchecked) crashed. The manager's count of sounds started isn't saved,
-// and each frame saved keeps its value, so when Rewind is let go every sound started between the frame it went back
-// to and the last step back is ended; those the ticks since started are the race's again.
+// in the stretch stepped back over, or by the tick that ran from the frame stepped back to, is one the race no longer
+// knows of. Some end by themselves, but a loop plays or waits for a voice for the rest of the race, owner or not, and
+// so does a sound the race ends itself: the squeal of a skid (sample 36) isn't a loop by the flag at +0x19, which comes
+// from the sample's entry in the table at 0x8011F5CC, yet one started while Rewind was held played on through the race
+// and the menus after it. With Rewind used a lot they filled the manager's 80 sounds, and the next sound the race
+// started (func_80092278 takes one off the free list unchecked) crashed. The manager's count of sounds started isn't
+// saved, and each frame saved keeps its value, so each step back ends every sound started between the frame it goes
+// back to and the step. Ended only once Rewind was let go, they played on while it was held: a tick from a frame just
+// before a skid started its squeal (func_800E05F0 starts one for a slot of -1), the step back took the slot back to
+// -1, and the squeal of every skid the hold went back over played on, the dirt under the wheels too.
 //
 // One waiting for a voice is made one that times out, and the sound thread frees it at its next update: only flags
 // change, no links, so it doesn't matter where the sound thread was stopped. One that has a voice is stopped the way
 // the race stops a sound (func_80091C04, which queues the sound thread a command that stops the voice and frees the
 // sound): the sound thread counts a timeout only while a sound waits, and frees a playing one only when its voice
-// ends, which a looping voice never does.
+// ends, which a looping voice never does. A sound stopped stays in the playing list until the sound thread has run
+// the stop, so the IDs ended are kept until Rewind is let go, and each is ended once.
 // The IDs are gathered first: the stop waits for the sound manager's lock, and the sound thread can change the lists
 // while it waits.
-int release_orphaned_sounds(uint8_t* rdram, recomp_context* ctx) {
-    constexpr uint32_t playing = 0x80144028, waiting = 0x80144C58;
+constexpr uint32_t playing_head = 0x80144028, waiting_head = 0x80144C58;
+
+// Calls f(list head, node, ID) for each sound the manager has, playing or waiting for a voice.
+template <typename F>
+void for_each_sound(const uint8_t* rdram, F f) {
+    for (uint32_t head : { playing_head, waiting_head }) {
+        for (uint32_t node = read_word(rdram, head), n = 0; node != 0 && n < 256; node = read_word(rdram, node), n++) {
+            f(head, node, read_word(rdram, node + 0xC));
+        }
+    }
+}
+
+// As a call from the frame loop at this point: the callee may change any register the hook's function holds.
+void call_game(uint8_t* rdram, recomp_context* ctx, uint32_t func, uint32_t arg) {
+    const recomp_context saved = *ctx;
+    ctx->r4 = (gpr)(int32_t)arg;
+    LOOKUP_FUNC(func)(rdram, ctx);
+    *ctx = saved;
+}
+
+// Ends the sounds started from the count from up to the count to.
+void release_lost_sounds(uint8_t* rdram, recomp_context* ctx, uint32_t from, uint32_t to) {
     const uint32_t shift = read_word(rdram, sound_shift_addr) & 31;
     std::vector<uint32_t> to_stop;
-    int released = 0;
-    for (uint32_t head : { playing, waiting }) {
-        for (uint32_t node = read_word(rdram, head), n = 0; node != 0 && n < 256; node = read_word(rdram, node), n++) {
-            const uint32_t id = read_word(rdram, node + 0xC);
-            const uint32_t started = id >> shift;
-            // The count goes back to 1 when it runs out, which takes days of play.
-            const bool lost = stepped_sounds >= shadow_sounds ? started >= shadow_sounds && started < stepped_sounds
-                                                              : started >= shadow_sounds || started < stepped_sounds;
-            if (!lost) {
-                continue;
-            }
-            if (head == playing) {
-                to_stop.push_back(id);
-            } else {
-                rdram[(node + 0x19 - 0x80000000u) ^ 3] = 0;
-                const float expired = -100.0f;  // past the -10 at which the sound thread frees a sound that timed out
-                memcpy(rdram + (node + 0x20 - 0x80000000u), &expired, 4);
-            }
-            released++;
+    for_each_sound(rdram, [&](uint32_t head, uint32_t node, uint32_t id) {
+        const uint32_t started = id >> shift;
+        // The count goes back to 1 when it runs out, which takes days of play.
+        const bool lost = to >= from ? started >= from && started < to : started >= from || started < to;
+        if (!lost || std::find(released.begin(), released.end(), id) != released.end()) {
+            return;
+        }
+        if (head == playing_head) {
+            to_stop.push_back(id);
+        } else {
+            rdram[(node + 0x19 - 0x80000000u) ^ 3] = 0;
+            const float expired = -100.0f;  // past the -10 at which the sound thread frees a sound that timed out
+            memcpy(rdram + (node + 0x20 - 0x80000000u), &expired, 4);
+        }
+        released.push_back(id);
+    });
+    for (uint32_t id : to_stop) {
+        call_game(rdram, ctx, 0x80091C04, id);
+    }
+}
+
+// A car's engine, the loops in the first two of its slots, is stopped with its other sounds when it crashes
+// (func_800D5828) and started again under new IDs when it respawns (func_800D5E64), and ended by nothing else. A rewind
+// from after a respawn to before the crash gives the race the IDs of the loops the crash stopped, and the respawn's
+// loops are lost sounds, ended with the rest, so the car went silent until a pause stopped and started its sounds
+// again. When Rewind is let go, a car whose sounds are on but whose engine is a sound the manager no longer has gets
+// that stop and start: func_800D5524 ends its sounds and clears its slots, func_800D5E64 starts its engine.
+int restart_lost_engines(uint8_t* rdram, recomp_context* ctx) {
+    if (read_byte(rdram, sound_on_addr) == 0) {
+        return 0;
+    }
+    std::vector<uint32_t> live;
+    for_each_sound(rdram, [&](uint32_t, uint32_t, uint32_t id) { live.push_back(id); });
+    int restarted = 0;
+    const uint32_t cars = std::min<uint32_t>(read_byte(rdram, car_count_addr), 8);
+    for (uint32_t car = cars_addr, n = 0; n < cars; car += 0x808, n++) {
+        const uint32_t index = read_half(rdram, car + 0x7C6);
+        if (index >= 8 || read_byte(rdram, car_sounds_on_addr + index) == 0 || read_byte(rdram, car + 0x640) != 0) {
+            continue;  // its sounds are stopped (a crash), and its respawn starts them
+        }
+        bool lost = false;
+        for (uint32_t slot = car_sounds_addr + index * 0x54 + 4, k = 0; k < 2; slot += 0x14, k++) {
+            const uint32_t id = read_word(rdram, slot);
+            lost |= id != 0xFFFFFFFF && std::find(live.begin(), live.end(), id) == live.end();
+        }
+        if (lost) {
+            call_game(rdram, ctx, 0x800D5524, car);
+            call_game(rdram, ctx, 0x800D5E64, car);
+            restarted++;
         }
     }
-    if (!to_stop.empty()) {
-        // As a call from the frame loop at this point: the callee may change any register the hook's function holds.
-        const recomp_context saved = *ctx;
-        for (uint32_t id : to_stop) {
-            ctx->r4 = (gpr)(int32_t)id;
-            LOOKUP_FUNC(0x80091C04)(rdram, ctx);
-        }
-        *ctx = saved;
-    }
-    return released;
+    return restarted;
 }
 
 }
@@ -388,15 +447,20 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
         return;  // no race time has passed
     }
     if (rewind_held()) {
+        const uint32_t sounds = read_word(rdram, sound_count_addr);
         step_back(rdram);
+        release_lost_sounds(rdram, ctx, shadow_sounds, sounds);
         resend_car_sounds(rdram);
+        rewinding = true;
         return;
     }
-    if (frames_back > 0) {
-        int released = release_orphaned_sounds(rdram, ctx);
-        fprintf(stderr, "[rewind] back %u frames, %zu frames (%zu MB) left, %d lost sounds released\n", frames_back,
-            history.size(), history_bytes >> 20, released);
+    if (rewinding) {
+        const int restarted = restart_lost_engines(rdram, ctx);
+        fprintf(stderr, "[rewind] back %u frames, %zu frames (%zu MB) left, %zu lost sounds released, %d engines "
+            "restarted\n", frames_back, history.size(), history_bytes >> 20, released.size(), restarted);
+        rewinding = false;
         frames_back = 0;
+        released.clear();
     }
     save_frame(rdram);
 }
