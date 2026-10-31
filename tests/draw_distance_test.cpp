@@ -4,7 +4,7 @@
 // the game's own test. The far builder's depth clamp reaches 1600 times the setting, and an offset it leaves 2048 or more
 // out is divided down with the rotation's scale and w. A prim depth moves as the far plane moves a vertex's depth.
 // Scenery Culling's Reduced ORs the visibility masks of the stretches whose boxes are near the camera, numbered as the
-// game's list numbers them.
+// game's list numbers them, and lets through every object whose box is taller than 600 units.
 
 #include <cmath>
 #include <cstdio>
@@ -205,6 +205,16 @@ int main() {
     check(shown(500.0f, 3000.0f, 3) == 0x8, "Reduced: none near, the stretch's own mask", shown(500.0f, 3000.0f, 3));
     check(shown(500.0f, 0.0f, -1) == 0x1, "Reduced: no stretch holds the camera, the game's mask",
         shown(500.0f, 0.0f, -1));
+    // The box at x 800, third in the list, made 700 units tall: Reduced lets object 2 through from anywhere.
+    ram_float(boxes_addr + 0x68 * 1 + 0x54, -50.0f);
+    ram_float(boxes_addr + 0x68 * 1 + 0x60, 650.0f);
+    check(shown(500.0f, 0.0f, 0) == 0x7, "Reduced: a tall object from afar, numbered by the list",
+        shown(500.0f, 0.0f, 0));
+    check(shown(500.0f, 3000.0f, 3) == 0xC, "Reduced: a tall object with none near", shown(500.0f, 3000.0f, 3));
+    check(shown(0.0f, 0.0f, 0) == 0x1, "Original: a tall object only where the game lets it through",
+        shown(0.0f, 0.0f, 0));
+    ram_float(boxes_addr + 0x68 * 1 + 0x60, 500.0f);
+    check(shown(500.0f, 0.0f, 0) == 0x3, "Reduced: 550 tall is not tall", shown(500.0f, 0.0f, 0));
     rush2049::set_scenery_culling(-1.0f);
     check(rush2049_scenery_mask(0, 0) == (gpr)(int32_t)-1, "Off: every bit set", 0);
 

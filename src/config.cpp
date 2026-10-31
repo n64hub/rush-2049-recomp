@@ -520,8 +520,9 @@ void rush2049::init_config() {
         "buildings, signs and roadside pieces pop in and out as you drive from one stretch into the next, some of "
         "them close to the car."
         "<br/>"
-        "<b>Reduced:</b> what can be seen from the stretches of road around you is drawn too, so scenery comes in "
-        "well before you reach it, for much less than Off costs. <b>Off:</b> all of the track's "
+        "<b>Reduced:</b> what can be seen from the stretches of road around you is drawn too, and the tallest "
+        "towers wherever they are in view, so scenery comes in well before you reach it, for much less than Off "
+        "costs. <b>Off:</b> all of the track's "
         "scenery is drawn wherever you are, and only <recomp-color primary>Draw Distance</recomp-color> decides how "
         "far.",
         scenery_culling_options,

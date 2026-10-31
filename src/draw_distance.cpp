@@ -59,9 +59,10 @@
 // (docs/web.md).
 //
 // Reduced, between them, also lets through what every stretch within 500 units of the camera (in x and z, to the edge
-// of its box) lets through, so what pops in as you cross into a stretch was let in 500 units before you got there. A
-// track has as many stretches as scenery objects (117 on Track 1), and object n mostly sits by stretch n: 109 of Track
-// 1's records let their own object through. On the camera's path through attract races on Tracks 1 and 2, with each
+// of its box) lets through, so what pops in as you cross into a stretch was let in 500 units before you got there. The
+// boxes are the scenery objects' own: box n's centre is where object n stands (all 117 of Track 1's), so the stretch
+// the camera is in is the object it is inside, mostly a piece of road, and 109 of Track 1's records let their own
+// object through. On the camera's path through attract races on Tracks 1 and 2, with each
 // object put at its own stretch's box, Original let 12 and 3 objects in within 300 units of the camera and Reduced
 // none, while it let through 46 and 33 objects a frame where Original lets through 26 and 22 and Off all 117. The
 // boxes are the list func_8009EBC0 walks (a box's centre at +0x34, +0x3C, its extent around that from +0x50 to +0x5C
@@ -71,6 +72,20 @@
 // "the next few stretches" is not a fixed distance along the road. Where no box holds the camera, or the table is off,
 // Reduced leaves the mask alone. In the attract race at 1600x1200, with the view test below, it draws 570 calls a
 // frame where Original draws 490 and Off 840 (README, Performance).
+//
+// The table is made for driving the right way. Driving the wrong way the tallest buildings stand over everything in
+// front of them from much farther than 500 units: at the foot of Track 1's downhill, where it meets the loop, looking
+// back the way the track comes, five of the skyline's towers 2000 to 3100 units out are let through by no stretch within
+// 500 units, only by stretches 1000 to 1600 away, and a player saw them pop in driving there backward (GitHub #267). So
+// Reduced also lets through every object whose box (+0x54 to +0x60 in y) is more than 600 units tall, wherever the
+// camera is, and the view test below skips those out of view. Track 1 has 16, its towers. At that spot (1600x900)
+// Reduced then draws 1108 calls a frame where Off draws 1366 and Original 639, and its picture differs from Off's in
+// under a thousand pixels instead of 16000; in 16 views around Track 1, most of them looking back, what is still
+// missing beside Off is small and far. In the attract race at 1600x1200 the towers cost no calls past the noise between
+// runs (449 and 471 a frame against 469 and 526 without them). A longer reach would take the towers in too, but costs
+// nearly what Off does: it takes about 1500 units, with which 36 objects are in view on average where the towers bring
+// Reduced from 27 to 30 and Off draws 43 (each object's box against the view, from the camera's path through Track 1).
+// Why Off isn't cut down the same way is in docs/ruled-out.md.
 //
 // Besides these limits and that table, func_8009DD88 skips a node only by its per-camera hidden bit (0x100 << camera
 // in its flags, func_8009DD18: hidden unless a child is visible) and its disable bit. The game sets and clears them
@@ -104,7 +119,9 @@ std::atomic<float> scenery_reach{ 0.0f };
 std::atomic<float> scenery_reach{ -1.0f };
 #endif
 
-// Reduced: where the camera is (x, z), and the masks of every stretch within reach of it, while reduced_valid.
+// Reduced: where the camera is (x, z), and the masks of every stretch within reach of it and the objects taller than
+// `tall` units, while reduced_valid.
+constexpr float tall = 600.0f;
 float camera_x = 0.0f, camera_z = 0.0f;
 uint32_t reduced_mask[4];
 bool reduced_valid = false;
@@ -180,8 +197,9 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
     for (int w = 0; w < 4; w++) {
         reduced_mask[w] = word(record + 4 * w);
     }
-    // The boxes in the game's order, which numbers the records; each is its centre (+0x34, +0x3C) and its extent
-    // around it (+0x50 to +0x5C in x, +0x58 to +0x64 in z), and +0x44 the next box's index, negative for the last.
+    // The boxes in the game's order, which numbers the records and the objects; each is its centre (+0x34, +0x3C) and
+    // its extent around it (+0x50 to +0x5C in x, +0x54 to +0x60 in y, +0x58 to +0x64 in z), and +0x44 the next box's
+    // index, negative for the last.
     uint32_t box = boxes;
     for (int n = 0; n < 128; n++) {
         float dx = camera_x - value(box + 0x34), dz = camera_z - value(box + 0x3C);
@@ -191,6 +209,9 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
             for (int w = 0; w < 4; w++) {
                 reduced_mask[w] |= word(table + 16 * n + 4 * w);
             }
+        }
+        if (value(box + 0x60) - value(box + 0x54) > tall) {
+            reduced_mask[n / 32] |= 1u << (n % 32);
         }
         int16_t next = (int16_t)(word((box + 0x44) & ~3u) >> 16);
         if (next < 0) {
