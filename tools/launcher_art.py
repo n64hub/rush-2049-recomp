@@ -4,8 +4,9 @@ Usage: .venv/Scripts/python -I tools/launcher_art.py [--chrome <chrome or chromi
 Needs fontTools and Pillow in the venv.
 
 All of it is drawn here, from shapes and the menus' own font (assets/InterVariable.ttf, SIL OFL 1.1), so none of it
-comes from the game or its box: a night San Francisco with a suspension bridge, a skyline and a road into it, a
-wordmark set in Inter Black, and an "R" on the same night for the icon. It writes
+comes from the game or its box: a night San Francisco with a suspension bridge, a skyline and a road into it, race
+cars of our own design on the road trailing neon, a wordmark set in Inter Black, and an "R" on the same night for the
+icon. It writes
 
     assets/launcher/background.svg   the launcher's background (src/main.cpp, on_launcher_init)
     assets/launcher/title.svg        the wordmark in place of RecompFrontend's text title
@@ -16,7 +17,8 @@ wordmark set in Inter Black, and an "R" on the same night for the icon. It write
 The background is 1600x1200, the window's default 4:3, and the launcher stretches it to the window's width and
 centres it: a wider window crops its top and bottom, a narrower one shows the launcher's own background colour above
 and below it, so both edges are that colour (RecompFrontend's Background1, #020712). The menu sits in the middle of
-the window, over the skyline's dark silhouettes and the road, and the wordmark above it in the sky.
+the window, over the skyline's dark silhouettes and the road, and the wordmark above it in the sky; the cars keep to
+either side of it, below the skyline.
 """
 import argparse
 import io
@@ -58,6 +60,40 @@ def text_path(font, text, size, x, y, tracking=0.0, anchor="middle"):
     return pen.getCommands(), width
 
 
+# The race cars' paint (top and bottom of the gradient) and the neon of their underglow, wing and thrusters.
+CARS = {"red": ("#ff7a3a", "#9a0e2a", "#ff3fa4"), "cyan": ("#7ae8ff", "#1a2f9a", "#3fe0ff"),
+        "gold": ("#ffe27a", "#b8600e", "#ffb238")}
+
+
+def car(name, neon):
+    """A futuristic race car from behind, 224 wide, its wheels on y=0, in the units of the group that places it."""
+    return "".join((
+        f'<ellipse cx="0" cy="-2" rx="150" ry="18" fill="url(#under-{name})"/>',
+        # Wheels under the fenders, the body (a rounded wedge, wide at the hips), and a bubble canopy with a neon rim.
+        '<rect x="-108" y="-30" width="30" height="30" rx="5" fill="#06030d"/>',
+        '<rect x="78" y="-30" width="30" height="30" rx="5" fill="#06030d"/>',
+        f'<path d="M -96 -8 L 96 -8 Q 112 -12 112 -30 L 104 -50 Q 96 -60 68 -62 L -68 -62 Q -96 -60 -104 -50 '
+        f'L -112 -30 Q -112 -12 -96 -8 Z" fill="url(#paint-{name})"/>',
+        '<path d="M -40 -61 Q -36 -90 0 -92 Q 36 -90 40 -61 Z" fill="#0d0820"/>',
+        f'<path d="M -40 -61 Q -36 -90 0 -92 Q 36 -90 40 -61" fill="none" stroke="{neon}" stroke-width="2.5"/>',
+        f'<path d="M -98 -52 Q 0 -60 98 -52" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.35"/>',
+        # The diffuser, two thrusters in it, and the tail lights across the back with a halo.
+        '<path d="M -94 -8 L 94 -8 L 100 -30 L -100 -30 Z" fill="#120826"/>',
+        *(f'<circle cx="{x}" cy="-19" r="14" fill="{neon}" opacity="0.3"/><circle cx="{x}" cy="-19" r="7" '
+          f'fill="{neon}"/><circle cx="{x}" cy="-19" r="3.5" fill="#ffffff"/>' for x in (-36, 36)),
+        '<rect x="-104" y="-46" width="208" height="16" rx="6" fill="#ff2d55" opacity="0.25"/>',
+        '<rect x="-98" y="-41" width="196" height="6" rx="3" fill="#ff2d55"/>',
+        '<rect x="-26" y="-40" width="52" height="4" fill="#ffd0da"/>',
+        # A low rear wing on two struts, with endplates and a neon edge.
+        '<path d="M -50 -62 L -43 -62 L -41 -76 L -48 -76 Z" fill="#160b2c"/>',
+        '<path d="M 50 -62 L 43 -62 L 41 -76 L 48 -76 Z" fill="#160b2c"/>',
+        f'<path d="M -100 -82 L 100 -82 L 96 -74 L -96 -74 Z" fill="url(#paint-{name})"/>',
+        f'<path d="M -97 -75 L 97 -75" stroke="{neon}" stroke-width="2.5"/>',
+        '<path d="M -104 -90 L -96 -90 L -94 -68 L -101 -68 Z" fill="#160b2c"/>',
+        '<path d="M 104 -90 L 96 -90 L 94 -68 L 101 -68 Z" fill="#160b2c"/>',
+    ))
+
+
 def background():
     rnd = random.Random(2049)
     w, h, horizon = 1600, 1200, 740
@@ -81,6 +117,11 @@ def background():
            '<stop offset="1" stop-color="#ff3fa4" stop-opacity="0"/></linearGradient>',
            '<linearGradient id="fade2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fe0ff"/>'
            '<stop offset="1" stop-color="#3fe0ff" stop-opacity="0"/></linearGradient>',
+           *(f'<linearGradient id="paint-{name}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{hi}"/>'
+             f'<stop offset="1" stop-color="{lo}"/></linearGradient>'
+             f'<radialGradient id="under-{name}"><stop offset="0" stop-color="{glow}" stop-opacity="0.7"/>'
+             f'<stop offset="1" stop-color="{glow}" stop-opacity="0"/></radialGradient>'
+             for name, (hi, lo, glow) in CARS.items()),
            "</defs>",
            f'<rect width="{w}" height="{horizon}" fill="url(#sky)"/>',
            f'<rect y="{horizon}" width="{w}" height="{h - horizon}" fill="url(#ground)"/>']
@@ -109,19 +150,24 @@ def background():
                     out.append(f'<rect x="{wx}" y="{wy}" width="4" height="6" fill="{lit}" '
                                f'opacity="{rnd.uniform(0.35, 0.85):.2f}"/>')
 
-    x = 520
+    x, roofs = 520, []
     while x < 1640:
         width = rnd.uniform(40, 90)
         if not 1130 < x < 1250:
-            tower(x, horizon - rnd.uniform(70, 230) * (1.2 if 700 < x < 1000 else 1.0), width)
+            top = horizon - rnd.uniform(70, 230) * (1.2 if 700 < x < 1000 else 1.0)
+            tower(x, top, width)
+            roofs.append((x, width, top))
         x += width + rnd.uniform(-10, 12)
     out.append(f'<path d="M 1190 {horizon - 420} L 1232 {horizon} L 1148 {horizon} Z" fill="#20113f"/>')
     out.append(f'<path d="M 1190 {horizon - 470} L 1190 {horizon - 420}" stroke="#ff3fa4" stroke-width="3"/>')
     out.append(f'<circle cx="1190" cy="{horizon - 472}" r="4" fill="#ff3fa4"/>')
-    for x, top in ((900, 170), (650, 140)):
-        out.append(f'<path d="M {x} {horizon - top - 60} L {x + 8} {horizon - top} L {x - 8} {horizon - top} Z" '
+    # A spire on the roof of the tallest tower either side of the road's vanishing point, wherever the towers came out.
+    for lo, hi in ((560, 760), (840, 1120)):
+        x, width, top = min((r for r in roofs if lo < r[0] + r[1] / 2 < hi), key=lambda r: r[2])
+        x += width / 2
+        out.append(f'<path d="M {x:.0f} {top - 60:.0f} L {x + 8:.0f} {top + 1:.0f} L {x - 8:.0f} {top + 1:.0f} Z" '
                    'fill="#1c0f3a"/>')
-        out.append(f'<circle cx="{x}" cy="{horizon - top - 62}" r="3" fill="#3fe0ff"/>')
+        out.append(f'<circle cx="{x:.0f}" cy="{top - 62:.0f}" r="3" fill="#3fe0ff"/>')
     for x in range(-20, 520, 46):
         tower(x, horizon - rnd.uniform(30, 80), rnd.uniform(30, 50), "#120a28")
 
@@ -150,6 +196,10 @@ def background():
 
     # The road, from the horizon to the bottom edge, with neon edges and a dashed centre line.
     vx = 800
+
+    def road_half(y):
+        return 30 + (y - horizon) / (h - horizon) * 1070
+
     out.append(f'<path d="M {vx - 30} {horizon} L {vx + 30} {horizon} L 1900 {h} L -300 {h} Z" fill="url(#road)"/>')
     out.append(f'<path d="M {vx - 30} {horizon} L -300 {h}" stroke="url(#fade)" stroke-width="5"/>')
     out.append(f'<path d="M {vx + 30} {horizon} L 1900 {h}" stroke="url(#fade2)" stroke-width="5"/>')
@@ -167,6 +217,41 @@ def background():
         out.append(f'<path d="M 0 {y:.1f} L {w} {y:.1f}" stroke="#7a1a6a" stroke-width="1.5" '
                    f'opacity="{0.35 / z ** 0.5:.2f}"/>')
         z *= 1.6
+
+    # Neon posts along both road edges, pink on the left and cyan on the right, shrinking into the distance.
+    for z in (1.15, 1.5, 2.0, 2.7, 3.7, 5.2, 7.5, 11):
+        y = horizon + (h - horizon) / z
+        half, post = road_half(y), (y - horizon) * 0.3
+        for side, color in ((-1, "#ff3fa4"), (1, "#3fe0ff")):
+            px = vx + side * (half + post * 0.35)
+            out.append(f'<path d="M {px:.1f} {y:.1f} L {px:.1f} {y - post:.1f}" stroke="#2a1850" '
+                       f'stroke-width="{post / 14 + 1:.1f}"/>')
+            out.append(f'<circle cx="{px:.1f}" cy="{y - post:.1f}" r="{post / 10 + 1.5:.1f}" fill="{color}" '
+                       'opacity="0.3"/>')
+            out.append(f'<circle cx="{px:.1f}" cy="{y - post:.1f}" r="{post / 22 + 1:.1f}" fill="{color}"/>')
+
+    # Race cars seen from behind, heading into the city, the nearest at the bottom left, clear of the menu down the
+    # middle. Each sits in its lane at its depth (x as a share of the road's half-width at its ground line y), scaled
+    # with distance, trailing streaks of its tail lights and thrusters back toward the viewer.
+    for n, (lane, y, name) in enumerate(((0.05, 772, "gold"), (0.5, 880, "cyan"), (-0.5, 1010, "red"))):
+        cx, scale = vx + lane * road_half(y), (y - horizon) / 180
+        glow = CARS[name][2]
+        for i, (lx, ly, color, width, length, op) in enumerate((
+                (-92, -38, "#ff2d55", 6, 150, 0.45), (92, -38, "#ff2d55", 6, 150, 0.45),
+                (-36, -19, glow, 10, 260, 0.6), (36, -19, glow, 10, 260, 0.6))):
+            x0, y0 = cx + lx * scale, y + ly * scale
+            dx, dy = x0 - vx, y0 - horizon
+            d = (dx * dx + dy * dy) ** 0.5
+            x1, y1 = x0 + dx / d * length * scale, y0 + dy / d * length * scale
+            nx, ny = -dy / d, dx / d
+            w0, w1 = width * scale / 2, width * scale
+            out.append(f'<linearGradient id="trail{n}{i}" gradientUnits="userSpaceOnUse" x1="{x0:.0f}" y1="{y0:.0f}" '
+                       f'x2="{x1:.0f}" y2="{y1:.0f}"><stop offset="0" stop-color="{color}" stop-opacity="{op}"/>'
+                       f'<stop offset="1" stop-color="{color}" stop-opacity="0"/></linearGradient>')
+            out.append(f'<path d="M {x0 + nx * w0:.1f} {y0 + ny * w0:.1f} L {x1 + nx * w1:.1f} {y1 + ny * w1:.1f} '
+                       f'L {x1 - nx * w1:.1f} {y1 - ny * w1:.1f} L {x0 - nx * w0:.1f} {y0 - ny * w0:.1f} Z" '
+                       f'fill="url(#trail{n}{i})"/>')
+        out.append(f'<g transform="translate({cx:.1f} {y}) scale({scale:.3f})">{car(name, glow)}</g>')
     out.append("</svg>")
     return "\n".join(out) + "\n"
 
