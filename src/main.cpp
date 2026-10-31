@@ -134,7 +134,79 @@ static void load_input_script(const char* path) {
     fclose(f);
 }
 
+// TEMP test driver: menus by the game's state into PRACTICE on track 1, then drive-skid-rewind cycles.
+#include "debug_probe.h"
+static const ScriptedInput* test_drive() {
+    static ScriptedInput out{};
+    out = {};
+    uint8_t* rdram = rush2049::probe_get_rdram();
+    if (rdram == nullptr) {
+        return &out;
+    }
+    auto w = [&](uint32_t a) { return *(uint32_t*)(rdram + (a - 0x80000000u)); };
+    auto b = [&](uint32_t a) { return rdram[(a - 0x80000000u) ^ 3]; };
+    using clk = std::chrono::steady_clock;
+    static const auto t0 = clk::now();
+    const double now = std::chrono::duration<double>(clk::now() - t0).count();
+    const uint32_t state = w(0x801174B4);
+    static double attract_at = -1, race_at = -1;
+    if (state == 0x00400000 && attract_at >= 0 && now - attract_at > 12) {
+        if (race_at < 0) {
+            race_at = now;
+            fprintf(stderr, "[drive] race at %.1f\n", now);
+        }
+        const double t = now - race_at;
+        static const double holds[] = { 3, 6, 10, 2, 8, 4, 12, 5, 7, 3, 9, 6 };
+        static int phase = 0, cycle = 0;
+        static double since = 0;
+        static bool was_gone = false;
+        const bool gone = b(0x8014A250 + 0x640) != 0;
+        if (gone != was_gone) { fprintf(stderr, "[drive] %s at %.1f\n", gone ? "CRASH" : "respawn", t); was_gone = gone; }
+        out.buttons = 0x8000;
+        if (cycle >= 12) { out.buttons = 0; return &out; }
+        const double d = t - since;
+        switch (phase) {
+        case 0:  // drive: straight 3 s, then hard weaving to skid and scrape
+            if (d > 3) out.x = fmod(d, 2.4) < 1.2 ? 1.0f : -1.0f;
+            if (d > 9 && !gone) { phase = 1; since = t; fprintf(stderr, "[drive] cycle %d rewind %.0f s at %.1f\n", cycle, holds[cycle], t); }
+            break;
+        case 1:
+            out.buttons |= 0x10000;
+            if (d > holds[cycle]) { phase = 2; since = t; fprintf(stderr, "[drive] let go at %.1f\n", t); }
+            break;
+        case 2:  // straight on after letting go
+            if (d > 6) { phase = 0; since = t; cycle++; }
+            break;
+        }
+        return &out;
+    }
+    if ((state & 0x8) && attract_at < 0) {
+        attract_at = now;
+        fprintf(stderr, "[drive] attract at %.1f\n", now);
+    }
+    if (attract_at < 0 || now - attract_at < 12) {
+        return &out;
+    }
+    // A press of 150 ms every 1.2 s.
+    if (fmod(now, 1.2) > 0.15) {
+        return &out;
+    }
+    if (state & 0x40) {
+        out.buttons = (b(0x803B469F) != 1) ? 0x0400 : 0x8000;
+    } else if (state & 0x80) {
+        out.buttons = (w(0x8014978C) >> 24) != 0 ? 0x0100 : 0x8000;
+    } else if (state & 0x8) {
+        out.buttons = 0x1000;
+    } else {
+        out.buttons = 0x8000;
+    }
+    return &out;
+}
+
 static const ScriptedInput* scripted_input() {
+    if (getenv("TEST_DRIVE") != nullptr) {
+        return test_drive();
+    }
     if (input_script.empty()) {
         return nullptr;
     }

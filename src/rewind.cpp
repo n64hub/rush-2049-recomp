@@ -136,6 +136,7 @@ struct Frame {
 };
 std::deque<Frame> history;     // newest last
 size_t history_bytes = 0;
+uint32_t temp_last_step = 0;  // TEMP
 bool rewinding = false;       // Rewind is held and the race has been stepped back
 uint32_t frames_back = 0;     // frames stepped back since Rewind was pressed
 std::vector<uint32_t> released;  // the IDs of the sounds ended since then
@@ -423,6 +424,43 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     if (tick_running) {
         return;
     }
+    {  // TEMP log
+        static int calls = 0, after = 0;
+        if (rewinding && !rewind_held()) after = 120;
+        const bool detail = after > 0;
+        if (after > 0) after--;
+        if (++calls % 6 == 0 || detail) {
+            int playing = 0, waiting = 0;
+            std::vector<uint32_t> live;
+            for_each_sound(rdram, [&](uint32_t head, uint32_t, uint32_t id) { (head == playing_head ? playing : waiting)++; live.push_back(id); });
+            const uint32_t car = cars_addr, index = read_half(rdram, car + 0x7C6);
+            const uint32_t e0 = read_word(rdram, car_sounds_addr + index * 0x54 + 4), e1 = read_word(rdram, car_sounds_addr + index * 0x54 + 0x18);
+            auto where = [&](uint32_t id) {
+                char c = '-';
+                if (id != 0xFFFFFFFF) {
+                    c = 'N';
+                    for_each_sound(rdram, [&](uint32_t head, uint32_t, uint32_t x) { if (x == id) c = head == playing_head ? 'P' : 'W'; });
+                }
+                return c;
+            };
+            auto vol = [&](uint32_t slot) { float f; memcpy(&f, rdram + (slot - 0x80000000u), 4); return f; };
+            float clock;
+            memcpy(&clock, rdram + (race_clock_addr - 0x80000000u), 4);
+            fprintf(stderr, "[snd] clock %.2f playing %d waiting %d count %u rewind %d released %zu on %d gone %d engine %08X %c v%.2f %08X %c v%.2f skid %08X %c\n",
+                clock, playing, waiting, read_word(rdram, sound_count_addr), (int)rewind_held(), released.size(), read_byte(rdram, car_sounds_on_addr + index),
+                read_byte(rdram, car + 0x640), e0, where(e0), vol(car_sounds_addr + index * 0x54 + 8), e1, where(e1), vol(car_sounds_addr + index * 0x54 + 0x1C),
+                read_word(rdram, skid_sounds_addr + index * 0x14), where(read_word(rdram, skid_sounds_addr + index * 0x14)));
+            if (detail) {
+                for_each_sound(rdram, [&](uint32_t head, uint32_t node, uint32_t id) {
+                    if (id == e0 || id == e1) {
+                        fprintf(stderr, "[node] %08X %c:", id, head == playing_head ? 'P' : 'W');
+                        for (uint32_t k = 0; k < 0x40; k += 4) fprintf(stderr, " %08X", read_word(rdram, node + k));
+                        fprintf(stderr, "\n");
+                    }
+                });
+            }
+        }
+    }
     if (!have_shadow) {
         if (saved.empty()) {
             uint32_t lo = saved_lo;
@@ -458,13 +496,16 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     if (rewind_held()) {
         const uint32_t sounds = read_word(rdram, sound_count_addr);
         step_back(rdram);
+        temp_last_step = sounds;  // TEMP
+        if (getenv("TEST_OLD") == nullptr)  // TEMP
         release_lost_sounds(rdram, ctx, shadow_sounds, sounds);
         resend_car_sounds(rdram);
         rewinding = true;
         return;
     }
     if (rewinding) {
-        const int restarted = restart_lost_engines(rdram, ctx);
+        if (getenv("TEST_OLD") != nullptr) release_lost_sounds(rdram, ctx, shadow_sounds, temp_last_step);  // TEMP
+        const int restarted = getenv("TEST_OLD") != nullptr || getenv("TEST_NORESTART") != nullptr ? 0 : restart_lost_engines(rdram, ctx);
         fprintf(stderr, "[rewind] back %u frames, %zu frames (%zu MB) left, %zu lost sounds released, %d engines "
             "restarted\n", frames_back, history.size(), history_bytes >> 20, released.size(), restarted);
         rewinding = false;
