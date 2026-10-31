@@ -5,18 +5,18 @@ What has been tried or measured and dropped, with why.
 - AI upsampling (AudioSR) of the MusyX mix: inaudible in a headphone A/B. The mix is close to mono (L/R correlate
   0.99).
 - A headphone fold of the surround channel: the game only offers Stereo and Mono, and the channel reads 0.
-- Fixing the street lamp drawn behind the sailboats' sails at Track 1's start. One scenery display list draws the lamps
-  (a textured quad each) and then the boats, all in render mode C8104A50 (Z compare, no Z update), so a sail drawn
-  after a lamp passes its depth test and covers the pole; See-Through Order keeps two see-through draws in the game's
-  order, so it stays. Sorting the see-through draws by depth instead (each call by its triangles' mean screen depth,
-  and the triangles inside a call) turned the layers of an effect over: the exhaust flame's glow went under its core.
+- Sorting every see-through draw by depth, the effects' too (each call by its triangles' mean screen depth, and the
+  triangles inside a call): it turned the layers of an effect over, the exhaust flame's glow went under its core.
   Moving the see-through draws that the root display list calls itself (the player's car, its flame and the flame's
   trail, smoke and the other effects) as well draws the orange flame over its nozzle's glow, so only those two lists
-  deep (scene nodes) move.
-- Drawing the moved see-through scenery far to near among itself, each call by its triangles' mean depth or each scene
-  node's calls together by the node's. On a scripted Track 1 lap paused at the same race clock, neither changed
-  anything seen against the game's order: a frame has only 3 to 22 such calls, and by their screen rectangles 2 of 26
-  frames had two that overlap drawn near before far. It stays in the game's order.
+  deep (scene nodes) move, and only those are sorted.
+- Drawing the moved see-through scenery far to near call by call (each call by its triangles' mean depth, or each scene
+  node's calls together by the node's): it changes nothing seen. A call holds many pictures (one scenery list draws a
+  row of street lamps in one call and the sail boats in the next, all in render mode C8104A50, Z compare without Z
+  update), so a far sail drawn after a nearer lamp or sail still covers it. In the first 12 seconds of a Track 1
+  race, of the overlapping see-through pictures drawn near before far, about 2,200 pairs were inside one call and
+  3,900 across two, and each call holds pictures near and far, so no order of whole calls puts them right. They are
+  sorted picture by picture instead (runtime-patches/rt64-0011).
 - Making Scenery Culling's Off draw less where it loses frames. At the foot of Track 1's downhill, where it meets the
   loop, looking back the way the track comes (GitHub #267), Off draws 1366 calls a frame, Reduced 1108 and Original
   639 (1600x900), all at about the same GPU time: the cost is RT64's CPU work per call. 78 of the track's 117 scenery

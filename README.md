@@ -59,9 +59,9 @@ option has an Original value that runs the game as it shipped.
 - **See-through scenery in order**: trees, lamps, sails and glass are see-through pictures that the game draws
   wherever they come in its list, so solid scenery behind one that happened to be drawn after it painted over it: the
   tree by the sculpture on Track 1 was half see-through against the track behind it. See-through scenery is now drawn
-  after the rest of the scene, so it shows over whatever solid is behind it, and the cars' effects and the ghosts'
-  arrows are still drawn over it. Two see-through things still cover each other as the game drew them, so a boat's
-  sail at Track 1's start still covers the street lamp in front of it.
+  after the rest of the scene, farthest first, so it shows over whatever is behind it: a street lamp and a sail at
+  Track 1's start cover the boats behind them, not the other way round. The cars' effects and the ghosts' arrows are
+  still drawn over it.
 - **Enhanced audio**: MusyX music and sound effects are mixed at 44.1 kHz with a better interpolator instead of the
   game's 22.05 kHz mix, loud peaks are softly limited instead of clipping, and playback no longer skips or drops
   out when the audio output falls behind.
