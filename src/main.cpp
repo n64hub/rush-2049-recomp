@@ -207,7 +207,8 @@ static const ScriptedInput* test_drive() {
         return &out;
     }
     if (state & 0x40) {
-        out.buttons = (b(0x803B469F) != 1) ? 0x0400 : 0x8000;
+        static const int item = getenv("TEST_ITEM") ? atoi(getenv("TEST_ITEM")) : 1;
+        out.buttons = (b(0x803B469F) != item) ? 0x0400 : 0x8000;
     } else if (state & 0x80) {
         out.buttons = (w(0x8014978C) >> 24) != 0 ? 0x0100 : 0x8000;
     } else if (state & 0x8) {
