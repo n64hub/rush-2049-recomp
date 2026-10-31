@@ -72,7 +72,7 @@
 #include "SDL_syswm.h"
 #endif
 
-const std::string version_string = "0.1.35";
+const std::string version_string = "0.1.36";
 
 template<typename... Ts>
 void exit_error(const char* str, Ts ...args) {
