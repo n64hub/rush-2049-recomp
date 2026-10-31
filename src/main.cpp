@@ -156,19 +156,34 @@ static const ScriptedInput* test_drive() {
             fprintf(stderr, "[drive] race at %.1f\n", now);
         }
         const double t = now - race_at;
-        const double c = fmod(t, 30.0);
-        const int cycle = (int)(t / 30.0);
+        // drive (weave hard) -> crashed (car gone) -> respawned: 2.5 s on, then Rewind 9 s, then 12 s straight.
+        static int phase = 0, rewinds = 0;
+        static double since = 0;
+        const bool gone = b(0x8014A250 + 0x640) != 0;
         out.buttons = 0x8000;
-        if (cycle >= 5) {
+        if (rewinds >= 5) {
             out.buttons = 0;
             return &out;
         }
-        const float steer = (cycle & 1) ? -1.0f : 1.0f;
-        if (c >= 6 && c < 10) out.x = steer;
-        else if (c >= 10 && c < 13) out.x = -steer;
-        else if (c >= 16 && c < 22) out.buttons |= 0x10000;
-        static int logged_cycle = -1;
-        if (cycle != logged_cycle && c >= 16) { logged_cycle = cycle; fprintf(stderr, "[drive] cycle %d rewind at %.1f\n", cycle, t); }
+        switch (phase) {
+        case 0:
+            out.x = fmod(t, 8.0) < 4.0 ? 1.0f : -1.0f;
+            if (gone) { phase = 1; fprintf(stderr, "[drive] crashed at %.1f\n", t); }
+            break;
+        case 1:
+            if (!gone) { phase = 2; since = t; fprintf(stderr, "[drive] respawned at %.1f\n", t); }
+            break;
+        case 2:
+            if (t - since > 2.5) { phase = 3; since = t; fprintf(stderr, "[drive] rewind %d at %.1f\n", rewinds, t); }
+            break;
+        case 3:
+            out.buttons |= 0x10000;
+            if (t - since > 9.0) { phase = 4; since = t; fprintf(stderr, "[drive] let go at %.1f\n", t); }
+            break;
+        case 4:
+            if (t - since > 12.0) { phase = 0; rewinds++; }
+            break;
+        }
         return &out;
     }
     if ((state & 0x8) && attract_at < 0) {
