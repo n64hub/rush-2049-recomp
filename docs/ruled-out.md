@@ -13,6 +13,10 @@ What has been tried or measured and dropped, with why.
   Moving the see-through draws that the root display list calls itself (the player's car, its flame and the flame's
   trail, smoke and the other effects) as well draws the orange flame over its nozzle's glow, so only those two lists
   deep (scene nodes) move.
+- Drawing the moved see-through scenery far to near among itself, each call by its triangles' mean depth or each scene
+  node's calls together by the node's. On a scripted Track 1 lap paused at the same race clock, neither changed
+  anything seen against the game's order: a frame has only 3 to 22 such calls, and by their screen rectangles 2 of 26
+  frames had two that overlap drawn near before far. It stays in the game's order.
 - Caching texture hashes while TMEM is untouched: only 8% of hashes repeat without a TMEM change.
 - Merging or batching RT64's draws to cut the 240p floor (`start_gpu_profiler`'s table in `src/main.cpp`). Only ~5% of
   draws repeat the one before exactly; merging every run that shares a pipeline (wrong textures, timing only) halves

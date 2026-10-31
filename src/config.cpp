@@ -168,9 +168,10 @@ namespace {
     };
     const std::string scenery_culling_option = "scenery_culling";
 
-    // RT64's see-through order (runtime-patches/rt64-0009, sortTranslucentCalls in its rt64_state.cpp). Sorted moves
-    // the see-through draws made two display lists deep: the game's root list calls a list per scene node, which calls
-    // the node's model, while its effects (the player's car, its flame, smoke) are called from the root list.
+    // RT64's see-through order (runtime-patches/rt64-0009 and 0010, sortTranslucentCalls in its rt64_state.cpp). Sorted
+    // moves the see-through draws made two display lists deep to after the view's last solid draw that deep: the game's
+    // root list calls a list per scene node, which calls the node's model, while its effects (the player's car, its
+    // flame, smoke, the ghosts' arrows) are called from the root list and stay after them.
     enum class SeeThroughOrder {
         Original,
         Sorted,
@@ -545,8 +546,8 @@ void rush2049::init_config() {
         "of some walls and not others."
         "<br/>"
         "<b>Sorted:</b> see-through scenery is drawn after the rest of the scene, so it shows over whatever solid is "
-        "behind it. Two see-through pictures still cover each other as in the original, and your car's flame and "
-        "the smoke are drawn as they were.",
+        "behind it. Two see-through pictures still cover each other as in the original, and your car's flame, the "
+        "smoke and the ghosts' arrows are drawn over it as they were.",
         see_through_order_options,
         SeeThroughOrder::Sorted
     );
