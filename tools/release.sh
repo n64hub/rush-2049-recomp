@@ -64,7 +64,8 @@ cmake -S . -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
 ninja -C "$build" Rush2049Recompiled > "$build/build.log" 2>&1 ||
     { grep -E " error|FAILED|undefined" "$build/build.log" | head -20; exit 1; }
 
-# The game finds assets/ and recompcontrollerdb.txt in its working directory, so everything sits beside the exe.
+# The game finds assets/ and recompcontrollerdb.txt in its working directory, or in its own folder when started from
+# another (src/main.cpp), so everything sits beside the exe.
 stage="out/$name"
 rm -rf "$stage" "out/$name.zip"
 mkdir -p "$stage"
