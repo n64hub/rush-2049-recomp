@@ -163,7 +163,7 @@ static const ScriptedInput* test_drive() {
         const bool gone = b(0x8014A250 + 0x640) != 0;
         if (gone != was_gone) { fprintf(stderr, "[drive] %s at %.1f\n", gone ? "CRASH" : "respawn", t); was_gone = gone; }
         out.buttons = 0x8000;
-        if (cycle >= 12) { out.buttons = 0; return &out; }
+        if (cycle >= (getenv("TEST_FINAL") ? 2 : 12)) { out.buttons = 0; return &out; }
         const double d = t - since;
         const uint32_t car = 0x8014A250;
         auto h = [&](uint32_t a) { return *(int16_t*)(rdram + ((a - 0x80000000u) ^ 2)); };
@@ -181,13 +181,14 @@ static const ScriptedInput* test_drive() {
                 set_h(car + 0x7E2, h(0x80151CE8 + 8) - 1);
                 set_h(car + 0x7E4, h(0x80151CE8 + 4));
                 rdram[((car + 0x7DC) - 0x80000000u) ^ 3] = 1;
+                if (getenv("TEST_FINAL") != nullptr && cycle == 0) rdram[((car + 0x7E8) - 0x80000000u) ^ 3] = 1;  // the crossing makes the final lap
                 fprintf(stderr, "[drive] lap set up at %.1f\n", t);
             }
             if (!gone && ((lap_at > since && t - lap_at > 3) || d > 30)) { phase = 1; since = t; lap_set = false; fprintf(stderr, "[drive] cycle %d rewind %.0f s at %.1f\n", cycle, holds[cycle], t); }
             break;
         case 1:
             out.buttons |= 0x10000;
-            if (d > holds[cycle]) { phase = 2; since = t; fprintf(stderr, "[drive] let go at %.1f\n", t); }
+            if (d > (getenv("TEST_FINAL") ? 7.0 : holds[cycle])) { phase = 2; since = t; fprintf(stderr, "[drive] let go at %.1f\n", t); }
             break;
         case 2:  // straight on after letting go
             if (d > 6) { phase = 0; since = t; cycle++; }
