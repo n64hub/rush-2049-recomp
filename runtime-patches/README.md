@@ -30,4 +30,6 @@ rt64-0009              see-through surfaces (blended, Z compare without Z update
                        with each call's textures still taken from TMEM as the calls before it in the game's order left it
 rt64-0010              those see-through surfaces go in after the last other call as deep, not at the end of the view, so
                        a shallower call drawn after them (an effect, a Ghost Race's arrows) is still drawn after them
+rt64-0011              and among themselves picture by picture (a call's triangles that share corners), far to near by
+                       each picture's farthest corner, a call drawn as one call per run of its pictures in that order
 ```

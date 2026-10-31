@@ -168,10 +168,11 @@ namespace {
     };
     const std::string scenery_culling_option = "scenery_culling";
 
-    // RT64's see-through order (runtime-patches/rt64-0009 and 0010, sortTranslucentCalls in its rt64_state.cpp). Sorted
-    // moves the see-through draws made two display lists deep to after the view's last solid draw that deep: the game's
-    // root list calls a list per scene node, which calls the node's model, while its effects (the player's car, its
-    // flame, smoke, the ghosts' arrows) are called from the root list and stay after them.
+    // RT64's see-through order (runtime-patches/rt64-0009 to 0011, sortTranslucentCalls in its rt64_state.cpp). Sorted
+    // moves the see-through draws made two display lists deep to after the view's last solid draw that deep, and draws
+    // them picture by picture, far to near: the game's root list calls a list per scene node, which calls the node's
+    // model, while its effects (the player's car, its flame, smoke, the ghosts' arrows) are called from the root list
+    // and stay after them, in the game's order.
     enum class SeeThroughOrder {
         Original,
         Sorted,
@@ -546,9 +547,9 @@ void rush2049::init_config() {
         "comes in its list, so solid scenery behind one that is drawn after it covers it: a tree goes missing in front "
         "of some walls and not others."
         "<br/>"
-        "<b>Sorted:</b> see-through scenery is drawn after the rest of the scene, so it shows over whatever solid is "
-        "behind it. Two see-through pictures still cover each other as in the original, and your car's flame, the "
-        "smoke and the ghosts' arrows are drawn over it as they were.",
+        "<b>Sorted:</b> see-through scenery is drawn after the rest of the scene, farthest first, so it shows over "
+        "whatever is behind it, a sail over the boats behind it as well as over a wall. Your car's flame, the smoke "
+        "and the ghosts' arrows are drawn over it as they were.",
         see_through_order_options,
         SeeThroughOrder::Sorted
     );
