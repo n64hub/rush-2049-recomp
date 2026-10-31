@@ -175,7 +175,7 @@ static const ScriptedInput* test_drive() {
         if (lap != last_lap) { fprintf(stderr, "[drive] lap byte %d at %.1f\n", lap, t); if (lap > last_lap && last_lap >= 0) lap_at = t; last_lap = lap; }
         switch (phase) {
         case 0:  // drive: straight 3 s, then weaving to skid, and a lap made a few seconds in (docs/building.md)
-            if (d > 3) out.x = fmod(d, 2.4) < 1.2 ? 0.7f : -0.7f;
+            if (d > 3 && getenv("TEST_LAP") == nullptr) out.x = fmod(d, 2.4) < 1.2 ? 0.7f : -0.7f;
             if (getenv("TEST_LAP") != nullptr && d > 4 && !lap_set) {
                 lap_set = true;
                 set_h(car + 0x7E2, h(0x80151CE8 + 8) - 1);
@@ -183,7 +183,7 @@ static const ScriptedInput* test_drive() {
                 rdram[((car + 0x7DC) - 0x80000000u) ^ 3] = 1;
                 fprintf(stderr, "[drive] lap set up at %.1f\n", t);
             }
-            if (!gone && ((lap_at > since && t - lap_at > 3) || d > 16)) { phase = 1; since = t; lap_set = false; fprintf(stderr, "[drive] cycle %d rewind %.0f s at %.1f\n", cycle, holds[cycle], t); }
+            if (!gone && ((lap_at > since && t - lap_at > 3) || d > 30)) { phase = 1; since = t; lap_set = false; fprintf(stderr, "[drive] cycle %d rewind %.0f s at %.1f\n", cycle, holds[cycle], t); }
             break;
         case 1:
             out.buttons |= 0x10000;

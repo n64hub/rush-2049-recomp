@@ -454,8 +454,7 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
                 const uint32_t x0 = read_word(rdram, car_sounds_addr + ix * 0x54 + 4);
                 if (x0 == 0xFFFFFFFF || where(x0) == 'N') lostcars |= 1 << k;
             }
-            fprintf(stderr, "[cars] %u lost %02X lap %d
-", ncars, lostcars, read_byte(rdram, car + 0x7E8));
+            fprintf(stderr, "[cars] %u lost %02X lap %d\n", ncars, lostcars, read_byte(rdram, car + 0x7E8));
             fprintf(stderr, "[snd] clock %.2f playing %d waiting %d count %u rewind %d released %zu on %d gone %d engine %08X %c v%.2f %08X %c v%.2f skid %08X %c\n",
                 clock, playing, waiting, read_word(rdram, sound_count_addr), (int)rewind_held(), released.size(), read_byte(rdram, car_sounds_on_addr + index),
                 read_byte(rdram, car + 0x640), e0, where(e0), vol(car_sounds_addr + index * 0x54 + 8), e1, where(e1), vol(car_sounds_addr + index * 0x54 + 0x1C),
