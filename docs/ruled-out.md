@@ -17,6 +17,14 @@ What has been tried or measured and dropped, with why.
   node's calls together by the node's. On a scripted Track 1 lap paused at the same race clock, neither changed
   anything seen against the game's order: a frame has only 3 to 22 such calls, and by their screen rectangles 2 of 26
   frames had two that overlap drawn near before far. It stays in the game's order.
+- Making Scenery Culling's Off draw less where it loses frames. At the foot of Track 1's downhill, where it meets the
+  loop, looking back the way the track comes (GitHub #267), Off draws 1366 calls a frame, Reduced 1108 and Original
+  639 (1600x900), all at about the same GPU time: the cost is RT64's CPU work per call. 78 of the track's 117 scenery
+  objects are in view there, and hiding them one at a time, about 18 of those change no pixel, being behind closer
+  buildings. The view test (runtime-patches/rt64-0008) can't tell them, and nor can the game's table: a reach long
+  enough to leave them out (taking every stretch within 1500 units instead of all of them) leaves out a tower in sight
+  too. Skipping them needs an occlusion test before the call is sent, which is where the cost is. Reduced is the
+  cheaper setting (`src/draw_distance.cpp`).
 - Caching texture hashes while TMEM is untouched: only 8% of hashes repeat without a TMEM change.
 - Merging or batching RT64's draws to cut the 240p floor (`start_gpu_profiler`'s table in `src/main.cpp`). Only ~5% of
   draws repeat the one before exactly; merging every run that shares a pipeline (wrong textures, timing only) halves
