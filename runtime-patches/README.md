@@ -28,4 +28,6 @@ rt64-0008              G_CULLDL: a display list whose bounding box lies wholly o
 rt64-0009              see-through surfaces (blended, Z compare without Z update) drawn at least the game's number of
                        display lists deep go after the rest of their 3D view, in their own order (See-Through Order),
                        with each call's textures still taken from TMEM as the calls before it in the game's order left it
+rt64-0010              those see-through surfaces go in after the last other call as deep, not at the end of the view, so
+                       a shallower call drawn after them (an effect, a Ghost Race's arrows) is still drawn after them
 ```
