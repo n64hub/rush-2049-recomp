@@ -87,6 +87,17 @@
 // Reduced from 27 to 30 and Off draws 43 (each object's box against the view, from the camera's path through Track 1).
 // Why Off isn't cut down the same way is in docs/ruled-out.md.
 //
+// Shorter buildings do the same where they stand on higher ground than the road. Driving Track 1's start straight the
+// wrong way, toward the hairpin, nine objects come in at once ahead on the left, 900 to 2000 units out, and the tallest
+// of them (579 units, its top 700 above the camera, and two of 370 and 383) stand over the low buildings along the road
+// (GitHub #267). So Reduced also lets through every object whose top (+0x38 plus +0x60) stands higher above the camera
+// than 0.15 of its distance to the box (in x and z, as for the reach), about 8.5 degrees above eye level: what stands
+// out on the skyline from far off comes in while it is still small, and what stays below that line is left to the
+// stretches. On the camera's path through Track 1's attract race, both ways round, it brings the objects within 50
+// degrees of the way the camera moves from 24.3 a frame to 25.9, where Off has 33, and none of them then appears
+// standing more than 9 degrees above eye level, where 45 did (20 of them over 17 degrees). The 600-unit rule stays:
+// from the track's higher stretches it keeps the towers from farther than this one would.
+//
 // Besides these limits and that table, func_8009DD88 skips a node only by its per-camera hidden bit (0x100 << camera
 // in its flags, func_8009DD18: hidden unless a child is visible) and its disable bit. The game sets and clears them
 // with func_8008AE8C and func_8008B0D8, and in five minutes of attract races every such call was on a car's parts
@@ -119,10 +130,11 @@ std::atomic<float> scenery_reach{ 0.0f };
 std::atomic<float> scenery_reach{ -1.0f };
 #endif
 
-// Reduced: where the camera is (x, z), and the masks of every stretch within reach of it and the objects taller than
-// `tall` units, while reduced_valid.
+// Reduced: where the camera is, and the masks of every stretch within reach of it, the objects taller than `tall` units
+// and those whose tops stand higher above the camera than `rise` times their distance, while reduced_valid.
 constexpr float tall = 600.0f;
-float camera_x = 0.0f, camera_z = 0.0f;
+constexpr float rise = 0.15f;
+float camera_x = 0.0f, camera_y = 0.0f, camera_z = 0.0f;
 uint32_t reduced_mask[4];
 bool reduced_valid = false;
 
@@ -179,6 +191,7 @@ extern "C" float rush2049_draw_distance_cull(float cull) {
 extern "C" void rush2049_scenery_camera(uint8_t* rdram, gpr position) {
     const float* p = reinterpret_cast<const float*>(rdram + ((uint32_t)position - 0x80000000));
     camera_x = p[0];
+    camera_y = p[1];
     camera_z = p[2];
 }
 
@@ -197,20 +210,22 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
     for (int w = 0; w < 4; w++) {
         reduced_mask[w] = word(record + 4 * w);
     }
-    // The boxes in the game's order, which numbers the records and the objects; each is its centre (+0x34, +0x3C) and
-    // its extent around it (+0x50 to +0x5C in x, +0x54 to +0x60 in y, +0x58 to +0x64 in z), and +0x44 the next box's
-    // index, negative for the last.
+    // The boxes in the game's order, which numbers the records and the objects; each is its centre (+0x34, +0x38,
+    // +0x3C) and its extent around it (+0x50 to +0x5C in x, +0x54 to +0x60 in y, +0x58 to +0x64 in z), and +0x44 the
+    // next box's index, negative for the last.
     uint32_t box = boxes;
     for (int n = 0; n < 128; n++) {
         float dx = camera_x - value(box + 0x34), dz = camera_z - value(box + 0x3C);
         float ex = std::fmax(0.0f, std::fmax(value(box + 0x50) - dx, dx - value(box + 0x5C)));
         float ez = std::fmax(0.0f, std::fmax(value(box + 0x58) - dz, dz - value(box + 0x64)));
-        if (ex * ex + ez * ez <= reach * reach) {
+        float d = std::sqrt(ex * ex + ez * ez);
+        if (d <= reach) {
             for (int w = 0; w < 4; w++) {
                 reduced_mask[w] |= word(table + 16 * n + 4 * w);
             }
         }
-        if (value(box + 0x60) - value(box + 0x54) > tall) {
+        float top = value(box + 0x38) + value(box + 0x60);
+        if (value(box + 0x60) - value(box + 0x54) > tall || top - camera_y > rise * d) {
             reduced_mask[n / 32] |= 1u << (n % 32);
         }
         int16_t next = (int16_t)(word((box + 0x44) & ~3u) >> 16);
