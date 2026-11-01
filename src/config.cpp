@@ -357,9 +357,12 @@ void rush2049::init_config() {
     // Per Player is RecompFrontend's multiplayer mode: each player has a port of their own and each controller a
     // profile of its own, and a controller becomes the next player the first time it presses a button
     // (RecompFrontend-0003), or players are put in order with Assign Players (Controls page). Nothing of it is saved,
-    // so players join again each session. One Player is its single-player mode: every controller and the keyboard on
-    // port 1 through one shared profile. The Controls page reads the mode each time its tab opens, so switching needs
-    // no restart.
+    // so players join again each session. Until a controller joins it plays as One Player, which is its single-player
+    // mode: every controller and the keyboard on port 1 through one shared profile, so the Controls page shows the
+    // keyboard's keys then (RECOMPINPUT_SINGLE_PLAYER_UNTIL_ASSIGNED, CMakeLists.txt). Player 1 keeps those keyboard
+    // keys after a controller joins, and the page's controller and keyboard toggle shows them (RecompFrontend-0006);
+    // a player given the keyboard starts from them. The Controls page reads the mode each time it draws, so switching
+    // needs no restart.
     general.add_enum_option(
         controllers_option,
         "Controllers",

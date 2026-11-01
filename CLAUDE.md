@@ -89,6 +89,8 @@ anyone keeps ROMs.
   N64Recomp-browser's patches (each fork as one patch on upstream) and then `runtime-patches/`, so the tree is the
   forks' with the game's changes, natively too. A fork change is named by its label in N64Recomp-browser's
   `docs/forks.md` (rt64-0007) or by its fork and commit (rt64 7734fe4).
-- The desktop build sets two of the forks' options that are on with Emscripten (CMakeLists.txt):
-  `RT64_FLIPPED_RECT_HIGH_RES` (rt64 fe91344, the hi-res title's strips) and `ULTRAMODERN_LIBULTRA_THREAD_STOP`
-  (N64ModernRuntime 0df8334: the game stops its threads from other threads).
+- The desktop build sets three of the forks' options that are on with Emscripten (CMakeLists.txt):
+  `RT64_FLIPPED_RECT_HIGH_RES` (rt64 fe91344, the hi-res title's strips), `ULTRAMODERN_LIBULTRA_THREAD_STOP`
+  (N64ModernRuntime 0df8334: the game stops its threads from other threads) and
+  `RECOMPINPUT_SINGLE_PLAYER_UNTIL_ASSIGNED` (RecompFrontend bf01590: Per Player is One Player until a controller
+  joins, and a keyboard player starts from its keys).

@@ -70,11 +70,13 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 set(RT64_STATIC TRUE)
 set(RT64_SDL_WINDOW_VULKAN TRUE)
-# Two fixes in the web forks that are off on the desktop unless a game asks (both on with Emscripten): the hi-res
-# title's strips, drawn bottom-up, sampled on the texel the RDP picks (src/hires_font.cpp), and the game stopping its
-# threads from other threads, as libultra lets it.
+# Three fixes in the web forks that are off on the desktop unless a game asks (all on with Emscripten): the hi-res
+# title's strips, drawn bottom-up, sampled on the texel the RDP picks (src/hires_font.cpp), the game stopping its
+# threads from other threads, as libultra lets it, and Per Player playing as One Player until a controller joins, so
+# the keyboard alone shows its keys on the Controls tab, and a keyboard player starts from One Player's keys.
 set(RT64_FLIPPED_RECT_HIGH_RES ON)
 set(ULTRAMODERN_LIBULTRA_THREAD_STOP ON)
+set(RECOMPINPUT_SINGLE_PLAYER_UNTIL_ASSIGNED ON)
 add_compile_definitions(
     HLSL_CPU
     __PRFCHWINTRIN_H

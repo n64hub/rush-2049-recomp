@@ -1,0 +1,78 @@
+diff --git a/recompinput/src/profiles.cpp b/recompinput/src/profiles.cpp
+--- a/recompinput/src/profiles.cpp
++++ b/recompinput/src/profiles.cpp
+@@ -94,24 +94,10 @@
+     }
+ 
+     void profiles::reset_profile_bindings(int profile_index, InputDevice device) {
+-        // multiplayer keyboard profiles just get cleared completely because of overlapping key bindings.
+-        bool is_multiplayer_kb = false;
+-        if (device == InputDevice::Keyboard) {
+-            for (size_t i = 0; i < recompinput::players::get_number_of_assigned_players(); i++) {
+-                if (get_mp_keyboard_profile_index(i) == profile_index) {
+-                    is_multiplayer_kb = true;
+-                    break;
+-                }
+-            }
+-        }
+-
++        // A keyboard player's own profile gets the default keys too: upstream cleared it, for overlapping keys, but only one
++        // player can have the keyboard, so Reset to defaults left that player with no keys at all.
+         for (size_t i = 0; i < recompinput::num_game_inputs; i++) {
+             GameInput input = static_cast<GameInput>(i);
+-            if (is_multiplayer_kb) {
+-                profiles::clear_input_binding(profile_index, input);
+-                continue;
+-            }
+-
+             auto &new_mappings = recompinput::get_default_mapping_for_input(device, input);
+             for (size_t binding_index = 0; binding_index < recompinput::num_bindings_per_input; binding_index++) {
+                 if (binding_index >= new_mappings.size()) {
+diff --git a/recompui/src/config/ui_config_page_controls.cpp b/recompui/src/config/ui_config_page_controls.cpp
+--- a/recompui/src/config/ui_config_page_controls.cpp
++++ b/recompui/src/config/ui_config_page_controls.cpp
+@@ -463,8 +463,15 @@
+     }
+ }
+ 
++// A controller player who also has the keyboard: player 1 while nobody has been given it.
++static bool controller_player_has_keyboard(int player_index) {
++    return recompinput::players::get_player_input_device(player_index) == recompinput::InputDevice::Controller &&
++        recompinput::profiles::get_input_profile_for_player(player_index, recompinput::InputDevice::Keyboard) >= 0;
++}
++
+ void ConfigPageControls::on_edit_player_profile(int player_index) {
+     selected_player = player_index;
++    single_player_show_keyboard_mappings = false;
+     recompinput::InputDevice device = recompinput::players::get_player_input_device(player_index);
+     if (device != recompinput::InputDevice::COUNT) {
+         selected_profile_index = recompinput::profiles::get_input_profile_for_player(player_index, device);
+@@ -487,11 +494,17 @@
+     {
+         auto footer_left = footer->get_left();
+         footer_left->clear_children();
+-        if (!multiplayer_enabled) {
++        // The controller and keyboard toggle, also for a player who has both, so their keys can be seen and changed.
++        if (!multiplayer_enabled || controller_player_has_keyboard(selected_player)) {
+             keyboard_toggle = context.create_element<IconToggle>(footer_left, "icons/Cont.svg", "icons/Keyboard.svg", ToggleSize::Large);
+             keyboard_toggle->set_checked(single_player_show_keyboard_mappings);
+             keyboard_toggle->add_checked_callback([this](bool checked) {
+                 this->single_player_show_keyboard_mappings = checked;
++                if (this->multiplayer_enabled) {
++                    this->selected_profile_index = recompinput::profiles::get_input_profile_for_player(
++                        this->selected_player, this->get_player_input_device());
++                    this->force_update();
++                }
+                 this->update_control_mappings();
+             });
+         }
+@@ -644,6 +657,9 @@
+ 
+ recompinput::InputDevice ConfigPageControls::get_player_input_device() {
+     if (multiplayer_enabled) {
++        if (single_player_show_keyboard_mappings && controller_player_has_keyboard(this->selected_player)) {
++            return recompinput::InputDevice::Keyboard;
++        }
+         return recompinput::players::get_player_input_device(this->selected_player);
+     }
+ 
