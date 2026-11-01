@@ -4,7 +4,8 @@
 // the game's own test. The far builder's depth clamp reaches 1600 times the setting, and an offset it leaves 2048 or more
 // out is divided down with the rotation's scale and w. A prim depth moves as the far plane moves a vertex's depth.
 // Scenery Culling's Reduced ORs the visibility masks of the stretches whose boxes are near the camera, numbered as the
-// game's list numbers them, and lets through every object whose box is taller than 600 units.
+// game's list numbers them, and lets through every object whose box is taller than 600 units or whose top stands higher
+// above the camera than 0.15 of its distance.
 
 #include <cmath>
 #include <cstdio>
@@ -184,9 +185,10 @@ int main() {
     }
     // The first word of the mask the game then tests for a camera at x, in stretch `stretch`; 0xDEAD if the second
     // word isn't 0.
-    auto shown = [&](float reach, float x, int32_t stretch) {
+    auto shown = [&](float reach, float x, int32_t stretch, float y = 0.0f) {
         rush2049::set_scenery_culling(reach);
         ram_float(camera_addr, x);
+        ram_float(camera_addr + 4, y);
         ram_float(camera_addr + 8, 0.0f);
         rush2049_scenery_camera(ram.data(), (gpr)(int32_t)camera_addr);
         recomp_context ctx{};
@@ -213,8 +215,19 @@ int main() {
     check(shown(500.0f, 3000.0f, 3) == 0xC, "Reduced: a tall object with none near", shown(500.0f, 3000.0f, 3));
     check(shown(0.0f, 0.0f, 0) == 0x1, "Original: a tall object only where the game lets it through",
         shown(0.0f, 0.0f, 0));
+    // 550 units tall, its top 500 above the ground: from 700 units away (to the box's edge) it stands out on the skyline
+    // unless the camera is up near its top, and from 4700 it doesn't.
     ram_float(boxes_addr + 0x68 * 1 + 0x60, 500.0f);
-    check(shown(500.0f, 0.0f, 0) == 0x3, "Reduced: 550 tall is not tall", shown(500.0f, 0.0f, 0));
+    check(shown(500.0f, 0.0f, 0, 450.0f) == 0x3, "Reduced: 550 tall is not tall", shown(500.0f, 0.0f, 0, 450.0f));
+    check(shown(500.0f, 0.0f, 0) == 0x7, "Reduced: a top standing high above the camera, numbered by the list",
+        shown(500.0f, 0.0f, 0));
+    check(shown(500.0f, -4000.0f, 0) == 0x1, "Reduced: the same top too far off to stand out",
+        shown(500.0f, -4000.0f, 0));
+    ram_float(boxes_addr + 0x68 * 1 + 0x38, 300.0f);
+    check(shown(500.0f, -4000.0f, 0) == 0x5, "Reduced: on higher ground (the box's centre y)",
+        shown(500.0f, -4000.0f, 0));
+    check(shown(0.0f, 0.0f, 0) == 0x1, "Original: a top standing high only where the game lets it through",
+        shown(0.0f, 0.0f, 0));
     rush2049::set_scenery_culling(-1.0f);
     check(rush2049_scenery_mask(0, 0) == (gpr)(int32_t)-1, "Off: every bit set", 0);
 
