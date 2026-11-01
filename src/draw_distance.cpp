@@ -103,6 +103,8 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 
 #include "rush2049_game.h"
 #include "rush2049_hooks.h"
@@ -123,6 +125,12 @@ std::atomic<float> scenery_reach{ -1.0f };
 // `tall` units, while reduced_valid.
 constexpr float tall = 600.0f;
 float camera_x = 0.0f, camera_z = 0.0f;
+float dbg_y = 0.0f; // DEBUG
+int dbg_dumped = 0; // DEBUG
+int dbg_frame = 0; // DEBUG
+}
+extern "C" __declspec(dllimport) unsigned long long __stdcall GetTickCount64(void);
+namespace {
 uint32_t reduced_mask[4];
 bool reduced_valid = false;
 
@@ -180,6 +188,7 @@ extern "C" void rush2049_scenery_camera(uint8_t* rdram, gpr position) {
     const float* p = reinterpret_cast<const float*>(rdram + ((uint32_t)position - 0x80000000));
     camera_x = p[0];
     camera_z = p[2];
+    dbg_y = p[1];
 }
 
 extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
@@ -189,11 +198,30 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
     auto value = [&word](uint32_t addr) { uint32_t w = word(addr); float f; std::memcpy(&f, &w, 4); return f; };
     int32_t stretch = (int32_t)word((uint32_t)ctx->r29 + 0x78);
     uint32_t boxes = word(0x80149B80);
+    uint32_t record = (uint32_t)ctx->r10;
+    uint32_t table = record - 16 * stretch;
+    // DEBUG
+    dbg_frame++;
+    if (getenv("DBG_REACH")) reach = (float)atof(getenv("DBG_REACH"));
+    if (boxes != 0 && stretch >= 0) {
+        fprintf(stderr, "[S] %d %.1f %.1f %.1f %08X%08X%08X%08X %llu %08X\n", stretch, camera_x, dbg_y, camera_z, word(record), word(record + 4), word(record + 8), word(record + 12), GetTickCount64(), table);
+        if (dbg_dumped < 3) {
+            dbg_dumped++;
+            fprintf(stderr, "[T] table %08X boxes %08X\n", table, boxes);
+            uint32_t b = boxes;
+            for (int n = 0; n < 128; n++) {
+                fprintf(stderr, "[B] %d", n);
+                for (uint32_t o = 0; o < 0x68; o += 4) fprintf(stderr, " %08X", word(b + o));
+                fprintf(stderr, " | %08X%08X%08X%08X\n", word(table + 16 * n), word(table + 16 * n + 4), word(table + 16 * n + 8), word(table + 16 * n + 12));
+                int16_t nx = (int16_t)(word((b + 0x44) & ~3u) >> 16);
+                if (nx < 0) break;
+                b = boxes + 0x68 * nx;
+            }
+        }
+    }
     if (reach <= 0.0f || stretch < 0 || boxes == 0) {
         return;
     }
-    uint32_t record = (uint32_t)ctx->r10;
-    uint32_t table = record - 16 * stretch;
     for (int w = 0; w < 4; w++) {
         reduced_mask[w] = word(record + 4 * w);
     }
@@ -224,6 +252,18 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
 
 extern "C" gpr rush2049_scenery_mask(gpr mask, gpr offset) {
     float reach = scenery_reach.load(std::memory_order_relaxed);
+    if (const char* e = getenv("DBG_REACH")) reach = (float)atof(e);
+    if (const char* bl = getenv("DBG_BLINK")) {
+        uint32_t m = (reach < 0.0f) ? 0xFFFFFFFFu : (uint32_t)((reach > 0.0f && reduced_valid) ? reduced_mask[((uint32_t)offset >> 2) & 3] : (uint32_t)mask);
+        int w = ((uint32_t)offset >> 2) & 3;
+        for (const char* q = bl; *q;) {
+            int n = atoi(q);
+            if (n / 32 == w) { if ((dbg_frame / 6) % 2) m &= ~(1u << (n % 32)); else m |= 1u << (n % 32); }
+            while (*q && *q != ',') q++;
+            if (*q == ',') q++;
+        }
+        return (gpr)(int32_t)m;
+    }
     if (reach < 0.0f) {
         return (gpr)(int32_t)-1;
     }
