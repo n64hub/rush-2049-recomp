@@ -360,9 +360,9 @@ void rush2049::init_config() {
     // so players join again each session. Until a controller joins it plays as One Player, which is its single-player
     // mode: every controller and the keyboard on port 1 through one shared profile, so the Controls page shows the
     // keyboard's keys then (RECOMPINPUT_SINGLE_PLAYER_UNTIL_ASSIGNED, CMakeLists.txt). Player 1 keeps those keyboard
-    // keys after a controller joins, and the page's controller and keyboard toggle shows them (RecompFrontend-0006);
-    // a player given the keyboard starts from them. The Controls page reads the mode each time it draws, so switching
-    // needs no restart.
+    // keys after a controller joins, and the page's controller and keyboard toggle shows them; a player given the
+    // keyboard starts from them (N64Recomp-browser's RecompFrontend patch, with the option). The Controls page reads
+    // the mode each time it draws, so switching needs no restart.
     general.add_enum_option(
         controllers_option,
         "Controllers",
