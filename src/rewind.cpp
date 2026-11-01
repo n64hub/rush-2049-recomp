@@ -484,8 +484,7 @@ void temp_log(uint8_t* rdram, const char* tag) {
     const uint32_t e = car_sounds_addr + i * 0x54 + 4, w = wheel_sounds_addr + i * 0x3C;
     float clock; memcpy(&clock, rdram + (race_clock_addr - 0x80000000u), 4);
     std::string smp; for (uint32_t s : samples) smp += std::to_string(s) + ",";
-    fprintf(stderr, "[snd] %s clock %.2f rw %d eng %c%c skid %c wheels %c%c%c grind %u%c pair %u%c crashed %d n %zu samples %s
-", tag, clock, (int)rewinding,
+    fprintf(stderr, "[snd] %s clock %.2f rw %d eng %c%c skid %c wheels %c%c%c grind %u%c pair %u%c crashed %d n %zu samples %s\n", tag, clock, (int)rewinding,
         st(e), st(e + 0x14), st(skid_sounds_addr + i * 0x14), st(w), st(w + 0x14), st(w + 0x28), read_half(rdram, grind_state_addr + i * 2), st(grind_sounds_addr + i * 4),
         read_half(rdram, car + 0x65C), st(pair_sounds_addr + i * 4), read_byte(rdram, car + 0x640), live.size(), smp.c_str());
 }
