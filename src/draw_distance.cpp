@@ -88,15 +88,15 @@
 // Why Off isn't cut down the same way is in docs/ruled-out.md.
 //
 // Shorter buildings do the same where they stand on higher ground than the road. Driving Track 1's start straight the
-// wrong way, toward the hairpin, nine of them (the tallest 579 units) come in at once ahead on the left, 900 to 2000
-// units out, their tops 300 to 700 units above the camera, standing over the low buildings along the road (GitHub
-// #267). So Reduced also lets through every object whose top (+0x38 plus +0x60) stands higher above the camera than
-// 0.15 of its distance to the box (in x and z, as for the reach), about 8.5 degrees above eye level: what stands out on
-// the skyline from far off comes in while it is still small, and what stays below that line is left to the stretches.
-// On the camera's path through Track 1's attract race, both ways round, it brings the objects within 50 degrees of the
-// way the camera moves from 24.3 a frame to 25.9, where Off has 33, and none of them then appears standing more than 9
-// degrees above eye level, where 45 did (20 of them over 17 degrees). The 600-unit rule stays: from the track's higher stretches it keeps the towers from
-// farther than this one would.
+// wrong way, toward the hairpin, nine objects come in at once ahead on the left, 900 to 2000 units out, and the tallest
+// of them (579 units, its top 700 above the camera, and two of 370 and 383) stand over the low buildings along the road
+// (GitHub #267). So Reduced also lets through every object whose top (+0x38 plus +0x60) stands higher above the camera
+// than 0.15 of its distance to the box (in x and z, as for the reach), about 8.5 degrees above eye level: what stands
+// out on the skyline from far off comes in while it is still small, and what stays below that line is left to the
+// stretches. On the camera's path through Track 1's attract race, both ways round, it brings the objects within 50
+// degrees of the way the camera moves from 24.3 a frame to 25.9, where Off has 33, and none of them then appears
+// standing more than 9 degrees above eye level, where 45 did (20 of them over 17 degrees). The 600-unit rule stays:
+// from the track's higher stretches it keeps the towers from farther than this one would.
 //
 // Besides these limits and that table, func_8009DD88 skips a node only by its per-camera hidden bit (0x100 << camera
 // in its flags, func_8009DD18: hidden unless a child is visible) and its disable bit. The game sets and clears them

@@ -25,6 +25,11 @@ What has been tried or measured and dropped, with why.
   enough to leave them out (taking every stretch within 1500 units instead of all of them) leaves out a tower in sight
   too. Skipping them needs an occlusion test before the call is sent, which is where the cost is. Reduced is the
   cheaper setting (`src/draw_distance.cpp`).
+- Lowering Scenery Culling Reduced's 600-unit height cutoff to let the shorter buildings that pop in through (GitHub
+  #267): at 300 units, on the camera's path through Track 1's attract race both ways round, it lets through about as
+  many objects in view as the rule that replaced it (25.7 a frame against 25.9) and still lets 27 appear standing more
+  than 9 degrees above eye level, 5 of them over 17, because what stands out is how high a top rises above the camera,
+  not how tall its box is. Reduced lets through tops that stand high instead (`src/draw_distance.cpp`).
 - Caching texture hashes while TMEM is untouched: only 8% of hashes repeat without a TMEM change.
 - Merging or batching RT64's draws to cut the 240p floor (`start_gpu_profiler`'s table in `src/main.cpp`). Only ~5% of
   draws repeat the one before exactly; merging every run that shares a pipeline (wrong textures, timing only) halves

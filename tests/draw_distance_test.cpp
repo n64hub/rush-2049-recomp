@@ -215,8 +215,8 @@ int main() {
     check(shown(500.0f, 3000.0f, 3) == 0xC, "Reduced: a tall object with none near", shown(500.0f, 3000.0f, 3));
     check(shown(0.0f, 0.0f, 0) == 0x1, "Original: a tall object only where the game lets it through",
         shown(0.0f, 0.0f, 0));
-    // 550 units tall, its top 500 above the ground: from 700 units away (to the box's edge) it stands out on the skyline
-    // unless the camera is up near its top, and from 4700 it doesn't.
+    // 550 units tall, its top 500 above the ground: from 700 units away (to the box's edge) it stands out on the
+    // skyline unless the camera is up near its top, and from 4700 it doesn't.
     ram_float(boxes_addr + 0x68 * 1 + 0x60, 500.0f);
     check(shown(500.0f, 0.0f, 0, 450.0f) == 0x3, "Reduced: 550 tall is not tall", shown(500.0f, 0.0f, 0, 450.0f));
     check(shown(500.0f, 0.0f, 0) == 0x7, "Reduced: a top standing high above the camera, numbered by the list",
