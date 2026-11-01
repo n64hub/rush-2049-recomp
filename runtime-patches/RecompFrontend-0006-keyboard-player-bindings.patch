@@ -1,33 +1,39 @@
 diff --git a/recompinput/src/profiles.cpp b/recompinput/src/profiles.cpp
 --- a/recompinput/src/profiles.cpp
 +++ b/recompinput/src/profiles.cpp
-@@ -94,24 +94,10 @@
+@@ -94,20 +94,27 @@
      }
  
      void profiles::reset_profile_bindings(int profile_index, InputDevice device) {
 -        // multiplayer keyboard profiles just get cleared completely because of overlapping key bindings.
 -        bool is_multiplayer_kb = false;
--        if (device == InputDevice::Keyboard) {
--            for (size_t i = 0; i < recompinput::players::get_number_of_assigned_players(); i++) {
++        // A keyboard player's own profile gets the default keys, which upstream cleared for every keyboard player, for
++        // overlapping keys, so a player alone on the keyboard was left with none. Only a second keyboard player (Assign
++        // Players' keyboard button adds one) is cleared, so the two don't share the keys.
++        bool second_keyboard_player = false;
+         if (device == InputDevice::Keyboard) {
++            bool keyboard_player_before = false;
+             for (size_t i = 0; i < recompinput::players::get_number_of_assigned_players(); i++) {
 -                if (get_mp_keyboard_profile_index(i) == profile_index) {
 -                    is_multiplayer_kb = true;
--                    break;
--                }
--            }
--        }
--
-+        // A keyboard player's own profile gets the default keys too: upstream cleared it, for overlapping keys, but only one
-+        // player can have the keyboard, so Reset to defaults left that player with no keys at all.
++                if (recompinput::players::get_player_input_device((int)i) != InputDevice::Keyboard) {
++                    continue;
++                }
++                if (get_mp_keyboard_profile_index((int)i) == profile_index) {
++                    second_keyboard_player = keyboard_player_before;
+                     break;
+                 }
++                keyboard_player_before = true;
+             }
+         }
+ 
          for (size_t i = 0; i < recompinput::num_game_inputs; i++) {
              GameInput input = static_cast<GameInput>(i);
 -            if (is_multiplayer_kb) {
--                profiles::clear_input_binding(profile_index, input);
--                continue;
--            }
--
-             auto &new_mappings = recompinput::get_default_mapping_for_input(device, input);
-             for (size_t binding_index = 0; binding_index < recompinput::num_bindings_per_input; binding_index++) {
-                 if (binding_index >= new_mappings.size()) {
++            if (second_keyboard_player) {
+                 profiles::clear_input_binding(profile_index, input);
+                 continue;
+             }
 diff --git a/recompui/src/config/ui_config_page_controls.cpp b/recompui/src/config/ui_config_page_controls.cpp
 --- a/recompui/src/config/ui_config_page_controls.cpp
 +++ b/recompui/src/config/ui_config_page_controls.cpp
