@@ -62,6 +62,9 @@ option has an Original value that runs the game as it shipped.
   after the rest of the scene, farthest first, so it shows over whatever is behind it: a street lamp and a sail at
   Track 1's start cover the boats behind them, not the other way round. The cars' effects and the ghosts' arrows are
   still drawn over it.
+- **Whole ghost arrows**: the arrow over a ghost was drawn into the scene, so anything nearer covered part of it, and
+  a ghost driving under the deck beside Track 1's footbridge straight lost the top of its arrow while in plain view.
+  An arrow is now drawn whole while its tip above the ghost can be seen, and not at all while something hides it.
 - **Enhanced audio**: MusyX music and sound effects are mixed at 44.1 kHz with a better interpolator instead of the
   game's 22.05 kHz mix, loud peaks are softly limited instead of clipping, and playback no longer skips or drops
   out when the audio output falls behind.
@@ -103,6 +106,7 @@ shipped, set every Original value:
 | Model detail | Level of Detail | `graphics.json` `level_of_detail` | `"High"` (4× the distances; `"Highest"`: always the most detailed) | `"Original"` |
 | No scenery culling | Scenery Culling | `graphics.json` `scenery_culling` | `"Off"` (`"Original"` in a browser; `"Reduced"`: what can be seen from the stretches around you, and the tallest towers) | `"Original"` |
 | See-through scenery in order | See-Through Order | `graphics.json` `see_through_order` | `"Sorted"` | `"Original"` |
+| Whole ghost arrows | Ghost Arrows | `graphics.json` `ghost_arrows` | `"Whole"` | `"Original"` |
 | Rendering resolution | Resolution | `graphics.json` `res_option` | `"Auto"` (window size) | `"Original"` (320×240) |
 | Anti-aliasing | MS Anti-Aliasing | `graphics.json` `msaa_option` | `"MSAA2X"` | `"None"` |
 | Hi-res menu and HUD text | Hi-res Font | `graphics.json` `hires_font` | `"On"` | `"Off"` |

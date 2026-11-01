@@ -10,7 +10,8 @@
 //
 // Menus use the same function, so this only applies during a race, which is when the race timer is drawn
 // (func_8010761C). RT64 only reads extended commands after a gEXEnable in the same display list, and every
-// frame's list starts by setting segment 0 to 0, which is already its value, so that command becomes gEXEnable.
+// frame's list starts by setting segment 0 to 0, which is already its value, so that command becomes gEXEnable
+// while the HUD or the menus move, or Ghost Arrows tests the arrows (src/ghost_arrows.cpp).
 //
 // The two spinning coins beside the right-hand counters are 3D models, drawn among the world's objects with a matrix
 // that keeps them in front of the camera. They're the only objects whose matrix has 10 in its bottom-right corner.
@@ -806,7 +807,7 @@ extern "C" void rush2049_enable_extended_gbi(uint8_t* rdram, uint32_t task_addr)
     bool menu = menu_background_drawn;
     menu_background_drawn = false;
     uint32_t dl = (uint32_t)MEM_W(0x30, task) | 0x80000000;
-    bool extended = (hud_moves() || menus) && read_word(rdram, dl) == 0xDB060000 && read_word(rdram, dl + 4) == 0;  // gsSPSegment(0, 0)
+    bool extended = (hud_moves() || menus || rush2049::ghost_arrows_whole()) && read_word(rdram, dl) == 0xDB060000 && read_word(rdram, dl + 4) == 0;  // gsSPSegment(0, 0)
     if (extended) {
         GfxCommand cmd{};
         gEXEnable(&cmd);

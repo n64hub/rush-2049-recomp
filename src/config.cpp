@@ -184,6 +184,18 @@ namespace {
     };
     const std::string see_through_order_option = "see_through_order";
 
+    // src/ghost_arrows.cpp.
+    enum class GhostArrows {
+        Original,
+        Whole,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> ghost_arrows_options = {
+        {GhostArrows::Original, "Original", "Original"},
+        {GhostArrows::Whole, "Whole", "Whole"},
+    };
+    const std::string ghost_arrows_option = "ghost_arrows";
+
     enum class SplitScreenRatio {
         Expand,
         Original,
@@ -559,6 +571,22 @@ void rush2049::init_config() {
     // Called on load too.
     on_apply(graphics, see_through_order_option, [](uint32_t value) {
         RT64::setTranslucentSort(value == (uint32_t)SeeThroughOrder::Sorted ? 2 : 0);
+    });
+
+    graphics.add_enum_option(
+        ghost_arrows_option,
+        "Ghost Arrows",
+        "The arrow over a ghost is drawn into the scene in the original game, so anything nearer covers part of it: "
+        "driving under a sign or a deck, a ghost in plain view loses the top of its arrow."
+        "<br/>"
+        "<b>Whole:</b> an arrow is drawn whole, in front of everything, while its tip above the ghost can be seen, "
+        "and not at all while something hides the tip.",
+        ghost_arrows_options,
+        GhostArrows::Whole
+    );
+    // Called on load too.
+    on_apply(graphics, ghost_arrows_option, [](uint32_t value) {
+        rush2049::set_ghost_arrows_whole(static_cast<GhostArrows>(value) == GhostArrows::Whole);
     });
 
     graphics.add_enum_option(
