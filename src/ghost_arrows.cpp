@@ -3,7 +3,10 @@
 // anything nearer the camera covers the part of the arrow behind it: on Track 1 the deck over the road beside the
 // footbridge straight cuts the top off the arrow of a ghost driving under it, in plain view.
 //
-// At Whole the arrow is drawn whole or not at all, by whether its tip, the vertex nearest the ghost, can be seen. The
+// At Whole the arrow is drawn whole or not at all, by whether its tip can be seen. The model is a disc 145 units
+// across its x-y plane (y up, turning about it) with the arrow, pointing down, in its texture, so the tip is the
+// disc's lowest vertex, (0, -144), the one nearest the ghost. A ghost going over a crest keeps its whole arrow until
+// the tip drops behind the road, then loses all of it at once, where the original cut it off from the bottom up. The
 // hook before the model's display list call writes, at the display list pointer (sp+0xE4, which the function reads
 // back for every command after it):
 //   G_VTX of that one vertex, from the arrow's own vertex data, into slot 0
