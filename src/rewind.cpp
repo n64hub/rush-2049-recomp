@@ -45,8 +45,6 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
-#include <string>  // TEMP
-#include <cstdlib>  // TEMP
 #include <vector>
 
 #include "recomp.h"
@@ -366,10 +364,10 @@ void release_lost_sounds(uint8_t* rdram, recomp_context* ctx, uint32_t from, uin
 //    (func_800DFBA0), one at a time. The race starts any of them but the engine when it finds its slot clear, so such
 //    a slot is cleared. The engine is started only by a respawn, so a car whose engine is lost gets the stop and start
 //    a pause gives it: func_800D5524 ends its sounds and clears all of these, func_800D5E64 starts the engine.
-//  - The grind of a wall (sample 19 at 0x80140AE0, func_800DEF68): contact puts the car's state
-//    (0x80140A08) at the side it touches, 1 to 3, and its time (0x80140B10); 0.1 s on the state goes to 4 to 6 and the
-//    grind starts, and only the end of the contact stops it and puts the state at 0. A lost grind's state goes back to
-//    1 to 3 with a contact that began long ago, so the next tick starts it.
+//  - The grind of a wall (sample 19 at 0x80140AE0, func_800DEF68): contact puts the car's state (0x80140A08) at the
+//    side it touches, 1 to 3, and its time (0x80140B10); 0.1 s on the state goes to 4 to 6 and the grind starts, and
+//    only the end of the contact stops it and puts the state at 0. A lost grind's state goes back to 1 to 3 with a
+//    contact that began long ago, so the next tick starts it.
 //  - A sound a player's car starts and stops in a pair (sample 25 at 0x801407C0) on a state (car + 0x65C) that asks for
 //    the start (1), plays (2) and asks for the stop (3): a lost one in state 2 goes back to 1.
 // A tick while Rewind is held runs from the frame stepped back to and starts a sound for a slot cleared like that,
@@ -473,22 +471,6 @@ int restore_held_sounds(uint8_t* rdram, recomp_context* ctx, const std::vector<u
     return restarted;
 }
 
-// TEMP log: the player's held sounds, after this frame's step back or save.
-void temp_log(uint8_t* rdram, const char* tag) {
-    static int calls = 0;
-    if (++calls % 6 != 0) return;
-    std::vector<uint32_t> live, samples;
-    for_each_sound(rdram, [&](uint32_t, uint32_t node, uint32_t id) { live.push_back(id); samples.push_back(read_word(rdram, node + 0x34)); });
-    auto st = [&](uint32_t a) { uint32_t id = read_word(rdram, a); return id == 0xFFFFFFFF ? '-' : std::find(live.begin(), live.end(), id) != live.end() ? 'Y' : 'N'; };
-    const uint32_t car = cars_addr, i = read_half(rdram, car + 0x7C6);
-    const uint32_t e = car_sounds_addr + i * 0x54 + 4, w = wheel_sounds_addr + i * 0x3C;
-    float clock; memcpy(&clock, rdram + (race_clock_addr - 0x80000000u), 4);
-    std::string smp; for (uint32_t s : samples) smp += std::to_string(s) + ",";
-    fprintf(stderr, "[snd] %s clock %.2f rw %d eng %c%c skid %c wheels %c%c%c grind %u%c pair %u%c crashed %d n %zu samples %s\n", tag, clock, (int)rewinding,
-        st(e), st(e + 0x14), st(skid_sounds_addr + i * 0x14), st(w), st(w + 0x14), st(w + 0x28), read_half(rdram, grind_state_addr + i * 2), st(grind_sounds_addr + i * 4),
-        read_half(rdram, car + 0x65C), st(pair_sounds_addr + i * 4), read_byte(rdram, car + 0x640), live.size(), smp.c_str());
-}
-
 }
 
 void rush2049::set_rewind(bool on) {
@@ -559,12 +541,10 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
         const std::vector<uint8_t> before(rdram + (held_lo - 0x80000000u), rdram + (held_hi - 0x80000000u));
         step_back(rdram);
         std::vector<uint32_t> kept;
-        if (getenv("TEST_OLD") == nullptr)  // TEMP
         restore_held_sounds(rdram, ctx, &before, kept);
         release_lost_sounds(rdram, ctx, shadow_sounds, sounds, kept);
         resend_car_sounds(rdram);
         rewinding = true;
-        temp_log(rdram, "back");  // TEMP
         return;
     }
     if (rewinding) {
@@ -577,5 +557,4 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
         released.clear();
     }
     save_frame(rdram);
-    temp_log(rdram, "save");  // TEMP
 }
