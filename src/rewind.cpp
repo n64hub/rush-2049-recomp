@@ -45,6 +45,8 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <string>  // TEMP
+#include <cstdlib>  // TEMP
 #include <vector>
 
 #include "recomp.h"
@@ -324,15 +326,17 @@ void call_game(uint8_t* rdram, recomp_context* ctx, uint32_t func, uint32_t arg)
     *ctx = saved;
 }
 
-// Ends the sounds started from the count from up to the count to.
-void release_lost_sounds(uint8_t* rdram, recomp_context* ctx, uint32_t from, uint32_t to) {
+// Ends the sounds started from the count from up to the count to, but the ones kept.
+void release_lost_sounds(uint8_t* rdram, recomp_context* ctx, uint32_t from, uint32_t to,
+    const std::vector<uint32_t>& kept) {
     const uint32_t shift = read_word(rdram, sound_shift_addr) & 31;
     std::vector<uint32_t> to_stop;
     for_each_sound(rdram, [&](uint32_t head, uint32_t node, uint32_t id) {
         const uint32_t started = id >> shift;
         // The count goes back to 1 when it runs out, which takes days of play.
         const bool lost = to >= from ? started >= from && started < to : started >= from || started < to;
-        if (!lost || std::find(released.begin(), released.end(), id) != released.end()) {
+        if (!lost || std::find(released.begin(), released.end(), id) != released.end() ||
+            std::find(kept.begin(), kept.end(), id) != kept.end()) {
             return;
         }
         if (head == playing_head) {
@@ -349,21 +353,71 @@ void release_lost_sounds(uint8_t* rdram, recomp_context* ctx, uint32_t from, uin
     }
 }
 
-// A car's engine, the loops in the first two of its slots, is stopped with its other sounds when it crashes
-// (func_800D5828) and started again under new IDs when it respawns (func_800D5E64), and ended by nothing else. A rewind
-// from after a respawn to before the crash gives the race the IDs of the loops the crash stopped, and the respawn's
-// loops are lost sounds, ended with the rest, so the car went silent until a pause stopped and started its sounds
-// again. When Rewind is let go, a car whose sounds are on but whose engine is a sound the manager no longer has gets
-// that stop and start: func_800D5524 ends its sounds and clears its slots, func_800D5E64 starts its engine.
-// The squeal of a skid is the same: the race ends it and starts the next under a new ID (func_800E05F0), so a rewind
-// into a skid the replayed stretch ended left the race holding a sound the manager no longer had, and the skid went on
-// silent. A slot like that is cleared the way func_800D54BC clears one, and the race starts a squeal for it again.
-int restart_lost_engines(uint8_t* rdram, recomp_context* ctx) {
+// The race holds each car's sounds by ID in tables of its own, and a sound the replayed stretch ended is one the race
+// still holds when a step back takes it to before that end: the manager no longer has it, so the race sets the volume
+// of nothing and starts no other while its slot says one plays. A squeal, a wall's grind or the grass under the wheels
+// went silent from where Rewind reached the end of one until it was let go, and on past it until the race ended that
+// sound itself: let go during a grind, it stayed silent for as long as the car stayed on the wall. And the engine is
+// stopped with the car's other sounds when it crashes (func_800D5828) and started again under new IDs when it respawns
+// (func_800D5E64), so a rewind back past a reset held the engine the crash stopped, and the respawn's was a lost sound.
+// A held sound the manager no longer has is given back after every step back, and when Rewind is let go:
+//  - Each car's slots of { ID, volume, pitch, ... } (func_800D54BC clears one): the engine's two loops (samples 102
+//    and 115) and one more, the squeal of a skid (func_800E05F0), and for a player's car the three under its wheels
+//    (func_800DFBA0), one at a time. The race starts any of them but the engine when it finds its slot clear, so such
+//    a slot is cleared. The engine is started only by a respawn, so a car whose engine is lost gets the stop and start
+//    a pause gives it: func_800D5524 ends its sounds and clears all of these, func_800D5E64 starts the engine.
+//  - The grind of a wall (sample 19 at 0x80140AE0, func_800DEF68): contact puts the car's state
+//    (0x80140A08) at the side it touches, 1 to 3, and its time (0x80140B10); 0.1 s on the state goes to 4 to 6 and the
+//    grind starts, and only the end of the contact stops it and puts the state at 0. A lost grind's state goes back to
+//    1 to 3 with a contact that began long ago, so the next tick starts it.
+//  - A sound a player's car starts and stops in a pair (sample 25 at 0x801407C0) on a state (car + 0x65C) that asks for
+//    the start (1), plays (2) and asks for the stop (3): a lost one in state 2 goes back to 1.
+// A tick while Rewind is held runs from the frame stepped back to and starts a sound for a slot cleared like that,
+// which the next step back would end as a lost sound and clear again, a new start every frame. So when the frame
+// stepped back to holds a lost sound where the tick just held one the manager still has, that one is kept and the
+// race given its ID: the squeal, the grind and the engine play on through the rewind as one sound each.
+constexpr uint32_t held_lo = 0x80140420, held_hi = 0x80140B14;  // all of the tables below
+constexpr uint32_t wheel_sounds_addr = 0x801406C0; // 0x3C bytes for each of the first four cars
+constexpr uint32_t pair_sounds_addr = 0x801407C0;  // a word a car
+constexpr uint32_t grind_state_addr = 0x80140A08;  // a half a car
+constexpr uint32_t grind_sounds_addr = 0x80140AE0; // a word a car
+constexpr uint32_t grind_since_addr = 0x80140B10;  // a float a car
+
+enum class Held { engine, slot, pair, grind };
+
+void write_half(uint8_t* mem, uint32_t addr, uint16_t value) {
+    *(uint16_t*)(mem + ((addr - 0x80000000u) ^ 2)) = value;
+}
+
+// Gives back the sounds the race holds that the manager no longer has, as above. before is the tables as the tick
+// left them, before the step back (nullptr when Rewind is let go). Returns how many engines were started again, and
+// adds the IDs the race was given to kept.
+int restore_held_sounds(uint8_t* rdram, recomp_context* ctx, const std::vector<uint8_t>* before,
+    std::vector<uint32_t>& kept) {
     if (read_byte(rdram, sound_on_addr) == 0) {
         return 0;
     }
     std::vector<uint32_t> live;
-    for_each_sound(rdram, [&](uint32_t, uint32_t, uint32_t id) { live.push_back(id); });
+    for_each_sound(rdram, [&](uint32_t, uint32_t, uint32_t id) {
+        if (std::find(released.begin(), released.end(), id) == released.end()) {
+            live.push_back(id);
+        }
+    });
+    auto is_live = [&](uint32_t id) { return std::find(live.begin(), live.end(), id) != live.end(); };
+    // Whether the slot holds a lost sound, once given the one it held before the step back if that one isn't.
+    auto lost = [&](uint32_t slot) {
+        const uint32_t id = read_word(rdram, slot);
+        if (id == 0xFFFFFFFF || is_live(id)) {
+            return false;
+        }
+        const uint32_t was = before != nullptr ? *(const uint32_t*)(before->data() + (slot - held_lo)) : id;
+        if (was != 0xFFFFFFFF && is_live(was)) {
+            write_word(rdram, slot, was);
+            kept.push_back(was);
+            return false;
+        }
+        return true;
+    };
     int restarted = 0;
     const uint32_t cars = std::min<uint32_t>(read_byte(rdram, car_count_addr), 8);
     for (uint32_t car = cars_addr, n = 0; n < cars; car += 0x808, n++) {
@@ -371,23 +425,69 @@ int restart_lost_engines(uint8_t* rdram, recomp_context* ctx) {
         if (index >= 8 || read_byte(rdram, car_sounds_on_addr + index) == 0 || read_byte(rdram, car + 0x640) != 0) {
             continue;  // its sounds are stopped (a crash), and its respawn starts them
         }
-        auto lost = [&](uint32_t slot) {
-            const uint32_t id = read_word(rdram, slot);
-            return id != 0xFFFFFFFF && std::find(live.begin(), live.end(), id) == live.end();
+        const uint32_t engine = car_sounds_addr + index * 0x54 + 4;
+        std::vector<std::pair<uint32_t, Held>> slots = {
+            { engine, Held::engine }, { engine + 0x14, Held::engine }, { engine + 0x3C, Held::slot },
+            { skid_sounds_addr + index * 0x14, Held::slot }, { pair_sounds_addr + index * 4, Held::pair },
+            { grind_sounds_addr + index * 4, Held::grind },
         };
-        const uint32_t engine = car_sounds_addr + index * 0x54 + 4, skid = skid_sounds_addr + index * 0x14;
-        if (lost(engine) || lost(engine + 0x14)) {
+        if (read_byte(rdram, car + 0x7CC) == 2 && index < 4) {  // a player's car
+            for (uint32_t k = 0; k < 3; k++) {
+                slots.push_back({ wheel_sounds_addr + index * 0x3C + k * 0x14, Held::slot });
+            }
+        }
+        bool engine_lost = false;
+        for (auto [slot, how] : slots) {
+            if (!lost(slot)) {
+                continue;
+            }
+            if (how == Held::engine) {
+                engine_lost = true;
+            } else if (how == Held::slot) {
+                write_word(rdram, slot, 0xFFFFFFFF);
+                for (uint32_t k = 4; k < 0x14; k += 4) {
+                    write_word(rdram, slot + k, 0xC0000000);  // -2.0f, not sent
+                }
+            } else if (how == Held::pair) {
+                write_word(rdram, slot, 0xFFFFFFFF);
+                if (read_half(rdram, car + 0x65C) == 2) {
+                    write_half(rdram, car + 0x65C, 1);
+                }
+            } else {
+                write_word(rdram, slot, 0xFFFFFFFF);
+                const uint32_t state = grind_state_addr + index * 2;
+                const uint16_t side = read_half(rdram, state);
+                if (side >= 4 && side <= 6) {
+                    write_half(rdram, state, side - 3);
+                    const float long_ago = -1e30f;
+                    memcpy(rdram + (grind_since_addr + index * 4 - 0x80000000u), &long_ago, 4);
+                }
+            }
+        }
+        if (engine_lost) {
             call_game(rdram, ctx, 0x800D5524, car);
             call_game(rdram, ctx, 0x800D5E64, car);
             restarted++;
-        } else if (lost(skid)) {
-            write_word(rdram, skid, 0xFFFFFFFF);
-            for (uint32_t k = 4; k < 0x14; k += 4) {
-                write_word(rdram, skid + k, 0xC0000000);  // -2.0f, not sent
-            }
         }
     }
     return restarted;
+}
+
+// TEMP log: the player's held sounds, after this frame's step back or save.
+void temp_log(uint8_t* rdram, const char* tag) {
+    static int calls = 0;
+    if (++calls % 6 != 0) return;
+    std::vector<uint32_t> live, samples;
+    for_each_sound(rdram, [&](uint32_t, uint32_t node, uint32_t id) { live.push_back(id); samples.push_back(read_word(rdram, node + 0x34)); });
+    auto st = [&](uint32_t a) { uint32_t id = read_word(rdram, a); return id == 0xFFFFFFFF ? '-' : std::find(live.begin(), live.end(), id) != live.end() ? 'Y' : 'N'; };
+    const uint32_t car = cars_addr, i = read_half(rdram, car + 0x7C6);
+    const uint32_t e = car_sounds_addr + i * 0x54 + 4, w = wheel_sounds_addr + i * 0x3C;
+    float clock; memcpy(&clock, rdram + (race_clock_addr - 0x80000000u), 4);
+    std::string smp; for (uint32_t s : samples) smp += std::to_string(s) + ",";
+    fprintf(stderr, "[snd] %s clock %.2f rw %d eng %c%c skid %c wheels %c%c%c grind %u%c pair %u%c crashed %d n %zu samples %s
+", tag, clock, (int)rewinding,
+        st(e), st(e + 0x14), st(skid_sounds_addr + i * 0x14), st(w), st(w + 0x14), st(w + 0x28), read_half(rdram, grind_state_addr + i * 2), st(grind_sounds_addr + i * 4),
+        read_half(rdram, car + 0x65C), st(pair_sounds_addr + i * 4), read_byte(rdram, car + 0x640), live.size(), smp.c_str());
 }
 
 }
@@ -457,14 +557,20 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     }
     if (rewind_held()) {
         const uint32_t sounds = read_word(rdram, sound_count_addr);
+        const std::vector<uint8_t> before(rdram + (held_lo - 0x80000000u), rdram + (held_hi - 0x80000000u));
         step_back(rdram);
-        release_lost_sounds(rdram, ctx, shadow_sounds, sounds);
+        std::vector<uint32_t> kept;
+        if (getenv("TEST_OLD") == nullptr)  // TEMP
+        restore_held_sounds(rdram, ctx, &before, kept);
+        release_lost_sounds(rdram, ctx, shadow_sounds, sounds, kept);
         resend_car_sounds(rdram);
         rewinding = true;
+        temp_log(rdram, "back");  // TEMP
         return;
     }
     if (rewinding) {
-        const int restarted = restart_lost_engines(rdram, ctx);
+        std::vector<uint32_t> kept;
+        const int restarted = restore_held_sounds(rdram, ctx, nullptr, kept);
         fprintf(stderr, "[rewind] back %u frames, %zu frames (%zu MB) left, %zu lost sounds released, %d engines "
             "restarted\n", frames_back, history.size(), history_bytes >> 20, released.size(), restarted);
         rewinding = false;
@@ -472,4 +578,5 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
         released.clear();
     }
     save_frame(rdram);
+    temp_log(rdram, "save");  // TEMP
 }
