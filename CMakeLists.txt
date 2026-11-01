@@ -201,6 +201,7 @@ target_sources(Rush2049Recompiled PRIVATE
     ${CMAKE_SOURCE_DIR}/src/dl_dump.cpp
     ${CMAKE_SOURCE_DIR}/src/widescreen.cpp
     ${CMAKE_SOURCE_DIR}/src/draw_distance.cpp
+    ${CMAKE_SOURCE_DIR}/src/ghost_arrows.cpp
     ${CMAKE_SOURCE_DIR}/src/hires_font.cpp
     ${CMAKE_SOURCE_DIR}/src/rewind.cpp
     ${CMAKE_SOURCE_DIR}/src/music_thread.cpp
