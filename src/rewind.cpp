@@ -491,7 +491,9 @@ extern "C" void rush2049_rewind_frame_begin(uint8_t* rdram) {
     }
 }
 
+static void r49_frame(uint8_t* rdram);
 extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) {
+    r49_frame(rdram);
     if (read_word(rdram, game_state_addr) != 0x00400000) {
         return;  // menus draw here too
     }
@@ -557,4 +559,163 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
         released.clear();
     }
     save_frame(rdram);
+}
+
+// TEMPORARY TEST HARNESS (not for commit): Ghost Race on Track 1. Race 1 drives 30 s at full throttle and counts as
+// finished, so race 2 has its ghost; race 2 follows it 0.7 s behind. R49_TOGGLE flips RT64's r49Fix every wall second.
+#include <chrono>
+#include <cmath>
+#include <cstdlib>
+namespace RT64 { extern int r49Fix; extern int r49Log; }
+static uint8_t* r49_rdram = nullptr;
+static float r49_rc = -1;
+static int r49_race = 0;
+static bool r49_seen_menu = false;
+static uint32_t r49_last_state = 0xFFFFFFFF;
+static double r49_wall() {
+    static auto s = std::chrono::steady_clock::now();
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - s).count();
+}
+static long long r49_epoch_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+static float r49_envf(const char* n, float d) { const char* e = getenv(n); return e ? (float)atof(e) : d; }
+static double r49_abort_until = -1;
+static void r49_set_cp(uint8_t* rdram, uint32_t car, int cp) {
+    *(uint16_t*)(rdram + ((car + 0x7E2 - 0x80000000u) ^ 2)) = (uint16_t)cp;
+    *(uint16_t*)(rdram + ((car + 0x7E4 - 0x80000000u) ^ 2)) = (uint16_t)(cp + 1);
+}
+static void r49_frame(uint8_t* rdram) {
+    r49_rdram = rdram;
+    if (getenv("R49_AUTO") == nullptr) return;
+    uint32_t st = read_word(rdram, game_state_addr);
+    if (const char* fg = getenv("R49_FOG")) rdram[(0x8013F1D8u - 0x80000000u) ^ 3] = (uint8_t)atoi(fg);
+    if (st != r49_last_state) {
+        fprintf(stderr, "[test] state %08X race %d\n", st, r49_race);
+        r49_last_state = st;
+    }
+    if (st != 0x00400000) {
+        static uint32_t orig = 0; static bool saved = false;
+        if (!saved) { saved = true; orig = read_word(rdram, 0x80111754); }
+        float lim = 30.0f; uint32_t lw; memcpy(&lw, &lim, 4);
+        write_word(rdram, 0x80111754, r49_race == 0 ? lw : orig);
+        r49_rc = -1;
+        return;
+    }
+    float rc; uint32_t w = read_word(rdram, race_clock_addr); memcpy(&rc, &w, 4);
+    static float last_rc = 1e9;
+    if (rc < last_rc - 1.0f || last_rc > 1e8) { r49_race++; fprintf(stderr, "[test] race %d\n", r49_race); }
+    last_rc = rc;
+    static int last_q = -1;
+    if ((int)(rc * 4) != last_q) {
+        last_q = (int)(rc * 4);
+        fprintf(stderr, "[test] race %d rc %.2f epoch %lld\n", r49_race, rc, r49_epoch_ms());
+        if (r49_race >= 2 && (last_q % 4) == 0) RT64::r49Log = 1;
+        if ((last_q % 8) == 0) { extern int r49_arrow_log; r49_arrow_log = 20; fprintf(stderr, "[arrowlog] race %d rc %.2f%c", r49_race, rc, 10); }
+    }
+    if (r49_race == 1 && getenv("R49_DUMPCAR")) {
+        static int dumped = 0;
+        static const float at[] = { 2.0f, 2.5f, 4.0f, 6.0f };
+        if (dumped < 4 && rc >= at[dumped]) {
+            fprintf(stderr, "[car] rc %.3f", rc);
+            for (uint32_t o = 0; o < 0x808; o += 4) { uint32_t v = read_word(rdram, cars_addr + o); fprintf(stderr, " %08X", v); }
+            fprintf(stderr, "\n[cp]");
+            for (uint32_t o = 0; o < 0x40; o += 4) fprintf(stderr, " %08X", read_word(rdram, 0x80151CE8 + o));
+            fprintf(stderr, "\n");
+            dumped++;
+        }
+    }
+    if (r49_race == 1 && getenv("R49_DRONE") && rc >= r49_envf("R49_DRONEAT", 0.5f)) {
+        rdram[(cars_addr + 0x7CC - 0x80000000u) ^ 3] = (uint8_t)atoi(getenv("R49_DRONE"));
+    }
+    if (r49_race >= 1 && (int)(rc * 2) != (int)(r49_rc * 2)) {
+        uint32_t w0 = read_word(rdram, cars_addr + 0x74C), w3 = read_word(rdram, cars_addr + 0x754);
+        float px, pz; memcpy(&px, &w0, 4); memcpy(&pz, &w3, 4);
+        int n = read_byte(rdram, car_count_addr);
+        uint32_t w1 = read_word(rdram, cars_addr + 0x808 + 0x74C), w2 = read_word(rdram, cars_addr + 0x808 + 0x754);
+        float gx, gz; memcpy(&gx, &w1, 4); memcpy(&gz, &w2, 4);
+        fprintf(stderr, "[pos] race %d rc %.2f n %d player %.0f %.0f k%u ghost %.0f %.0f k%u%c", r49_race, rc, n, px, pz,
+            read_byte(rdram, cars_addr + 0x7CC), gx, gz, read_byte(rdram, cars_addr + 0x808 + 0x7CC), 10);
+    }
+    static int tp2_done = 0;
+    if (r49_race >= 2 && tp2_done != r49_race && getenv("R49_TP2AT") && rc >= r49_envf("R49_TP2AT", 1e9)) {
+        tp2_done = r49_race;
+        r49_set_cp(rdram, cars_addr, atoi(getenv("R49_CP")));
+        r49_abort_until = r49_wall() + 0.4;
+        fprintf(stderr, "[test] tp2 race %d rc %.2f%c", r49_race, rc, 10);
+    }
+    static int tp_done = 0;
+    if (tp_done != r49_race && rc >= r49_envf("R49_TPAT", 1.0f) && getenv("R49_CP")) {
+        tp_done = r49_race;
+        int n = read_byte(rdram, car_count_addr);
+        for (int i = (r49_race >= 2 && getenv("R49_TP2AT")) ? 1 : 0; i < n; i++) r49_set_cp(rdram, cars_addr + i * 0x808, atoi(getenv("R49_CP")));
+        if (r49_race == 1 || !getenv("R49_TP2AT")) r49_abort_until = r49_wall() + 0.4;
+        fprintf(stderr, "[test] tp race %d cars %d rc %.2f\n", r49_race, n, rc);
+    }
+    r49_rc = rc;
+    if (r49_race >= 2) {
+        if (const char* t = getenv("R49_TOGGLE")) {
+            static int last = -1;
+            int par = (int)(r49_epoch_ms() / 1000) & 1;
+            if (par != last) {
+                last = par;
+                RT64::r49Fix = par ? atoi(t) : 0;
+                fprintf(stderr, "[test] fix %d epoch %lld rc %.2f\n", RT64::r49Fix, r49_epoch_ms(), rc);
+            }
+        } else {
+            RT64::r49Fix = (int)r49_envf("R49_FIX", 0);
+        }
+    }
+}
+extern "C" bool r49_test_input(uint16_t* buttons, float* x, float* y) {
+    if (getenv("R49_AUTO") == nullptr || r49_rdram == nullptr) return false;
+    uint8_t* rdram = r49_rdram;
+    double now = r49_wall();
+    bool pulse = std::fmod(now, 1.2) < 0.15;
+    *x = 0; *y = 0; *buttons = 0;
+    uint32_t st = read_word(rdram, game_state_addr);
+    if (st == 0x00400000) {
+        if (now < r49_abort_until && now > r49_abort_until - 0.25) { *buttons = 0x0008; return true; }
+        float g = getenv("R49_CP") ? r49_envf("R49_TPAT", 1.0f) + 0.6f : 0.0f;
+        if (r49_race == 1 && r49_rc >= g) *buttons = 0x8000;
+        if (r49_race >= 2 && r49_rc >= g + r49_envf("R49_GAS2", 0.7f)) *buttons = 0x8000;
+        if (r49_race >= 2 && getenv("R49_FOLLOW") && r49_rc >= r49_envf("R49_TP2AT", 1e9) + 1.0f) {
+            auto f = [rdram](uint32_t addr) { uint32_t w = read_word(rdram, addr); float v; memcpy(&v, &w, 4); return v; };
+            float dx = f(cars_addr + 0x808 + 0x74C) - f(cars_addr + 0x74C), dz = f(cars_addr + 0x808 + 0x754) - f(cars_addr + 0x754);
+            float d = sqrtf(dx * dx + dz * dz);
+            *buttons = d > r49_envf("R49_FOLLOW", 120) ? 0x8000 : (d < r49_envf("R49_FOLLOW", 120) * 0.6f ? 0x4000 : 0);
+        }
+        return true;
+    }
+    static uint32_t prev_st = 0; static int pulses_in_st = 0; static bool was_pulse = false;
+    if (st != prev_st) { prev_st = st; pulses_in_st = 0; }
+    if (pulse && !was_pulse) pulses_in_st++;
+    was_pulse = pulse;
+    if (!pulse) return true;
+    if (st == 0x00800000) {
+        *buttons = pulses_in_st < 5 ? 0 : ((pulses_in_st - 5) % 3 == 0 ? 0x0400 : 0x8000);
+        return true;
+    }
+    if (st & 0x80) {
+        uint32_t track = read_word(rdram, 0x8014978C) >> 24;
+        *buttons = track != 0 ? 0x0100 : 0x8000;
+    } else if (st & 0x40) {
+        r49_seen_menu = true;
+        uint32_t mode = read_word(rdram, 0x803B469C) & 255;
+        uint32_t want = 2;
+        *buttons = mode < want ? 0x0400 : mode > want ? 0x0800 : 0x8000;
+    } else if (st & 0x10) {
+        r49_seen_menu = true;
+        *buttons = 0x8000;
+    } else {
+        *buttons = r49_seen_menu ? 0x8000 : 0x1000;
+    }
+    return true;
+}
+extern "C" void r49_finish(uint8_t* rdram, recomp_context* ctx) {
+    if (getenv("R49_AUTO") == nullptr || r49_race != 1) return;
+    uint32_t v0 = (uint32_t)ctx->r2;
+    rdram[(v0 + 0xEF - 0x80000000u) ^ 3] = 1;
+    float t = 25.0f; uint32_t tw; memcpy(&tw, &t, 4);
+    write_word(rdram, v0 + 0xF0, tw);
 }

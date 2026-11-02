@@ -25,6 +25,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 
 #include "rush2049_game.h"
 #include "rush2049_hooks.h"
@@ -36,6 +37,9 @@ namespace {
 std::atomic<bool> whole{ true };
 
 // The arrow being drawn, between the two hooks.
+} // namespace
+int r49_arrow_log = 0; // R49 TEMP
+namespace {
 bool in_arrow = false;
 
 uint32_t read_word(uint8_t* rdram, uint32_t addr) {
@@ -83,6 +87,12 @@ extern "C" void rush2049_ghost_arrow_begin(uint8_t* rdram, recomp_context* ctx) 
     const uint32_t dl = (uint32_t)ctx->r30;
     if (!rush2049::ghost_arrows_whole() || !is_arrow(rdram, node, dl)) {
         return;
+    }
+    if (r49_arrow_log > 0) { // R49 TEMP
+        r49_arrow_log--;
+        fprintf(stderr, "[arrow] node %08X dl %08X tex %08X vtx %08X |", node, dl, read_word(rdram, dl + 12), read_word(rdram, dl + 4));
+        for (uint32_t o = 0; o < 0x50; o += 4) fprintf(stderr, " %08X", read_word(rdram, node + o));
+        fprintf(stderr, "%c", 10);
     }
 
     // The tip: the lowest of the first load's vertices (the model's y is up).
