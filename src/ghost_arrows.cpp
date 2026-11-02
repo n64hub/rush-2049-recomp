@@ -26,6 +26,9 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <set>
+#include <tuple>
 
 #include "rush2049_game.h"
 #include "rush2049_hooks.h"
@@ -85,14 +88,18 @@ extern "C" void rush2049_ghost_arrow_begin(uint8_t* rdram, recomp_context* ctx) 
     in_arrow = false;
     const uint32_t node = (uint32_t)ctx->r23;
     const uint32_t dl = (uint32_t)ctx->r30;
-    if (rush2049::ghost_arrows_whole() && !is_arrow(rdram, node, dl) && r49_arrow_log > 0 && (read_word(rdram, node) & 0x2000)) { // R49 TEMP
-        const uint32_t c = read_word(rdram, node + 0x3C) >> 8;
-        if (c != 0xFFC800 && c != 0xC8E6FF) {
-            r49_arrow_log--;
-            fprintf(stderr, "[nomatch] node %08X dl %08X |", node, dl);
+    { // R49 TEMP: every distinct prim-coloured model once
+        static std::set<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t>> seen;
+        const uint32_t fl = read_word(rdram, node), c = read_word(rdram, node + 0x3C);
+        auto key = std::make_tuple(fl, read_word(rdram, dl), read_word(rdram, dl + 12), read_word(rdram, dl + 20), c);
+        const uint32_t rm = read_word(rdram, dl + 20), rm2 = read_word(rdram, dl + 28), rm3 = read_word(rdram, dl + 12);
+        const bool xlu = ((rm & 0xFFFF) == 0x4A50) || ((rm2 & 0xFFFF) == 0x4A50) || ((rm3 & 0xFFFF) == 0x4A50);
+        (void)xlu; key = std::make_tuple(fl, read_word(rdram, dl), read_word(rdram, dl + 4), read_word(rdram, node + 0x40), c);
+        if (seen.insert(key).second) {
+            fprintf(stderr, "[model] match %d node %08X dl %08X |", int(is_arrow(rdram, node, dl)), node, dl);
             for (uint32_t o = 0; o < 0x50; o += 4) fprintf(stderr, " %08X", read_word(rdram, node + o));
             fprintf(stderr, " | dl");
-            for (uint32_t o = 0; o < 0x60; o += 4) fprintf(stderr, " %08X", read_word(rdram, dl + o));
+            for (uint32_t o = 0; o < 0x80; o += 4) fprintf(stderr, " %08X", read_word(rdram, dl + o));
             fprintf(stderr, "%c", 10);
         }
     }
@@ -131,6 +138,7 @@ extern "C" void rush2049_ghost_arrow_begin(uint8_t* rdram, recomp_context* ctx) 
     gp = put(rdram, gp, test);
     gp = put(rdram, gp, 0xE2001D00, 0x00000004);  // gsDPSetDepthSource(G_ZS_PRIM)
     gp = put(rdram, gp, 0xEE000000, 0x00000000);  // gsDPSetPrimDepth(0, 0)
+    if (getenv("R49_MAGENTA")) gp = put(rdram, gp, 0xFA000000, 0xFF00FFFF); // R49 TEMP
     write_word(rdram, sp + 0xE4, gp);
     in_arrow = true;
 }
