@@ -98,6 +98,15 @@
 // standing more than 9 degrees above eye level, where 45 did (20 of them over 17 degrees). The 600-unit rule stays:
 // from the track's higher stretches it keeps the towers from farther than this one would.
 //
+// Neither catches what you look down on. Driving Track 2 the right way, buildings came in at once 1000 to 2500 units
+// out, 5 to 20 degrees tall as seen from the camera, with their tops near eye level: they stand on lower ground than the
+// road, or the road is up a hill (GitHub #267). So Reduced also lets through every object whose box looks taller than
+// `span` (5 degrees) from the camera, from its bottom (+0x38 plus +0x54) to its top, at its distance in x and z. On the
+// camera's paths through eleven attract races on Tracks 1 to 6 (a race's camera path read backward for driving the
+// wrong way), nothing then comes in looking taller than 5 degrees, where before things up to 24 degrees tall did, and
+// Reduced lets through 20.8 objects in view a frame instead of 17.5 (Original 9.6, Off 30.1; backward 22.6 instead of
+// 18.5, Off 33.5). Lowering `rise` instead costs more for less (docs/ruled-out.md).
+//
 // Besides these limits and that table, func_8009DD88 skips a node only by its per-camera hidden bit (0x100 << camera
 // in its flags, func_8009DD18: hidden unless a child is visible) and its disable bit. The game sets and clears them
 // with func_8008AE8C and func_8008B0D8, and in five minutes of attract races every such call was on a car's parts
@@ -130,10 +139,12 @@ std::atomic<float> scenery_reach{ 0.0f };
 std::atomic<float> scenery_reach{ -1.0f };
 #endif
 
-// Reduced: where the camera is, and the masks of every stretch within reach of it, the objects taller than `tall` units
-// and those whose tops stand higher above the camera than `rise` times their distance, while reduced_valid.
+// Reduced: where the camera is, and the masks of every stretch within reach of it, the objects taller than `tall` units,
+// those whose tops stand higher above the camera than `rise` times their distance and those that look taller than
+// `span` from the camera, while reduced_valid.
 constexpr float tall = 600.0f;
 constexpr float rise = 0.15f;
+constexpr float span = 5.0f * 3.14159265f / 180.0f;
 float camera_x = 0.0f, camera_y = 0.0f, camera_z = 0.0f;
 uint32_t reduced_mask[4];
 bool reduced_valid = false;
@@ -224,8 +235,11 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
                 reduced_mask[w] |= word(table + 16 * n + 4 * w);
             }
         }
-        float top = value(box + 0x38) + value(box + 0x60);
-        if (value(box + 0x60) - value(box + 0x54) > tall || top - camera_y > rise * d) {
+        float top = value(box + 0x38) + value(box + 0x60) - camera_y;
+        float bottom = value(box + 0x38) + value(box + 0x54) - camera_y;
+        float across = std::fmax(d, 1.0f);
+        if (value(box + 0x60) - value(box + 0x54) > tall || top > rise * d ||
+            std::atan2(top, across) - std::atan2(bottom, across) > span) {
             reduced_mask[n / 32] |= 1u << (n % 32);
         }
         int16_t next = (int16_t)(word((box + 0x44) & ~3u) >> 16);

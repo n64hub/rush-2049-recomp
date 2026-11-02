@@ -53,9 +53,10 @@ option has an Original value that runs the game as it shipped.
 - **No scenery culling**: the whole track's scenery is drawn wherever you are. The game left out what it reckoned
   couldn't be seen from the stretch of road you were on, so buildings, walls and signs popped in and out as you
   drove from one stretch into the next, some of them a few car lengths away. On a weaker PC, Reduced draws only what
-  can be seen from the stretches around you, and the tallest towers and any building standing high above you wherever
-  they are in view (the game's lists are made for driving the right way, and driving the wrong way the skyline came in
-  late), so scenery comes in well ahead of the car for a fraction of the cost.
+  can be seen from the stretches around you, and the tallest towers and any building that already looks more than a
+  sliver tall from where you are, above you or down a slope, wherever it is in view (the game's lists leave out much
+  that can be seen from far off), so scenery comes in well ahead of the car, while it is still small, for a fraction
+  of the cost.
 - **See-through scenery in order**: trees, lamps, sails and glass are see-through pictures that the game draws
   wherever they come in its list, so solid scenery behind one that happened to be drawn after it painted over it: the
   tree by the sculpture on Track 1 was half see-through against the track behind it. See-through scenery is now drawn
@@ -104,7 +105,7 @@ shipped, set every Original value:
 | Widescreen menus | Menu Aspect Ratio | `graphics.json` `menu_ratio` | `"Expand"` (up to about 21:9; needs Aspect Ratio at Expand) | `"Original"` (4:3, pillarboxed) |
 | Draw distance | Draw Distance | `graphics.json` `draw_distance` | `"Far"` (4×; `"Farthest"` is 16×) | `"Original"` |
 | Model detail | Level of Detail | `graphics.json` `level_of_detail` | `"High"` (4× the distances; `"Highest"`: always the most detailed) | `"Original"` |
-| No scenery culling | Scenery Culling | `graphics.json` `scenery_culling` | `"Off"` (`"Original"` in a browser; `"Reduced"`: what can be seen from the stretches around you, the tallest towers and buildings standing high above you) | `"Original"` |
+| No scenery culling | Scenery Culling | `graphics.json` `scenery_culling` | `"Off"` (`"Original"` in a browser; `"Reduced"`: what can be seen from the stretches around you, the tallest towers and any building that looks tall from where you are) | `"Original"` |
 | See-through scenery in order | See-Through Order | `graphics.json` `see_through_order` | `"Sorted"` | `"Original"` |
 | Whole ghost arrows | Ghost Arrows | `graphics.json` `ghost_arrows` | `"Whole"` | `"Original"` |
 | Rendering resolution | Resolution | `graphics.json` `res_option` | `"Auto"` (window size) | `"Original"` (320×240) |
@@ -245,8 +246,9 @@ a saved profile keeps its bindings until "Reset to defaults".
 **Several players.** Each controller is a player of its own, as on the console: the first controller to press a
 button is player 1, the next one player 2, and so on up to 4, and the keyboard drives player 1. To put players in
 another order, or give the keyboard to another player, press Assign Players on the Controls tab, then a button on
-each controller (or a key, for the keyboard) in player order, and confirm. Each controller has bindings of its own
-on the Controls tab, starting from the one-player ones. Until a controller joins, the Controls tab shows the one-player
+each controller (or a key, for the keyboard) in player order, and confirm. Each kind of controller has bindings of its
+own on the Controls tab, starting from the one-player ones, and a second player on the same kind has their own too,
+starting from the first's (a third and fourth likewise). Until a controller joins, the Controls tab shows the one-player
 bindings, with the keyboard's behind the keyboard button; after that, player 1's Edit Profile has the same button for
 the keyboard's keys. A player given the keyboard starts from the one-player keyboard keys, and "Reset to defaults" gives
 them the default keys. Players join again each time the game starts. A controller that
