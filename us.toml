@@ -47,7 +47,8 @@ text = "    ctx->r10 = rush2049_frame_pace(ctx->r10);"
 # The frame's display list (src/frame_list.cpp): the game's slot for it (frame data + 0x9CC0) has room for 4000
 # commands, which a two-player race with the enhancements can pass. Where a frame starts the list at the slot
 # (func_800EDDC0, $t8, and where the frame data is set up, func_800EE8B4 $t4 and func_800EEA7C $t8) and where the
-# graphics task takes its address ($t2) and length ($t8), a buffer of our own in the recomp heap takes its place.
+# graphics task takes its address ($t2) and length ($t8), a buffer of our own in the recomp heap takes its place, one
+# for each of the game's two blocks of frame data.
 [[patches.hook]]
 func = "func_800EDDC0"
 before_vram = 0x800EDE0C

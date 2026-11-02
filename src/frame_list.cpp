@@ -97,9 +97,7 @@ extern "C" gpr rush2049_frame_task_list(uint8_t* rdram, gpr slot) {
     return list != 0 ? (gpr)(int32_t)list : slot;
 }
 
-extern "C" void dbg_frame_list_scan(uint8_t* rdram);
 extern "C" gpr rush2049_frame_list_bytes(uint8_t* rdram, gpr bytes) {
-    dbg_frame_list_scan(rdram);
     uint32_t slot = (uint32_t)MEM_W(0, (gpr)(int32_t)frame_data_addr) + slot_offset;
     uint32_t list = buffer_for(rdram, slot);
     if (list == 0) {
@@ -109,23 +107,3 @@ extern "C" gpr rush2049_frame_list_bytes(uint8_t* rdram, gpr bytes) {
     return (gpr)(int32_t)((head - list) & ~7u);
 }
 
-#include <cstdio>
-static int dbg_prints = 0;
-static void dbg_walk(uint8_t* rdram, uint32_t p, int depth) {  // TEMP DEBUG
-    for (int n = 0; n < 40000 && dbg_prints < 100; n++, p += 8) {
-        uint32_t w0 = (uint32_t)MEM_W(0, (gpr)(int32_t)p), w1 = (uint32_t)MEM_W(4, (gpr)(int32_t)p);
-        uint8_t op = w0 >> 24;
-                if ((w1 >> 29) == 5 && op != 0xE4 && op != 0xE1 && op != 0xF1 && op != 0xF0 && op != 0xF2 && op != 0xF5 && op != 0xFC && op != 0xE2 && op != 0xE3 && op != 0xF7 && op != 0xFA && op != 0xF9 && op != 0xF8 && op != 0xFB && op != 0xED && op != 0xF6 && op != 0x05 && op != 0x06 && op != 0x07) {
-            fprintf(stderr, "[fl] kseg1 d%d %08X: %08X %08X\n", depth, p, w0, w1); dbg_prints++;
-        }
-        if (op == 0xDF) return;
-        if (op == 0xDE && depth < 6 && (w1 >> 24) >= 0x80 && (w1 >> 24) < 0x82) {
-            if (w0 & 0x00010000) { p = w1 - 8; continue; }
-            dbg_walk(rdram, w1, depth + 1);
-        }
-    }
-}
-extern "C" void dbg_frame_list_scan(uint8_t* rdram) {
-    if (dbg_prints >= 100) return;
-    uint32_t l = buffer_for(rdram, (uint32_t)MEM_W(0, (gpr)(int32_t)frame_data_addr) + slot_offset); if (l) dbg_walk(rdram, l + prefix_bytes, 0);
-}
