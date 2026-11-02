@@ -199,7 +199,7 @@ extern "C" void rush2049_dump_task(uint8_t* rdram, uint32_t task_addr) {
     uint32_t data_ptr = (uint32_t)MEM_W(0x30, task);
     fprintf(f, "gfx task %08X data_ptr %08X at %.2f s\n", task_addr, data_ptr, since.count());
     Walker w{ rdram, f };
-    w.walk(data_ptr & 0x00FFFFFF, 0);
+    w.walk(data_ptr | 0x80000000, 0);  // in the recomp heap (src/frame_list.cpp)
     fclose(f);
     fprintf(stderr, "[dl] wrote %s (%d lines)\n", dump_path.c_str(), w.lines);
 }
