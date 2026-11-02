@@ -565,10 +565,10 @@ void rush2049::init_config() {
         "them close to the car."
         "<br/>"
         "<b>Reduced:</b> what can be seen from the stretches of road around you is drawn too, and the tallest "
-        "towers and any building standing high above you wherever they are in view, so scenery comes in well before "
-        "you reach it, for much less than Off costs. <b>Off:</b> all of the track's "
-        "scenery is drawn wherever you are, and only <recomp-color primary>Draw Distance</recomp-color> decides how "
-        "far.",
+        "towers and any building that already looks more than a sliver tall from where you are, wherever they are in "
+        "view, so scenery comes in while it is still small, for much less than Off costs. <b>Off:</b> all of the "
+        "track's scenery is drawn wherever you are, and only <recomp-color primary>Draw Distance</recomp-color> "
+        "decides how far.",
         scenery_culling_options,
 #ifdef __EMSCRIPTEN__
         // Off costs a page about a third of its frames (docs/web.md), so a browser starts at Original.

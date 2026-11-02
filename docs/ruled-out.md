@@ -30,6 +30,12 @@ What has been tried or measured and dropped, with why.
   many objects in view as the rule that replaced it (25.7 a frame against 25.9) and still lets 27 appear standing more
   than 9 degrees above eye level, 5 of them over 17, because what stands out is how high a top rises above the camera,
   not how tall its box is. Reduced lets through tops that stand high instead (`src/draw_distance.cpp`).
+- Lowering Scenery Culling Reduced's `rise` (0.15) to catch the buildings that pop in on Track 2 driven the right way
+  (GitHub #267): those stand below the road with their tops near eye level, so at 0.07 Reduced lets through 26.5
+  objects in view a frame on Track 2's attract race against 21.2 with the rule that was added instead, and buildings
+  up to 18 degrees tall as seen still pop in on Track 3. Nor does weighting by width help: letting through what looks
+  bigger than 120 square degrees (height times width, the width capped at 45) costs nearly as much and still lets
+  buildings up to 12 degrees tall pop in. Reduced lets through what looks taller than 5 degrees from the camera (`src/draw_distance.cpp`).
 - Caching texture hashes while TMEM is untouched: only 8% of hashes repeat without a TMEM change.
 - Merging or batching RT64's draws to cut the 240p floor (`start_gpu_profiler`'s table in `src/main.cpp`). Only ~5% of
   draws repeat the one before exactly; merging every run that shares a pipeline (wrong textures, timing only) halves
