@@ -659,7 +659,7 @@ static void r49_frame(uint8_t* rdram) {
     if (st != 0x00400000) {
         static uint32_t orig = 0; static bool saved = false;
         if (!saved) { saved = true; orig = read_word(rdram, 0x80111754); }
-        float lim = 30.0f; uint32_t lw; memcpy(&lw, &lim, 4);
+        float lim = r49_envf("R49_LIMIT", 30.0f); uint32_t lw; memcpy(&lw, &lim, 4);
         write_word(rdram, 0x80111754, r49_race == 0 ? lw : orig);
         r49_rc = -1;
         return;
@@ -706,6 +706,16 @@ static void r49_frame(uint8_t* rdram) {
         r49_set_cp(rdram, cars_addr, atoi(getenv("R49_CP")));
         r49_abort_until = r49_wall() + 0.4;
         fprintf(stderr, "[test] tp2 race %d rc %.2f%c", r49_race, rc, 10);
+    }
+    if (r49_race == 1 && getenv("R49_CPSCAN") && rc >= 2.0f) {
+        static int scan_cp = -1;
+        int cp = atoi(getenv("R49_CPSCAN")) + (int)((rc - 2.0f) / r49_envf("R49_SCANSTEP", 3.0f));
+        if (cp != scan_cp) {
+            scan_cp = cp;
+            r49_set_cp(rdram, cars_addr, cp);
+            r49_abort_until = r49_wall() + 0.4;
+            fprintf(stderr, "[scan] cp %d rc %.2f epoch %lld%c", cp, rc, r49_epoch_ms(), 10);
+        }
     }
     static int tp_done = 0;
     if (tp_done != r49_race && rc >= r49_envf("R49_TPAT", 1.0f) && getenv("R49_CP")) {
