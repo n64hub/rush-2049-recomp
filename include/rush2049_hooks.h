@@ -51,10 +51,11 @@ void rush2049_far_matrix_end(uint8_t* rdram, gpr matrix);
 float rush2049_far_clamp_distance(float d);
 void rush2049_far_clamp_fit(recomp_context* ctx);
 
-/* Ghost Arrows (src/ghost_arrows.cpp, us.toml): before and after the model draw func_8009C8F0 writes a model's
-   display list call. */
-void rush2049_ghost_arrow_begin(uint8_t* rdram, recomp_context* ctx);
-void rush2049_ghost_arrow_end(uint8_t* rdram, recomp_context* ctx);
+/* Ghost Arrows (src/ghost_arrows.cpp, us.toml): in the scene draw func_8009F058, at the start and the end of each
+   poly's turn in the poly loop, and after the camera's last model tree. */
+void rush2049_ghost_poly_begin(uint8_t* rdram, recomp_context* ctx);
+void rush2049_ghost_poly_end(uint8_t* rdram, recomp_context* ctx);
+void rush2049_ghost_arrows_draw(uint8_t* rdram, recomp_context* ctx);
 
 /* Scenery Culling (src/draw_distance.cpp, us.toml): func_8009EBC0 is given the camera's position, has picked the
    stretch's record, and then tests a word of the scenery visibility mask, the word's byte offset in the record beside
@@ -73,7 +74,6 @@ void rush2049_rewind_tick_end(uint8_t* rdram);
 void rush2049_rewind_frame_begin(uint8_t* rdram);
 void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx);
 void r49_finish(uint8_t* rdram, recomp_context* ctx);
-void r49_poly(uint8_t* rdram, recomp_context* ctx);
 
 /* Save Ghosts (src/controller_pak.cpp): at the end of a Ghost Race, before the game checks whether to offer
    SAVE GHOST. */

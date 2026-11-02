@@ -576,11 +576,12 @@ void rush2049::init_config() {
     graphics.add_enum_option(
         ghost_arrows_option,
         "Ghost Arrows",
-        "The arrow over a ghost is drawn into the scene in the original game, so anything nearer covers part of it: "
-        "driving under a sign or a deck, a ghost in plain view loses the top of its arrow."
+        "The arrow over a ghost is drawn before part of the scenery in the original game, so buildings far behind a "
+        "ghost can hide its arrow, and anything nearer covers part of it: driving under a sign or a deck, a ghost in "
+        "plain view loses the top of its arrow."
         "<br/>"
-        "<b>Whole:</b> an arrow is drawn whole, in front of everything, while its tip above the ghost can be seen, "
-        "and not at all while something hides the tip.",
+        "<b>Whole:</b> the arrows are drawn after the scenery, each one whole, in front of everything, while its tip "
+        "above the ghost can be seen, and not at all while something hides the tip.",
         ghost_arrows_options,
         GhostArrows::Whole
     );

@@ -724,7 +724,7 @@ static void r49_frame(uint8_t* rdram) {
             int par = (int)(r49_epoch_ms() / 1000) & 1;
             if (par != last) {
                 last = par;
-                RT64::r49Fix = par ? atoi(t) : 0;
+                rush2049::set_ghost_arrows_whole(par != 0); (void)t;
                 fprintf(stderr, "[test] fix %d epoch %lld rc %.2f\n", RT64::r49Fix, r49_epoch_ms(), rc);
             }
         } else {
