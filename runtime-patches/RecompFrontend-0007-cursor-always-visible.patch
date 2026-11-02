@@ -1,0 +1,40 @@
+diff --git a/recompui/include/recompui/recompui.h b/recompui/include/recompui/recompui.h
+--- a/recompui/include/recompui/recompui.h
++++ b/recompui/include/recompui/recompui.h
+@@ -97,6 +97,9 @@ namespace recompui {
+     void open_quit_game_prompt();
+     bool get_cursor_visible();
+     void set_cursor_visible(bool visible);
++    // Keeps the cursor shown while a controller or the keyboard is used, which otherwise hides it until the mouse
++    // moves. The cursor lock for mouse aiming still hides it.
++    void set_cursor_always_visible(bool always_visible);
+     void update_supported_options();
+ 
+     bool get_cont_active(void);
+diff --git a/recompui/src/base/ui_state.cpp b/recompui/src/base/ui_state.cpp
+--- a/recompui/src/base/ui_state.cpp
++++ b/recompui/src/base/ui_state.cpp
+@@ -34,6 +34,7 @@
+ #include "util/file.h"
+ 
+ static std::atomic_bool cursor_enabled = true;
++static std::atomic_bool cursor_always_visible = false;
+ 
+ void recompui::open_quit_game_prompt() {
+     recompui::open_choice_prompt(
+@@ -68,11 +69,14 @@ void recompui::register_extra_font(const std::string& font_filename) {
+ }
+ 
+ bool recompui::get_cursor_visible() {
+-    return cursor_enabled.load();
++    return cursor_enabled.load() || cursor_always_visible.load();
+ }
+ void recompui::set_cursor_visible(bool visible) {
+     cursor_enabled.store(visible);
+ }
++void recompui::set_cursor_always_visible(bool always_visible) {
++    cursor_always_visible.store(always_visible);
++}
+ 
+ static bool can_focus(Rml::Element* element) {
+     return element->GetOwnerDocument() != nullptr && element->GetProperty(Rml::PropertyId::TabIndex)->Get<Rml::Style::TabIndex>() != Rml::Style::TabIndex::None;
