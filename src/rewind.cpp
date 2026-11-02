@@ -384,8 +384,7 @@ void release_lost_sounds(uint8_t* rdram, recomp_context* ctx, uint32_t from, uin
         for (size_t at = 0; at + 4 <= tables.size() && !held; at += 4) {
             held = *(const uint32_t*)(tables.data() + at) == id;
         }
-        fprintf(stderr, "[TEMP] lost %08X sample %u loop %u held %d
-", id, read_word(rdram, node + 0x34), read_byte(rdram, node + 0x19), (int)held);  // TEMP
+        fprintf(stderr, "[TEMP] lost %08X sample %u loop %u held %d\n", id, read_word(rdram, node + 0x34), read_byte(rdram, node + 0x19), (int)held);  // TEMP
         if (held) {
             end_sound(rdram, head, node, id, to_stop);
         } else {
@@ -406,14 +405,12 @@ void end_old_spared(uint8_t* rdram, recomp_context* ctx) {
         live.push_back(id);
         for (const Spared& s : spared) {
             if (s.id == id && now - s.since >= spared_for && !has(released, id)) {
-                fprintf(stderr, "[TEMP] spared %08X sample %u ended at %d s
-", id, read_word(rdram, node + 0x34), (int)spared_for.count());  // TEMP
+                fprintf(stderr, "[TEMP] spared %08X sample %u ended at %d s\n", id, read_word(rdram, node + 0x34), (int)spared_for.count());  // TEMP
                 end_sound(rdram, head, node, id, to_stop);
             }
         }
     });
-    for (const Spared& s : spared) if (!has(live, s.id)) fprintf(stderr, "[TEMP] spared %08X done after %.2f s
-", s.id, std::chrono::duration<double>(now - s.since).count());  // TEMP
+    for (const Spared& s : spared) if (!has(live, s.id)) fprintf(stderr, "[TEMP] spared %08X done after %.2f s\n", s.id, std::chrono::duration<double>(now - s.since).count());  // TEMP
     spared.erase(std::remove_if(spared.begin(), spared.end(),
         [&](const Spared& s) { return !has(live, s.id) || has(released, s.id); }), spared.end());
     stop_sounds(rdram, ctx, to_stop);
