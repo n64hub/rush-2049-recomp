@@ -425,11 +425,12 @@ struct Rdp {
     void make_texture(uint64_t hash, uint32_t width, uint32_t height, const std::vector<float>& src);
     void title_rect(const RT64::LoadTile& tile, const uint32_t* rect);
 
-    void walk(uint32_t addr, int depth) {
+    // physical: addr is an RDRAM address, as a task's list is (RecompFrontend's send_dl), not a segmented one.
+    void walk(uint32_t addr, int depth, bool physical = false) {
         if (depth > 12) {
             return;
         }
-        uint32_t p = phys(addr);
+        uint32_t p = physical ? addr & 0x3FFFFFF : phys(addr);
         for (int n = 0; n < 50000; n++, p += 8) {
             uint32_t w0 = rd32(p), w1 = rd32(p + 4);
             switch (w0 >> 24) {
@@ -1116,7 +1117,7 @@ extern "C" void rush2049_hires_font_scan(uint8_t* rdram, uint32_t task_addr) {
     rdp.found_title = false;
     rdp.title_pending.clear();
     rdp.forget_tmem();
-    rdp.walk((uint32_t)MEM_W(0x30, task), 0);
+    rdp.walk((uint32_t)MEM_W(0x30, task), 0, true);  // in the recomp heap (src/frame_list.cpp)
     for (const auto& [hash, atlas] : rdp.pending) {
         rdp.make_texture(hash, atlas.width, atlas.height, atlas.texels);
     }

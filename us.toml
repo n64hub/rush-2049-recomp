@@ -44,6 +44,35 @@ func = "func_80000BA4"
 before_vram = 0x80000C14
 text = "    ctx->r10 = rush2049_frame_pace(ctx->r10);"
 
+# The frame's display list (src/frame_list.cpp): the game's slot for it (frame data + 0x9CC0) has room for 4000
+# commands, which a two-player race with the enhancements can pass. Where a frame starts the list at the slot
+# (func_800EDDC0, $t8, and where the frame data is set up, func_800EE8B4 $t4 and func_800EEA7C $t8) and where the
+# graphics task takes its address ($t2) and length ($t8), a buffer of our own in the recomp heap takes its place.
+[[patches.hook]]
+func = "func_800EDDC0"
+before_vram = 0x800EDE0C
+text = "    ctx->r24 = rush2049_frame_list(rdram, ctx->r24);"
+
+[[patches.hook]]
+func = "func_800EE8B4"
+before_vram = 0x800EEA48
+text = "    ctx->r12 = rush2049_frame_list(rdram, ctx->r12);"
+
+[[patches.hook]]
+func = "func_800EEA7C"
+before_vram = 0x800EEC20
+text = "    ctx->r24 = rush2049_frame_list(rdram, ctx->r24);"
+
+[[patches.hook]]
+func = "func_800EDACC"
+before_vram = 0x800EDB94
+text = "    ctx->r10 = rush2049_frame_list(rdram, ctx->r10);"
+
+[[patches.hook]]
+func = "func_800EDACC"
+before_vram = 0x800EDBD8
+text = "    ctx->r24 = rush2049_frame_list_bytes(rdram, ctx->r24);"
+
 # Input lag. The main thread queues a frame's graphics task (func_800EDACC, osSendMesg to the scheduler's command
 # queue at 0x8002E960) about half a millisecond after the frame starts, but the scheduler reads that queue only on a
 # retrace or on its 0x29E message, which the audio thread sends and the main thread doesn't. Then, as below, it
