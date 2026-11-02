@@ -412,17 +412,23 @@ func = "func_8009C8F0"
 before_vram = 0x8009CBCC
 text = "    ctx->f10.fl = rush2049_draw_distance_level(ctx->f10.fl);"
 
-# Ghost Arrows (src/ghost_arrows.cpp): before the model's display list call is written (s7 the node, fp the list,
-# sp+0xE4 the display list pointer), and after it.
+# Ghost Arrows (src/ghost_arrows.cpp): in the scene draw's poly loop, at the start of a poly's turn (s6 the poly, s7
+# the display list pointer's address, sp+0x16C its index) and at the end, where every path through it meets; and
+# after the camera's last model tree, or where it would be.
 [[patches.hook]]
-func = "func_8009C8F0"
-before_vram = 0x8009D2DC
-text = "    rush2049_ghost_arrow_begin(rdram, ctx);"
+func = "func_8009F058"
+before_vram = 0x8009FA1C
+text = "    rush2049_ghost_poly_begin(rdram, ctx);"
 
 [[patches.hook]]
-func = "func_8009C8F0"
-before_vram = 0x8009D2F8
-text = "    rush2049_ghost_arrow_end(rdram, ctx);"
+func = "func_8009F058"
+before_vram = 0x800A030C
+text = "    rush2049_ghost_poly_end(rdram, ctx);"
+
+[[patches.hook]]
+func = "func_8009F058"
+before_vram = 0x800A04B4
+text = "    rush2049_ghost_arrows_draw(rdram, ctx);"
 
 # The far plane: f8 is the camera's far distance (camera +0x3C) as it goes into the projection, here and for the
 # second projection below, and f4 its near distance (camera +0x38) already times f24. Runs once per camera a frame.
