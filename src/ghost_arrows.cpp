@@ -29,8 +29,8 @@
 // 0x8012E678's low half, and only sets it again when it changes). A ghost going over a crest keeps its whole arrow
 // until the tip drops behind the road, then loses all of it at once. The test is RT64's (rt64_gbi_extended.cpp,
 // RSPVertexTestZCS.hlsl), on the GPU, so nothing waits for the frame; its draws are left in place by See-Through Order.
-// RT64 reads extended commands only after a gEXEnable in the same display list, which src/widescreen.cpp writes at
-// the start of every frame's list while this is on.
+// RT64 reads extended commands only after a gEXEnable in the same display list, which every frame's list starts with
+// (src/frame_list.cpp).
 //
 // The arrow is told from the other polys by its texture (0x9800: the first of the effects' set; the shadows are
 // 0x9807, skid marks and smoke 0x9808), its four corners and its flags (0x1600 with the cameras it is seen by in the

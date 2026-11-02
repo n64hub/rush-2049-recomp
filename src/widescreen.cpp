@@ -9,9 +9,10 @@
 // list pointer across the call, so extra commands would be overwritten.
 //
 // Menus use the same function, so this only applies during a race, which is when the race timer is drawn
-// (func_8010761C). RT64 only reads extended commands after a gEXEnable in the same display list, and every
-// frame's list starts by setting segment 0 to 0, which is already its value, so that command becomes gEXEnable
-// while the HUD or the menus move, or Ghost Arrows tests the arrows (src/ghost_arrows.cpp).
+// (func_8010761C). RT64 only reads extended commands after a gEXEnable in the same display list, which every frame's
+// list starts with (src/frame_list.cpp). Should that list be in the game's own slot, its first command, setting
+// segment 0 to 0, which is already its value, becomes gEXEnable while the HUD or the menus move, or Ghost Arrows
+// tests the arrows (src/ghost_arrows.cpp).
 //
 // The two spinning coins beside the right-hand counters are 3D models, drawn among the world's objects with a matrix
 // that keeps them in front of the camera. They're the only objects whose matrix has 10 in its bottom-right corner.
@@ -362,12 +363,13 @@ void anchor_lines(uint8_t* rdram) {
 
 // Writes a call to the list at `list` at p, in the place of 3 commands.
 void write_call(uint8_t* rdram, uint32_t p, uint32_t list) {
-    // Addresses with the top bit set are read unmasked only in extended mode, so it's on just for the call.
+    // Addresses with the top bit set are read unmasked only in extended mode. The frame's list is in it from its start
+    // (src/frame_list.cpp), and stays in it after the call, for the lists the game writes inside its own list.
     GfxCommand call[3]{};
     gEXSetRDRAMExtended(&call[0], 1);
     call[1].values.word0 = 0xDE000000;  // gSPDisplayList
     call[1].values.word1 = list;
-    gEXSetRDRAMExtended(&call[2], 0);
+    gEXSetRDRAMExtended(&call[2], 1);
     write_commands(rdram, p, call, 3);
 }
 
@@ -806,9 +808,13 @@ extern "C" void rush2049_enable_extended_gbi(uint8_t* rdram, uint32_t task_addr)
     }
     bool menu = menu_background_drawn;
     menu_background_drawn = false;
-    uint32_t dl = (uint32_t)MEM_W(0x30, task) | 0x80000000;
-    bool extended = (hud_moves() || menus || rush2049::ghost_arrows_whole()) && read_word(rdram, dl) == 0xDB060000 && read_word(rdram, dl + 4) == 0;  // gsSPSegment(0, 0)
-    if (extended) {
+    uint32_t task_dl = (uint32_t)MEM_W(0x30, task) | 0x80000000;
+    uint32_t dl = rush2049::frame_list_game_start(task_dl);
+    bool wanted = hud_moves() || menus || rush2049::ghost_arrows_whole();
+    // The frame's list starts with gEXEnable (src/frame_list.cpp); a list in the game's slot gets it in place of
+    // its first command.
+    bool extended = wanted && (dl != task_dl || (read_word(rdram, dl) == 0xDB060000 && read_word(rdram, dl + 4) == 0));  // gsSPSegment(0, 0)
+    if (extended && dl == task_dl) {
         GfxCommand cmd{};
         gEXEnable(&cmd);
         write_word(rdram, dl, cmd.values.word0);

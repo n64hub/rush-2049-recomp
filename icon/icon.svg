@@ -1,20 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
 <defs>
-<linearGradient id="night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a0b2e"/>
-<stop offset="0.62" stop-color="#7a1a6a"/><stop offset="0.7" stop-color="#ff5a3c"/>
-<stop offset="0.7" stop-color="#140826"/><stop offset="1" stop-color="#020712"/></linearGradient>
-<linearGradient id="chrome" x1="0" y1="56" x2="0" y2="200" gradientUnits="userSpaceOnUse">
-<stop offset="0" stop-color="#fff6d0"/><stop offset="0.42" stop-color="#ffc23a"/><stop offset="0.5" stop-color="#ff7a1c"/>
-<stop offset="1" stop-color="#b8121e"/></linearGradient>
+<linearGradient id="night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#050a24"/>
+<stop offset="0.4" stop-color="#0d1c5a"/><stop offset="0.46" stop-color="#3fe0ff"/>
+<stop offset="0.46" stop-color="#0a0b2e"/><stop offset="1" stop-color="#020712"/></linearGradient>
+<linearGradient id="paint-cyan" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7ae8ff"/>
+<stop offset="1" stop-color="#1a2f9a"/></linearGradient>
+<radialGradient id="under-cyan"><stop offset="0" stop-color="#ff3fa4" stop-opacity="0.8"/>
+<stop offset="1" stop-color="#ff3fa4" stop-opacity="0"/></radialGradient>
 <clipPath id="tile"><rect x="8" y="8" width="240" height="240" rx="44"/></clipPath>
 </defs>
 <g clip-path="url(#tile)">
 <rect width="256" height="256" fill="url(#night)"/>
-<path d="M 120 179 L 136 179 L 300 256 L -44 256 Z" fill="#1a0d33"/>
-<path d="M 120 179 L -44 256" stroke="#ff3fa4" stroke-width="7"/>
-<path d="M 136 179 L 300 256" stroke="#3fe0ff" stroke-width="7"/>
+<path d="M 122 118 L 134 118 L 300 256 L -44 256 Z" fill="#1a0d33"/>
+<path d="M 122 118 L -44 256" stroke="#ff3fa4" stroke-width="6"/>
+<path d="M 134 118 L 300 256" stroke="#3fe0ff" stroke-width="6"/>
+<g transform="translate(128 212) scale(0.8)"><ellipse cx="0" cy="-2" rx="150" ry="18" fill="url(#under-cyan)"/><rect x="-108" y="-30" width="30" height="30" rx="5" fill="#06030d"/><rect x="78" y="-30" width="30" height="30" rx="5" fill="#06030d"/><path d="M -96 -8 L 96 -8 Q 112 -12 112 -30 L 104 -50 Q 96 -60 68 -62 L -68 -62 Q -96 -60 -104 -50 L -112 -30 Q -112 -12 -96 -8 Z" fill="url(#paint-cyan)"/><path d="M -40 -61 Q -36 -90 0 -92 Q 36 -90 40 -61 Z" fill="#0d0820"/><path d="M -40 -61 Q -36 -90 0 -92 Q 36 -90 40 -61" fill="none" stroke="#ff3fa4" stroke-width="2.5"/><path d="M -98 -52 Q 0 -60 98 -52" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.35"/><path d="M -94 -8 L 94 -8 L 100 -30 L -100 -30 Z" fill="#120826"/><circle cx="-36" cy="-19" r="14" fill="#ff3fa4" opacity="0.3"/><circle cx="-36" cy="-19" r="7" fill="#ff3fa4"/><circle cx="-36" cy="-19" r="3.5" fill="#ffffff"/><circle cx="36" cy="-19" r="14" fill="#ff3fa4" opacity="0.3"/><circle cx="36" cy="-19" r="7" fill="#ff3fa4"/><circle cx="36" cy="-19" r="3.5" fill="#ffffff"/><rect x="-104" y="-46" width="208" height="16" rx="6" fill="#ff2d55" opacity="0.25"/><rect x="-98" y="-41" width="196" height="6" rx="3" fill="#ff2d55"/><rect x="-26" y="-40" width="52" height="4" fill="#ffd0da"/><path d="M -50 -62 L -43 -62 L -41 -76 L -48 -76 Z" fill="#160b2c"/><path d="M 50 -62 L 43 -62 L 41 -76 L 48 -76 Z" fill="#160b2c"/><path d="M -100 -82 L 100 -82 L 96 -74 L -96 -74 Z" fill="url(#paint-cyan)"/><path d="M -97 -75 L 97 -75" stroke="#ff3fa4" stroke-width="2.5"/><path d="M -104 -90 L -96 -90 L -94 -68 L -101 -68 Z" fill="#160b2c"/><path d="M 104 -90 L 96 -90 L 94 -68 L 101 -68 Z" fill="#160b2c"/></g>
 </g>
-<path d="M75.3 200V54.5H137.1Q154.5 54.5 167.2 60.7Q179.8 66.9 186.7 78.3Q193.6 89.6 193.6 105.3Q193.6 120.4 186.4 131.4Q179.3 142.5 166.1 148.5Q153 154.5 134.9 154.5H100.3V123H134Q140.2 123 144.6 120.8Q149.1 118.6 151.5 114.6Q154 110.5 154 105.3Q154 99.9 151.5 95.9Q149.1 92 144.6 89.7Q140.2 87.5 134 87.5H115.9V200ZM155.8 200 124.2 134H165.7L198.1 200Z" fill="none" stroke="#14051f" stroke-width="16" stroke-linejoin="round" transform="translate(30 0) skewX(-12)"/>
-<path d="M75.3 200V54.5H137.1Q154.5 54.5 167.2 60.7Q179.8 66.9 186.7 78.3Q193.6 89.6 193.6 105.3Q193.6 120.4 186.4 131.4Q179.3 142.5 166.1 148.5Q153 154.5 134.9 154.5H100.3V123H134Q140.2 123 144.6 120.8Q149.1 118.6 151.5 114.6Q154 110.5 154 105.3Q154 99.9 151.5 95.9Q149.1 92 144.6 89.7Q140.2 87.5 134 87.5H115.9V200ZM155.8 200 124.2 134H165.7L198.1 200Z" fill="url(#chrome)" transform="translate(30 0) skewX(-12)"/>
 <rect x="8" y="8" width="240" height="240" rx="44" fill="none" stroke="#14051f" stroke-width="4"/>
 </svg>

@@ -5,8 +5,8 @@ Needs fontTools and Pillow in the venv.
 
 All of it is drawn here, from shapes and the menus' own font (assets/InterVariable.ttf, SIL OFL 1.1), so none of it
 comes from the game or its box: a night San Francisco with a suspension bridge, a skyline and a road into it, race
-cars of our own design on the road trailing neon, a wordmark set in Inter Black, and an "R" on the same night for the
-icon. It writes
+cars of our own design on the road trailing neon, a wordmark set in Inter Black, and one of those cars on its road for
+the icon. It writes
 
     assets/launcher/background.svg   the launcher's background (src/main.cpp, on_launcher_init)
     assets/launcher/title.svg        the wordmark in place of RecompFrontend's text title
@@ -284,26 +284,25 @@ def title():
 
 
 def icon():
-    black = load_font(900)
-    r, _ = text_path(black, "R", 200, 134, 200)
+    # One of the launcher's cars from behind, on its road under the night sky.
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
 <defs>
-<linearGradient id="night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a0b2e"/>
-<stop offset="0.62" stop-color="#7a1a6a"/><stop offset="0.7" stop-color="#ff5a3c"/>
-<stop offset="0.7" stop-color="#140826"/><stop offset="1" stop-color="{BG}"/></linearGradient>
-<linearGradient id="chrome" x1="0" y1="56" x2="0" y2="200" gradientUnits="userSpaceOnUse">
-<stop offset="0" stop-color="#fff6d0"/><stop offset="0.42" stop-color="#ffc23a"/><stop offset="0.5" stop-color="#ff7a1c"/>
-<stop offset="1" stop-color="#b8121e"/></linearGradient>
+<linearGradient id="night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#050a24"/>
+<stop offset="0.4" stop-color="#0d1c5a"/><stop offset="0.46" stop-color="#3fe0ff"/>
+<stop offset="0.46" stop-color="#0a0b2e"/><stop offset="1" stop-color="{BG}"/></linearGradient>
+<linearGradient id="paint-cyan" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{CARS['cyan'][0]}"/>
+<stop offset="1" stop-color="{CARS['cyan'][1]}"/></linearGradient>
+<radialGradient id="under-cyan"><stop offset="0" stop-color="#ff3fa4" stop-opacity="0.8"/>
+<stop offset="1" stop-color="#ff3fa4" stop-opacity="0"/></radialGradient>
 <clipPath id="tile"><rect x="8" y="8" width="240" height="240" rx="44"/></clipPath>
 </defs>
 <g clip-path="url(#tile)">
 <rect width="256" height="256" fill="url(#night)"/>
-<path d="M 120 179 L 136 179 L 300 256 L -44 256 Z" fill="#1a0d33"/>
-<path d="M 120 179 L -44 256" stroke="#ff3fa4" stroke-width="7"/>
-<path d="M 136 179 L 300 256" stroke="#3fe0ff" stroke-width="7"/>
+<path d="M 122 118 L 134 118 L 300 256 L -44 256 Z" fill="#1a0d33"/>
+<path d="M 122 118 L -44 256" stroke="#ff3fa4" stroke-width="6"/>
+<path d="M 134 118 L 300 256" stroke="#3fe0ff" stroke-width="6"/>
+<g transform="translate(128 212) scale(0.8)">{car("cyan", "#ff3fa4")}</g>
 </g>
-<path d="{r}" fill="none" stroke="#14051f" stroke-width="16" stroke-linejoin="round" transform="translate(30 0) skewX(-12)"/>
-<path d="{r}" fill="url(#chrome)" transform="translate(30 0) skewX(-12)"/>
 <rect x="8" y="8" width="240" height="240" rx="44" fill="none" stroke="#14051f" stroke-width="4"/>
 </svg>
 """

@@ -1,6 +1,6 @@
-// Config tabs: the stock tabs, plus the controller accessory, Controller Pak size and rewind options on the General
-// tab, the game frame rate, hi-res font, split-screen aspect ratio and copying frames to RAM on the Graphics tab, and
-// MusyX mixing on the Sound tab.
+// Config tabs: the stock tabs, plus the controller accessory, Controller Pak size, rewind and mouse cursor options on
+// the General tab, the game frame rate, hi-res font, split-screen aspect ratio and copying frames to RAM on the Graphics
+// tab, and MusyX mixing on the Sound tab.
 
 #include <algorithm>
 #include <atomic>
@@ -13,6 +13,7 @@
 #include "recompinput/input_mapping.h"
 #include "recompinput/players.h"
 #include "recompui/config.h"
+#include "recompui/recompui.h"
 #include "recompui/renderer.h"
 #include "util/file.h"
 #include "ultramodern/ultramodern.hpp"
@@ -80,6 +81,17 @@ namespace {
         {SaveGhosts::On, "On", "On"},
     };
     const std::string save_ghosts_option = "save_ghosts";
+
+    enum class MouseCursor {
+        Original,
+        Shown,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> mouse_cursor_options = {
+        {MouseCursor::Original, "Original", "Original"},
+        {MouseCursor::Shown, "Shown", "Always Shown"},
+    };
+    const std::string mouse_cursor_option = "mouse_cursor";
 
     enum class GameFrameRate {
         Original,
@@ -423,6 +435,16 @@ void rush2049::init_config() {
         save_ghosts_options,
         SaveGhosts::On
     );
+    general.add_enum_option(
+        mouse_cursor_option,
+        "Mouse Cursor",
+        "Whether the mouse cursor stays on screen while you play with a controller or the keyboard."
+        "<br/>"
+        "<b>Original:</b> hidden as soon as a controller or a key is pressed, and shown again when the mouse moves. "
+        "<b>Always Shown:</b> stays where you left it, for pointing at things in a recording.",
+        mouse_cursor_options,
+        MouseCursor::Original
+    );
     // Called on load too.
     general.add_option_change_callback(controllers_option,
         [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
@@ -432,6 +454,12 @@ void rush2049::init_config() {
     general.add_option_change_callback(rewind_option,
         [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             rush2049::set_rewind(static_cast<Rewind>(std::get<uint32_t>(cur_value)) == Rewind::On);
+        });
+    // RecompFrontend-0007.
+    general.add_option_change_callback(mouse_cursor_option,
+        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            recompui::set_cursor_always_visible(
+                static_cast<MouseCursor>(std::get<uint32_t>(cur_value)) == MouseCursor::Shown);
         });
 
     recomp::config::Config& graphics = recompui::config::create_graphics_tab();
