@@ -214,21 +214,18 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
     if (boxes != 0 && stretch >= 0 && getenv("DBG_LOG")) {
         if (dbg_boxes_dumped != table) {
             dbg_boxes_dumped = table;
-            fprintf(stderr, "[T] table %08X boxes %08X track %08X
-", table, boxes, word(0x8014978C));
+            fprintf(stderr, "[T] table %08X boxes %08X track %08X\n", table, boxes, word(0x8014978C));
             uint32_t b = boxes;
             for (int n = 0; n < 128; n++) {
                 fprintf(stderr, "[B] %d", n);
                 for (uint32_t o = 0; o < 0x68; o += 4) fprintf(stderr, " %08X", word(b + o));
-                fprintf(stderr, " | %08X%08X%08X%08X
-", word(table + 16 * n), word(table + 16 * n + 4), word(table + 16 * n + 8), word(table + 16 * n + 12));
+                fprintf(stderr, " | %08X%08X%08X%08X\n", word(table + 16 * n), word(table + 16 * n + 4), word(table + 16 * n + 8), word(table + 16 * n + 12));
                 int16_t nx = (int16_t)(word((b + 0x44) & ~3u) >> 16);
                 if (nx < 0) break;
                 b = boxes + 0x68 * nx;
             }
         }
-        fprintf(stderr, "[S] %d %d %.1f %.1f %.1f %08X%08X%08X%08X
-", dbg_frame, stretch, camera_x, camera_y, camera_z, word(record), word(record + 4), word(record + 8), word(record + 12));
+        fprintf(stderr, "[S] %d %d %.1f %.1f %.1f %08X%08X%08X%08X\n", dbg_frame, stretch, camera_x, camera_y, camera_z, word(record), word(record + 4), word(record + 8), word(record + 12));
     }
     if (reach <= 0.0f || stretch < 0 || boxes == 0) {
         return;
