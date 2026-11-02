@@ -66,7 +66,7 @@ text = "    ctx->r24 = rush2049_frame_list(rdram, ctx->r24);"
 [[patches.hook]]
 func = "func_800EDACC"
 before_vram = 0x800EDB94
-text = "    ctx->r10 = rush2049_frame_list(rdram, ctx->r10);"
+text = "    ctx->r10 = rush2049_frame_task_list(rdram, ctx->r10);"
 
 [[patches.hook]]
 func = "func_800EDACC"

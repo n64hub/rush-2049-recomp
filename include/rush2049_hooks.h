@@ -36,8 +36,10 @@ void rush2049_enable_extended_gbi(uint8_t* rdram, uint32_t task_addr);
 void rush2049_hires_font_scan(uint8_t* rdram, uint32_t task_addr);
 
 /* The frame's display list (src/frame_list.cpp, us.toml): where the game points the display list pointer at its slot
-   for the top-level list, the buffer to point it at instead, and the list's length in bytes for its graphics task. */
+   for the top-level list, the buffer to point it at instead; and for the frame's graphics task, the list RT64 is to
+   read and its length in bytes. */
 gpr rush2049_frame_list(uint8_t* rdram, gpr slot);
+gpr rush2049_frame_task_list(uint8_t* rdram, gpr slot);
 gpr rush2049_frame_list_bytes(uint8_t* rdram, gpr bytes);
 
 /* Before the scheduler starts a task (us.toml); writes it out when --dump-dl is due. */

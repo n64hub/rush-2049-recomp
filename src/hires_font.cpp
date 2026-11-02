@@ -191,7 +191,8 @@ struct Rdp {
         std::vector<float> texels;
     };
     std::unordered_map<uint64_t, Pending> pending;
-    // gEXSetRDRAMExtended: the widescreen HUD calls lists of its own above the game's 8 MB with this on.
+    // gEXSetRDRAMExtended: every frame's list turns it on (src/frame_list.cpp), and it is on for the widescreen HUD's
+    // calls to lists of its own above the game's 8 MB.
     bool extended_rdram = false;
     // The high half of the other modes, for the TLUT type.
     uint32_t othermode_h = 0;

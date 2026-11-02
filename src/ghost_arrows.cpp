@@ -16,8 +16,8 @@
 // and the hook after it gEXEndVertexZTest, zsrcsel pixel, and the prim depth the game last set (func_8008A644 keeps it
 // in 0x8012E678's low half, and only sets it again when it changes). The test is RT64's (rt64_gbi_extended.cpp,
 // RSPVertexTestZCS.hlsl), on the GPU, so nothing waits for the frame; its draws are left in place by See-Through Order.
-// RT64 reads extended commands only after a gEXEnable in the same display list, which src/widescreen.cpp writes at
-// the start of every frame's list while this is on.
+// RT64 reads extended commands only after a gEXEnable in the same display list, which every frame's list starts with
+// (src/frame_list.cpp).
 //
 // The arrow is told from other models by its display list: a 32-vertex load, a texture list, the render mode
 // C8104A50 (see-through, depth tested, not written) and the combiner FC127E03 FF0FF3FF, with a prim colour (node flag
