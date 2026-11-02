@@ -132,10 +132,12 @@ std::atomic<float> scenery_reach{ 0.0f };
 std::atomic<float> scenery_reach{ -1.0f };
 #endif
 
-// Reduced: where the camera is, and the masks of every stretch within reach of it, the objects taller than `tall` units
-// and those whose tops stand higher above the camera than `rise` times their distance, while reduced_valid.
+// Reduced: where the camera is, and the masks of every stretch within reach of it, the objects taller than `tall` units,
+// those whose tops stand higher above the camera than `rise` times their distance and those that look taller than
+// `span` from the camera, while reduced_valid.
 constexpr float tall = 600.0f;
 constexpr float rise = 0.15f;
+constexpr float span = 5.0f * 3.14159265f / 180.0f;
 float camera_x = 0.0f, camera_y = 0.0f, camera_z = 0.0f;
 uint32_t reduced_mask[4];
 bool reduced_valid = false;
@@ -247,8 +249,11 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
                 reduced_mask[w] |= word(table + 16 * n + 4 * w);
             }
         }
-        float top = value(box + 0x38) + value(box + 0x60);
-        if (value(box + 0x60) - value(box + 0x54) > tall || top - camera_y > rise * d) {
+        float top = value(box + 0x38) + value(box + 0x60) - camera_y;
+        float bottom = value(box + 0x38) + value(box + 0x54) - camera_y;
+        float across = std::fmax(d, 1.0f);
+        if (value(box + 0x60) - value(box + 0x54) > tall || top > rise * d ||
+            std::atan2(top, across) - std::atan2(bottom, across) > span) {
             reduced_mask[n / 32] |= 1u << (n % 32);
         }
         int16_t next = (int16_t)(word((box + 0x44) & ~3u) >> 16);
@@ -258,6 +263,7 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
         box = boxes + 0x68 * next;
     }
     reduced_valid = true;
+    if (getenv("DBG_LOG")) fprintf(stderr, "[R] %d %08X%08X%08X%08X\n", dbg_frame, reduced_mask[0], reduced_mask[1], reduced_mask[2], reduced_mask[3]); // DEBUG
 }
 
 extern "C" gpr rush2049_scenery_mask(gpr mask, gpr offset) {
