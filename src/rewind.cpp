@@ -744,7 +744,7 @@ extern "C" bool r49_test_input(uint16_t* buttons, float* x, float* y) {
         float g = getenv("R49_CP") ? r49_envf("R49_TPAT", 1.0f) + 0.6f : 0.0f;
         if (r49_race == 1 && r49_rc >= g) *buttons = 0x8000;
         if (r49_race >= 2 && r49_rc >= g + r49_envf("R49_GAS2", 0.7f)) *buttons = 0x8000;
-        if (r49_race >= 2 && getenv("R49_FOLLOW") && r49_rc >= r49_envf("R49_TP2AT", 1e9) + 1.0f) {
+        if (r49_race >= 2 && getenv("R49_FOLLOW") && r49_rc >= (getenv("R49_TP2AT") ? r49_envf("R49_TP2AT", 1e9) + 1.0f : 1.0f)) {
             auto f = [rdram](uint32_t addr) { uint32_t w = read_word(rdram, addr); float v; memcpy(&v, &w, 4); return v; };
             float dx = f(cars_addr + 0x808 + 0x74C) - f(cars_addr + 0x74C), dz = f(cars_addr + 0x808 + 0x754) - f(cars_addr + 0x754);
             float d = sqrtf(dx * dx + dz * dz);
