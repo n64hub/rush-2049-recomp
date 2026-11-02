@@ -750,6 +750,7 @@ extern "C" bool r49_test_input(uint16_t* buttons, float* x, float* y) {
             float dx = f(cars_addr + 0x808 + 0x74C) - f(cars_addr + 0x74C), dz = f(cars_addr + 0x808 + 0x754) - f(cars_addr + 0x754);
             float d = sqrtf(dx * dx + dz * dz);
             *buttons = d > r49_envf("R49_FOLLOW", 120) ? 0x8000 : (d < r49_envf("R49_FOLLOW", 120) * 0.6f ? 0x4000 : 0);
+            if (getenv("R49_STEER2") && r49_rc >= r49_envf("R49_STEER2AT", 0) && r49_rc < r49_envf("R49_STEER2TO", 1e9f)) *x = r49_envf("R49_STEER2", 0);
         }
         return true;
     }
