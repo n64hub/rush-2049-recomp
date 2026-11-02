@@ -707,12 +707,15 @@ static void r49_frame(uint8_t* rdram) {
         r49_abort_until = r49_wall() + 0.4;
         fprintf(stderr, "[test] tp2 race %d rc %.2f%c", r49_race, rc, 10);
     }
-    if (r49_race == 1 && getenv("R49_CPSCAN") && rc >= 2.0f) {
-        static int scan_cp = -1;
+    if ((r49_race == 1 || getenv("R49_SCAN2")) && getenv("R49_CPSCAN") && rc >= 2.0f) {
+        static int scan_cp = -1, scan_race = 0;
+        if (scan_race != r49_race) { scan_race = r49_race; scan_cp = -1; }
         int cp = atoi(getenv("R49_CPSCAN")) + (int)((rc - 2.0f) / r49_envf("R49_SCANSTEP", 3.0f));
+        if (getenv("R49_CPTO") && cp > atoi(getenv("R49_CPTO"))) cp = atoi(getenv("R49_CPTO"));
         if (cp != scan_cp) {
             scan_cp = cp;
-            r49_set_cp(rdram, cars_addr, cp);
+            int n = 1;  // the player only: moving a ghost hangs the game
+            for (int i = 0; i < n; i++) r49_set_cp(rdram, cars_addr + i * 0x808, cp);
             r49_abort_until = r49_wall() + 0.4;
             fprintf(stderr, "[scan] cp %d rc %.2f epoch %lld%c", cp, rc, r49_epoch_ms(), 10);
         }
@@ -751,7 +754,7 @@ extern "C" bool r49_test_input(uint16_t* buttons, float* x, float* y) {
     uint32_t st = read_word(rdram, game_state_addr);
     if (st == 0x00400000) {
         if (now < r49_abort_until && now > r49_abort_until - 0.25) { *buttons = 0x0008; return true; }
-        float g = getenv("R49_CP") ? r49_envf("R49_TPAT", 1.0f) + 0.6f : 0.0f;
+        float g = getenv("R49_CP") ? r49_envf("R49_TPAT", 1.0f) + 0.6f : getenv("R49_CPTO") ? 2.0f + r49_envf("R49_SCANSTEP", 3.0f) * (atoi(getenv("R49_CPTO")) - atoi(getenv("R49_CPSCAN")) + 1) : 0.0f;
         if (r49_race == 1 && r49_rc >= g) *buttons = 0x8000;
         if (r49_race == 1 && getenv("R49_STEER") && r49_rc >= g + r49_envf("R49_STEERAT", 1.0f) && r49_rc < g + r49_envf("R49_STEERTO", 1e9f)) *x = r49_envf("R49_STEER", 0);
         if (r49_race >= 2 && r49_rc >= g + r49_envf("R49_GAS2", 0.7f)) *buttons = 0x8000;
@@ -761,6 +764,19 @@ extern "C" bool r49_test_input(uint16_t* buttons, float* x, float* y) {
             float d = sqrtf(dx * dx + dz * dz);
             *buttons = d > r49_envf("R49_FOLLOW", 120) ? 0x8000 : (d < r49_envf("R49_FOLLOW", 120) * 0.6f ? 0x4000 : 0);
             if (getenv("R49_STEER2") && r49_rc >= r49_envf("R49_STEER2AT", 0) && r49_rc < r49_envf("R49_STEER2TO", 1e9f)) *x = r49_envf("R49_STEER2", 0);
+        }
+        // Lane keeping on a straight along +x (steering right lowers z): R49_ZT1 / R49_ZT2 for races 1 and 2.
+        if (const char* zt = getenv(r49_race >= 2 ? "R49_ZT2" : "R49_ZT1")) {
+            auto f = [rdram](uint32_t addr) { uint32_t w = read_word(rdram, addr); float v; memcpy(&v, &w, 4); return v; };
+            float px = f(cars_addr + 0x74C), pz = f(cars_addr + 0x754);
+            static float last_z = 0; static double last_t = -1;
+            double dt = now - last_t;
+            float vz = (last_t >= 0 && dt > 0.001 && dt < 0.5) ? (float)((pz - last_z) / dt) : 0.0f;
+            if (dt > 0.001) { last_z = pz; last_t = now; }
+            if (px > r49_envf("R49_XA", 1880) && px < r49_envf("R49_XB", 3600) && (*buttons & 0x8000)) {
+                float st = r49_envf("R49_ZKP", 0.02f) * (pz - (float)atof(zt)) + r49_envf("R49_ZKD", 0.012f) * vz;
+                *x = st > 0.7f ? 0.7f : st < -0.7f ? -0.7f : st;
+            }
         }
         return true;
     }
