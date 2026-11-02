@@ -80,6 +80,7 @@ void rush2049_rewind_tick_begin(uint8_t* rdram);
 void rush2049_rewind_tick_end(uint8_t* rdram);
 void rush2049_rewind_frame_begin(uint8_t* rdram);
 void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx);
+void r49_finish(uint8_t* rdram, recomp_context* ctx);
 
 /* Save Ghosts (src/controller_pak.cpp): at the end of a Ghost Race, before the game checks whether to offer
    SAVE GHOST. */

@@ -177,7 +177,9 @@ static bool port_has_player(int port) {
     return assigned || port < fake_players;
 }
 
+extern "C" bool r49_test_input(uint16_t* buttons, float* x, float* y);
 static bool get_n64_input_logged(int player_index, uint16_t* buttons_out, float* x_out, float* y_out) {
+    if (player_index == 0 && r49_test_input(buttons_out, x_out, y_out)) { return true; }
     // A port with nobody on it still has a controller (see get_connected_device_info), left alone.
     if (!port_has_player(player_index)) {
         *buttons_out = 0;
