@@ -245,8 +245,9 @@ a saved profile keeps its bindings until "Reset to defaults".
 **Several players.** Each controller is a player of its own, as on the console: the first controller to press a
 button is player 1, the next one player 2, and so on up to 4, and the keyboard drives player 1. To put players in
 another order, or give the keyboard to another player, press Assign Players on the Controls tab, then a button on
-each controller (or a key, for the keyboard) in player order, and confirm. Each controller has bindings of its own
-on the Controls tab, starting from the one-player ones. Until a controller joins, the Controls tab shows the one-player
+each controller (or a key, for the keyboard) in player order, and confirm. Each kind of controller has bindings of its
+own on the Controls tab, starting from the one-player ones, and a second player on the same kind has their own too,
+starting from the first's (a third and fourth likewise). Until a controller joins, the Controls tab shows the one-player
 bindings, with the keyboard's behind the keyboard button; after that, player 1's Edit Profile has the same button for
 the keyboard's keys. A player given the keyboard starts from the one-player keyboard keys, and "Reset to defaults" gives
 them the default keys. Players join again each time the game starts. A controller that
