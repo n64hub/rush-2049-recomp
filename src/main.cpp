@@ -72,7 +72,7 @@
 #include "SDL_syswm.h"
 #endif
 
-const std::string version_string = "0.1.48";
+const std::string version_string = "0.1.49";
 
 template<typename... Ts>
 void exit_error(const char* str, Ts ...args) {
@@ -88,6 +88,20 @@ ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1");
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+
+    // An NSO N64 controller that doesn't answer SDL's device-info request (seen with two of them on a Steam Deck) keeps
+    // its USB name, "N64 Controller", instead of SDL's "Nintendo N64 Controller", and SDL reads it as a Switch Pro
+    // controller, whose buttons the hint above reads by position: its A as B and B as A, and the two it reports as X
+    // and Y crossed too, where an N64 controller SDL knows is always read by label. While buttons go by position (an
+    // environment variable can say otherwise), that one gets the mapping SDL makes for a known one, with those crossed
+    // back. Its GUID is its own: a known one's last byte is the controller's type, this one's 0. USB, then Bluetooth.
+    if (!SDL_GetHintBoolean(SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS, SDL_TRUE)) {
+        for (const char* bus : { "03", "05" }) {
+            SDL_GameControllerAddMapping((std::string{ bus } + "0000007e0500001920000000006800,N64 Controller,"
+                "a:b1,b:b0,back:b4,dpdown:b12,dpleft:b13,dpright:b14,dpup:b11,guide:b5,leftshoulder:b9,leftstick:b7,"
+                "lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,righttrigger:a5,start:b6,x:b3,y:b2,misc1:b15,").c_str());
+        }
+    }
 
     // Emscripten's SDL2 is built without haptics, and asking for them there fails the whole call, gamepads with it.
     // Nothing uses them: rumble goes through SDL_JoystickRumble.

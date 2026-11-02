@@ -14,6 +14,8 @@ RecompFrontend-0003    multiplayer mode: a controller joins as the next player o
 RecompFrontend-0004    a controller that disconnects and comes back is its player's again; the log names each controller
 RecompFrontend-0005    a saved controller is matched to the connected one again (loaded with no hash, none ever was), so
                        its profile's bindings come back each session; the log says if a controller is known or new
+RecompFrontend-0006    a player whose controller is the same kind as an earlier player's gets a numbered profile of
+                       their own (made from the kind's), so two players on one kind of controller don't share bindings
 plume-0005             a query pool read of only the queries written (Vulkan calls a read with an unwritten one not ready)
 rt64-0001              viewports with left and right edge origins (split screen); fill-rect fix
 rt64-0003              GPU timings for --gpu-profile, split into the parts of each pass (none read on the web)

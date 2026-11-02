@@ -1,0 +1,139 @@
+diff --git a/recompinput/include/recompinput/players.h b/recompinput/include/recompinput/players.h
+--- a/recompinput/include/recompinput/players.h
++++ b/recompinput/include/recompinput/players.h
+@@ -27,6 +27,12 @@ namespace recompinput {
+         bool has_enough_players_assigned();
+         InputDevice get_player_input_device(int player_index, bool temp_player = false);
+         void reconnect_controller(SDL_GameController* controller);
++        // The profile a player's controller plays with, -1 for none. Controllers are matched to their profile by kind
++        // (profiles.cpp), so a player whose controller is of the same kind as an earlier player's has a numbered one of
++        // their own, and two players of one kind of controller don't share bindings.
++        int get_player_controller_profile_index(int player_index, bool temp_player = false);
++        // The same for a controller, by the player it belongs to (its kind's profile when it is nobody's).
++        int get_controller_profile_index(SDL_GameController* controller);
+     }
+ 
+     namespace playerassignment {
+diff --git a/recompinput/include/recompinput/profiles.h b/recompinput/include/recompinput/profiles.h
+--- a/recompinput/include/recompinput/profiles.h
++++ b/recompinput/include/recompinput/profiles.h
+@@ -54,6 +54,9 @@ namespace recompinput {
+         int get_controller_count();
+         ControllerGUID get_guid_from_sdl_controller(SDL_GameController *game_controller);
+         int get_controller_profile_index_from_sdl_controller(SDL_GameController *game_controller);
++        // The profile of the number-th controller of one kind among the players (2 to 4), the kind's own profile being
++        // the first's: made from the kind's profile the first time, and its own after that.
++        int get_or_create_numbered_controller_profile_index(int profile_index, int number);
+         std::string get_mp_keyboard_profile_key(int player_index);
+         std::string get_mp_keyboard_profile_name(int player_index);
+         // Whether a controller player also plays the keyboard, on their keyboard profile: with
+diff --git a/recompinput/src/players.cpp b/recompinput/src/players.cpp
+--- a/recompinput/src/players.cpp
++++ b/recompinput/src/players.cpp
+@@ -158,6 +158,32 @@ void players::reconnect_controller(SDL_GameController* controller) {
+     }
+ }
+ 
++int players::get_player_controller_profile_index(int player_index, bool temp_player) {
++    PlayerArray& player_array = PlayerState.get_player_array(temp_player);
++    SDL_GameController* controller = player_array[player_index].controller;
++    int profile_index = profiles::get_controller_profile_index_from_sdl_controller(controller);
++    if (profile_index < 0) {
++        return -1;
++    }
++    uint64_t hash = profiles::get_guid_from_sdl_controller(controller).hash;
++    int number = 1;
++    for (int i = 0; i < player_index; i++) {
++        if (player_array[i].controller != nullptr && profiles::get_guid_from_sdl_controller(player_array[i].controller).hash == hash) {
++            number++;
++        }
++    }
++    return number == 1 ? profile_index : profiles::get_or_create_numbered_controller_profile_index(profile_index, number);
++}
++
++int players::get_controller_profile_index(SDL_GameController* controller) {
++    for (size_t i = 0; i < PlayerState.players.get_count(); i++) {
++        if (controller != nullptr && PlayerState.players[i].controller == controller) {
++            return players::get_player_controller_profile_index((int)i);
++        }
++    }
++    return profiles::get_controller_profile_index_from_sdl_controller(controller);
++}
++
+ // playerassignment start
+ 
+ bool playerassignment::is_active() {
+@@ -180,8 +206,8 @@ void playerassignment::stop_and_close_modal() {
+ 
+ // A controller player has no keyboard, except player 1 while nobody has the keyboard: every player starts out on the
+ // single-player keyboard profile, which would make the keyboard drive them all.
+-static void set_controller_player_profiles(int player_index, SDL_GameController* controller, bool keyboard_assigned) {
+-    int cont_profile_index = profiles::get_controller_profile_index_from_sdl_controller(controller);
++static void set_controller_player_profiles(int player_index, bool keyboard_assigned) {
++    int cont_profile_index = players::get_player_controller_profile_index(player_index);
+     if (cont_profile_index >= 0) {
+         profiles::set_input_profile_for_player(player_index, cont_profile_index, InputDevice::Controller);
+     }
+@@ -200,7 +226,7 @@ void playerassignment::commit_player_assignment() {
+     for (int i = 0; i < players::get_number_of_assigned_players(); i++) {
+         Player &player = PlayerState.players[i];
+         if (player.controller != nullptr) {
+-            set_controller_player_profiles(i, player.controller, keyboard_assigned);
++            set_controller_player_profiles(i, keyboard_assigned);
+         } else {
+             profiles::set_input_profile_for_player(i, profiles::get_or_create_mp_keyboard_profile_index(i), InputDevice::Keyboard);
+         }
+@@ -268,7 +294,7 @@ void playerassignment::process_sdl_event(SDL_Event* event) {
+         if (controller != nullptr && !is_player && PlayerState.players.get_count() < PlayerState.max_players) {
+             int player_index = (int)PlayerState.players.get_count();
+             PlayerState.players.add_controller_player(controller);
+-            set_controller_player_profiles(player_index, controller, keyboard_assigned);
++            set_controller_player_profiles(player_index, keyboard_assigned);
+             if (recompui::controls_page != nullptr) {
+                 recompui::controls_page->force_update();
+             }
+diff --git a/recompinput/src/profiles.cpp b/recompinput/src/profiles.cpp
+--- a/recompinput/src/profiles.cpp
++++ b/recompinput/src/profiles.cpp
+@@ -362,6 +362,17 @@ namespace recompinput {
+         return profiles::get_controller_profile_index(controller_index);
+     }
+ 
++    int profiles::get_or_create_numbered_controller_profile_index(int profile_index, int number) {
++        std::string key = input_profiles[profile_index].key + "_" + std::to_string(number);
++        int numbered_index = profiles::get_input_profile_by_key(key);
++        if (numbered_index < 0) {
++            std::string name = input_profiles[profile_index].name + " " + std::to_string(number);
++            numbered_index = profiles::add_input_profile(key, name, InputDevice::Controller, false);
++            input_profiles[numbered_index].mappings = input_profiles[profile_index].mappings;
++        }
++        return numbered_index;
++    }
++
+     std::string profiles::get_mp_keyboard_profile_key(int player_index) {
+         return keyboard_mp_profile_key + std::to_string(player_index);
+     }
+diff --git a/recompui/src/base/ui_state.cpp b/recompui/src/base/ui_state.cpp
+--- a/recompui/src/base/ui_state.cpp
++++ b/recompui/src/base/ui_state.cpp
+@@ -827,7 +827,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+                 }
+                 else {
+                     auto controller = recompinput::get_controller_from_joystick_id(joystick_id);
+-                    profile_index = recompinput::profiles::get_controller_profile_index_from_sdl_controller(controller);
++                    profile_index = recompinput::players::get_controller_profile_index(controller);
+                 }
+ 
+                 if (check_menu_button_pressed(profile_index, recompinput::GameInput::TOGGLE_MENU, cur_event.cbutton.button)) {
+diff --git a/recompui/src/composites/ui_player_card.cpp b/recompui/src/composites/ui_player_card.cpp
+--- a/recompui/src/composites/ui_player_card.cpp
++++ b/recompui/src/composites/ui_player_card.cpp
+@@ -78,7 +78,7 @@ PlayerCard::PlayerCard(
+         std::vector<SelectOption> options;
+ 
+         int device_profile_index = has_controller
+-            ? recompinput::profiles::get_controller_profile_index_from_sdl_controller(player.controller)
++            ? recompinput::players::get_player_controller_profile_index(player_index, is_assignment_card)
+             : recompinput::profiles::get_or_create_mp_keyboard_profile_index(player_index);
+ 
+         if (device_profile_index >= 0) {
