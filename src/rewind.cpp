@@ -690,7 +690,7 @@ static void r49_frame(uint8_t* rdram) {
             dumped++;
         }
     }
-    if (r49_race == 1 && getenv("R49_DRONE") && rc >= r49_envf("R49_DRONEAT", 0.5f)) {
+    if ((r49_race == 1 || getenv("R49_DRONE2")) && getenv("R49_DRONE") && rc >= r49_envf("R49_DRONEAT", 0.5f)) {
         rdram[(cars_addr + 0x7CC - 0x80000000u) ^ 3] = (uint8_t)atoi(getenv("R49_DRONE"));
     }
     if (r49_race >= 1 && (int)(rc * 2) != (int)(r49_rc * 2)) {
@@ -743,6 +743,7 @@ extern "C" bool r49_test_input(uint16_t* buttons, float* x, float* y) {
         if (now < r49_abort_until && now > r49_abort_until - 0.25) { *buttons = 0x0008; return true; }
         float g = getenv("R49_CP") ? r49_envf("R49_TPAT", 1.0f) + 0.6f : 0.0f;
         if (r49_race == 1 && r49_rc >= g) *buttons = 0x8000;
+        if (r49_race == 1 && getenv("R49_STEER") && r49_rc >= g + r49_envf("R49_STEERAT", 1.0f) && r49_rc < g + r49_envf("R49_STEERTO", 1e9f)) *x = r49_envf("R49_STEER", 0);
         if (r49_race >= 2 && r49_rc >= g + r49_envf("R49_GAS2", 0.7f)) *buttons = 0x8000;
         if (r49_race >= 2 && getenv("R49_FOLLOW") && r49_rc >= (getenv("R49_TP2AT") ? r49_envf("R49_TP2AT", 1e9) + 1.0f : 1.0f)) {
             auto f = [rdram](uint32_t addr) { uint32_t w = read_word(rdram, addr); float v; memcpy(&v, &w, 4); return v; };
