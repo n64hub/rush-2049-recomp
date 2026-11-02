@@ -85,13 +85,32 @@ extern "C" void rush2049_ghost_arrow_begin(uint8_t* rdram, recomp_context* ctx) 
     in_arrow = false;
     const uint32_t node = (uint32_t)ctx->r23;
     const uint32_t dl = (uint32_t)ctx->r30;
+    if (rush2049::ghost_arrows_whole() && !is_arrow(rdram, node, dl) && r49_arrow_log > 0 && (read_word(rdram, node) & 0x2000)) { // R49 TEMP
+        const uint32_t c = read_word(rdram, node + 0x3C) >> 8;
+        if (c != 0xFFC800 && c != 0xC8E6FF) {
+            r49_arrow_log--;
+            fprintf(stderr, "[nomatch] node %08X dl %08X |", node, dl);
+            for (uint32_t o = 0; o < 0x50; o += 4) fprintf(stderr, " %08X", read_word(rdram, node + o));
+            fprintf(stderr, " | dl");
+            for (uint32_t o = 0; o < 0x60; o += 4) fprintf(stderr, " %08X", read_word(rdram, dl + o));
+            fprintf(stderr, "%c", 10);
+        }
+    }
     if (!rush2049::ghost_arrows_whole() || !is_arrow(rdram, node, dl)) {
         return;
     }
-    if (r49_arrow_log > 0) { // R49 TEMP
-        r49_arrow_log--;
+    const uint32_t r49c = read_word(rdram, node + 0x3C) >> 8;
+    static int r49_glow = 0; if (r49_arrow_log == 4 && r49_glow == 0) r49_glow = 1;
+    const bool r49g = (r49c == 0xFFC800 || r49c == 0xC8E6FF);
+    if ((r49_arrow_log > 0 && !r49g) || (r49g && r49_glow == 1)) { // R49 TEMP
+        if (r49g) r49_glow = 2; else r49_arrow_log--;
         fprintf(stderr, "[arrow] node %08X dl %08X tex %08X vtx %08X |", node, dl, read_word(rdram, dl + 12), read_word(rdram, dl + 4));
         for (uint32_t o = 0; o < 0x50; o += 4) fprintf(stderr, " %08X", read_word(rdram, node + o));
+        fprintf(stderr, " | dl");
+        for (uint32_t o = 0; o < 0x60; o += 4) fprintf(stderr, " %08X", read_word(rdram, dl + o));
+        const uint32_t tl = read_word(rdram, dl + 12) | 0x80000000;
+        fprintf(stderr, " | tex");
+        for (uint32_t o = 0; o < 0x40; o += 4) fprintf(stderr, " %08X", read_word(rdram, tl + o));
         fprintf(stderr, "%c", 10);
     }
 
