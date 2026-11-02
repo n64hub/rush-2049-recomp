@@ -157,3 +157,12 @@ extern "C" void rush2049_ghost_arrow_end(uint8_t* rdram, recomp_context* ctx) {
     gp = put(rdram, gp, 0xEE000000, (read_word(rdram, 0x8012E678) & 0xFFFF) << 16);
     write_word(rdram, sp + 0xE4, gp);
 }
+
+extern "C" void r49_poly(uint8_t* rdram, recomp_context* ctx) { // R49 TEMP
+    if (r49_arrow_log <= 0) return;
+    r49_arrow_log--;
+    const uint32_t sp = (uint32_t)ctx->r29, p = (uint32_t)ctx->r22;
+    fprintf(stderr, "[poly] pass %u p %08X |", read_word(rdram, sp + 0x190), p);
+    for (uint32_t o = 0; o < 0x60; o += 4) fprintf(stderr, " %08X", read_word(rdram, p + o));
+    fprintf(stderr, "%c", 10);
+}

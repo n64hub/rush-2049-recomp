@@ -482,3 +482,8 @@ text = "    ctx->r12 = rush2049_scenery_mask(ctx->r12, ctx->r6);"
 func = "func_800D510C"
 before_vram = 0x800D5208
 text = "    r49_finish(rdram, ctx);"
+
+[[patches.hook]]
+func = "func_8009F058"
+before_vram = 0x8009FA1C
+text = "    r49_poly(rdram, ctx);"

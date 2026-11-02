@@ -674,7 +674,9 @@ static void r49_frame(uint8_t* rdram) {
         last_q = (int)(rc * 4);
         fprintf(stderr, "[test] race %d rc %.2f epoch %lld\n", r49_race, rc, r49_epoch_ms());
         if (r49_race >= 2 && (last_q % 4) == 0) RT64::r49Log = 1;
-        if ((last_q % 8) == 0) { extern int r49_arrow_log; r49_arrow_log = 12; fprintf(stderr, "[arrowlog] race %d rc %.2f%c", r49_race, rc, 10); }
+        if ((last_q % 8) == 0) { extern int r49_arrow_log; r49_arrow_log = 12; fprintf(stderr, "[arrowlog] race %d rc %.2f%c", r49_race, rc, 10);
+            uint32_t ncam = read_word(rdram, 0x80146204) >> 24;
+            for (uint32_t ci = 0; ci < ncam && ci < 8; ci++) { fprintf(stderr, "[cam] %u", ci); for (uint32_t o = 0; o < 0x48; o += 4) fprintf(stderr, " %08X", read_word(rdram, 0x8017A510 + ci * 0x48 + o)); fprintf(stderr, "%c", 10); } }
     }
     if (r49_race == 1 && getenv("R49_DUMPCAR")) {
         static int dumped = 0;
