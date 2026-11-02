@@ -1,10 +1,9 @@
 // Ghost Arrows (Graphics tab). The arrow floating over each ghost in a Ghost Race is one of the game's "polys", the
 // quads it builds every frame for the cars' shadows, skid marks and smoke, drawn by the scene draw (func_8009F058)
 // for each camera between its first model tree and its last two. The arrow is see-through and tested against the
-// depth buffer without writing it, so everything in those last two trees is drawn over it wherever it is: on Track 1
-// the tunnel at the bottom of the hill, far behind a ghost coming down it, hides the ghost's arrow. Anything nearer the
-// camera also covers the part of the arrow behind it: the deck beside the footbridge straight cuts the top off the
-// arrow of a ghost driving under it, in plain view.
+// depth buffer without writing it, so everything in those last two trees is drawn over it, however far behind the
+// ghost: on Track 1 the buildings beside the straight after the Slim Jim sign, and the signal arm on the bridge at its
+// end, cut into the arrows of ghosts in plain view.
 //
 // At Whole the arrows are drawn after the last tree, whole or not at all, by whether the arrow's tip can be seen. The
 // poly loop walks the list from 0x8015B268 (0x58 bytes each, the count at 0x801613B4) and writes each poly's
@@ -38,13 +37,11 @@
 
 #include <atomic>
 #include <cstdint>
-#include <cstdio> // R49 TEMP
 
 #include "rush2049_game.h"
 #include "rush2049_hooks.h"
 #include "../lib/rt64/include/rt64_extended_gbi.h"
 
-extern int r49_arrow_log; // R49 TEMP
 namespace {
 
 // Set from the settings menu, read on the game thread. It starts at the option's default (config.cpp).
@@ -200,7 +197,6 @@ extern "C" void rush2049_ghost_poly_end(uint8_t* rdram, recomp_context* ctx) {
         defer(0xE2001D00, 0x00000000);  // gsDPSetDepthSource(G_ZS_PIXEL)
         defer(0xEE000000, (read_word(rdram, 0x8012E678) & 0xFFFF) << 16);
     }
-    if (r49_arrow_log > 0) { r49_arrow_log--; fprintf(stderr, "[defer] %u cmds tested %d total %u%c", (end - start) / 8, int(tested), deferred_count, 10); } // R49 TEMP
     write_word(rdram, gfx, start);
     const uint32_t sp = (uint32_t)ctx->r29;
     write_word(rdram, sp + 0x170, (uint32_t)saved_depth_source);
@@ -237,4 +233,3 @@ extern "C" void rush2049_ghost_arrows_draw(uint8_t* rdram, recomp_context* ctx) 
     write_word(rdram, tlut_cache, (uint32_t)-1);
 }
 
-int r49_arrow_log = 0; // R49 TEMP

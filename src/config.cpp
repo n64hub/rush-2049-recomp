@@ -605,8 +605,7 @@ void rush2049::init_config() {
         ghost_arrows_option,
         "Ghost Arrows",
         "The arrow over a ghost is drawn before part of the scenery in the original game, so buildings far behind a "
-        "ghost can hide its arrow, and anything nearer covers part of it: driving under a sign or a deck, a ghost in "
-        "plain view loses the top of its arrow."
+        "ghost can cover its arrow while the ghost is in plain view."
         "<br/>"
         "<b>Whole:</b> the arrows are drawn after the scenery, each one whole, in front of everything, while its tip "
         "above the ghost can be seen, and not at all while something hides the tip.",

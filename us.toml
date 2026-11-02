@@ -512,10 +512,3 @@ text = "    rush2049_scenery_stretch(rdram, ctx);"
 func = "func_8009EBC0"
 before_vram = 0x8009EFEC
 text = "    ctx->r12 = rush2049_scenery_mask(ctx->r12, ctx->r6);"
-
-# TEMPORARY TEST HOOK (not for commit)
-[[patches.hook]]
-func = "func_800D510C"
-before_vram = 0x800D5208
-text = "    r49_finish(rdram, ctx);"
-

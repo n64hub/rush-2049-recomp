@@ -64,10 +64,10 @@ option has an Original value that runs the game as it shipped.
   Track 1's start cover the boats behind them, not the other way round. The cars' effects and the ghosts' arrows are
   still drawn over it.
 - **Whole ghost arrows**: the arrow over a ghost was drawn before part of the scenery, which then painted over it
-  however far behind the ghost it was: on Track 1 the tunnel at the bottom of the hill hid the arrow of a ghost coming
-  down it. Anything nearer covered part of it too, so a ghost driving under the deck beside the footbridge straight
-  lost the top of its arrow while in plain view. The arrows are now drawn after the scenery, each one whole while its
-  tip above the ghost can be seen, and not at all while something in front hides it.
+  however far behind the ghost it was: on Track 1 the buildings beside the straight after the Slim Jim sign, and the
+  signal arm on the bridge at its end, cut into the arrows of ghosts in plain view. The arrows are now drawn after the
+  scenery, each one whole while its tip above the ghost can be seen, and not at all while something in front hides
+  it.
 - **Enhanced audio**: MusyX music and sound effects are mixed at 44.1 kHz with a better interpolator instead of the
   game's 22.05 kHz mix, loud peaks are softly limited instead of clipping, and playback no longer skips or drops
   out when the audio output falls behind.
