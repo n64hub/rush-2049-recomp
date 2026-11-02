@@ -41,6 +41,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -139,6 +140,11 @@ size_t history_bytes = 0;
 bool rewinding = false;       // Rewind is held and the race has been stepped back
 uint32_t frames_back = 0;     // frames stepped back since Rewind was pressed
 std::vector<uint32_t> released;  // the IDs of the sounds ended since then
+struct Spared {
+    uint32_t id;
+    std::chrono::steady_clock::time_point since;
+};
+std::vector<Spared> spared;    // lost sounds left to play out (see release_lost_sounds)
 
 uint32_t read_word(const uint8_t* mem, uint32_t addr) {
     return *(const uint32_t*)(mem + (addr - 0x80000000u));
@@ -178,6 +184,7 @@ void forget() {
     rewinding = false;
     frames_back = 0;
     released.clear();
+    spared.clear();
 }
 
 // Whether n bytes at a and b are the same. The web build's memcmp (musl's) compares a byte at a time, and the 6 MB
@@ -295,6 +302,13 @@ void resend_car_sounds(uint8_t* rdram) {
 // back to and the step. Ended only once Rewind was let go, they played on while it was held: a tick from a frame just
 // before a skid started its squeal (func_800E05F0 starts one for a slot of -1), the step back took the slot back to
 // -1, and the squeal of every skid the hold went back over played on, the dirt under the wheels too.
+// Ending them all at every step back took the one-off sounds with them: the tick that runs from the frame just before
+// a crash, an explosion or a landing starts its sound, and the step ended it before it was heard. So a lost sound that
+// plays out by itself is spared: not a loop by the flag, and not held in the race's tables of sounds (held_lo to
+// held_hi, below) as the tick left them, which hold the ones the race ends itself, the squeal among them. The tick
+// from each frame crosses a moment once, so each one-off sound the rewind goes back over plays once, forwards, as the
+// music does. A spared sound still playing after spared_for is ended all the same, in case one only the race would
+// have ended is held somewhere else.
 //
 // One waiting for a voice is made one that times out, and the sound thread frees it at its next update: only flags
 // change, no links, so it doesn't matter where the sound thread was stopped. One that has a voice is stopped the way
@@ -324,31 +338,85 @@ void call_game(uint8_t* rdram, recomp_context* ctx, uint32_t func, uint32_t arg)
     *ctx = saved;
 }
 
-// Ends the sounds started from the count from up to the count to, but the ones kept.
+constexpr auto spared_for = std::chrono::seconds(10);
+
+// Ends a sound as above, the stop of a playing one added to to_stop for after the lists are walked.
+void end_sound(uint8_t* rdram, uint32_t head, uint32_t node, uint32_t id, std::vector<uint32_t>& to_stop) {
+    if (head == playing_head) {
+        to_stop.push_back(id);
+    } else {
+        rdram[(node + 0x19 - 0x80000000u) ^ 3] = 0;
+        const float expired = -100.0f;  // past the -10 at which the sound thread frees a sound that timed out
+        memcpy(rdram + (node + 0x20 - 0x80000000u), &expired, 4);
+    }
+    released.push_back(id);
+}
+
+void stop_sounds(uint8_t* rdram, recomp_context* ctx, const std::vector<uint32_t>& to_stop) {
+    for (uint32_t id : to_stop) {
+        call_game(rdram, ctx, 0x80091C04, id);
+    }
+}
+
+bool has(const std::vector<uint32_t>& v, uint32_t id) {
+    return std::find(v.begin(), v.end(), id) != v.end();
+}
+
+bool is_spared(uint32_t id) {
+    return std::any_of(spared.begin(), spared.end(), [&](const Spared& s) { return s.id == id; });
+}
+
+// Ends the sounds started from the count from up to the count to, but the ones kept and the ones that play out by
+// themselves. tables is the race's tables of sounds as the tick left them.
 void release_lost_sounds(uint8_t* rdram, recomp_context* ctx, uint32_t from, uint32_t to,
-    const std::vector<uint32_t>& kept) {
+    const std::vector<uint32_t>& kept, const std::vector<uint8_t>& tables) {
     const uint32_t shift = read_word(rdram, sound_shift_addr) & 31;
+    const auto now = std::chrono::steady_clock::now();
     std::vector<uint32_t> to_stop;
     for_each_sound(rdram, [&](uint32_t head, uint32_t node, uint32_t id) {
         const uint32_t started = id >> shift;
         // The count goes back to 1 when it runs out, which takes days of play.
         const bool lost = to >= from ? started >= from && started < to : started >= from || started < to;
-        if (!lost || std::find(released.begin(), released.end(), id) != released.end() ||
-            std::find(kept.begin(), kept.end(), id) != kept.end()) {
+        if (!lost || has(released, id) || has(kept, id) || is_spared(id)) {
             return;
         }
-        if (head == playing_head) {
-            to_stop.push_back(id);
-        } else {
-            rdram[(node + 0x19 - 0x80000000u) ^ 3] = 0;
-            const float expired = -100.0f;  // past the -10 at which the sound thread frees a sound that timed out
-            memcpy(rdram + (node + 0x20 - 0x80000000u), &expired, 4);
+        bool held = read_byte(rdram, node + 0x19) != 0;
+        for (size_t at = 0; at + 4 <= tables.size() && !held; at += 4) {
+            held = *(const uint32_t*)(tables.data() + at) == id;
         }
-        released.push_back(id);
+        fprintf(stderr, "[TEMP] lost %08X sample %u loop %u held %d
+", id, read_word(rdram, node + 0x34), read_byte(rdram, node + 0x19), (int)held);  // TEMP
+        if (held) {
+            end_sound(rdram, head, node, id, to_stop);
+        } else {
+            spared.push_back({ id, now });
+        }
     });
-    for (uint32_t id : to_stop) {
-        call_game(rdram, ctx, 0x80091C04, id);
+    stop_sounds(rdram, ctx, to_stop);
+}
+
+// Forgets the spared sounds that have ended and ends the ones that have played for spared_for.
+void end_old_spared(uint8_t* rdram, recomp_context* ctx) {
+    if (spared.empty()) {
+        return;
     }
+    const auto now = std::chrono::steady_clock::now();
+    std::vector<uint32_t> live, to_stop;
+    for_each_sound(rdram, [&](uint32_t head, uint32_t node, uint32_t id) {
+        live.push_back(id);
+        for (const Spared& s : spared) {
+            if (s.id == id && now - s.since >= spared_for && !has(released, id)) {
+                fprintf(stderr, "[TEMP] spared %08X sample %u ended at %d s
+", id, read_word(rdram, node + 0x34), (int)spared_for.count());  // TEMP
+                end_sound(rdram, head, node, id, to_stop);
+            }
+        }
+    });
+    for (const Spared& s : spared) if (!has(live, s.id)) fprintf(stderr, "[TEMP] spared %08X done after %.2f s
+", s.id, std::chrono::duration<double>(now - s.since).count());  // TEMP
+    spared.erase(std::remove_if(spared.begin(), spared.end(),
+        [&](const Spared& s) { return !has(live, s.id) || has(released, s.id); }), spared.end());
+    stop_sounds(rdram, ctx, to_stop);
 }
 
 // The race holds each car's sounds by ID in tables of its own, and a sound the replayed stretch ended is one the race
@@ -536,13 +604,14 @@ extern "C" void rush2049_rewind_frame_draw(uint8_t* rdram, recomp_context* ctx) 
     if (read_word(rdram, race_clock_addr) == read_word(shadow.data(), race_clock_addr)) {
         return;  // no race time has passed
     }
+    end_old_spared(rdram, ctx);
     if (rewind_held()) {
         const uint32_t sounds = read_word(rdram, sound_count_addr);
         const std::vector<uint8_t> before(rdram + (held_lo - 0x80000000u), rdram + (held_hi - 0x80000000u));
         step_back(rdram);
         std::vector<uint32_t> kept;
         restore_held_sounds(rdram, ctx, &before, kept);
-        release_lost_sounds(rdram, ctx, shadow_sounds, sounds, kept);
+        release_lost_sounds(rdram, ctx, shadow_sounds, sounds, kept, before);
         resend_car_sounds(rdram);
         rewinding = true;
         return;
