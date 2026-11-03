@@ -238,6 +238,17 @@ int main() {
         shown(500.0f, -8000.0f, 0));
     check(shown(0.0f, 0.0f, 0) == 0x1, "Original: a top standing high only where the game lets it through",
         shown(0.0f, 0.0f, 0));
+    // Made 100 units tall and 4000 long in z instead, on the ground: from 2700 away it looks 2 degrees tall but 73 wide,
+    // and from 20700 under 0.3 by 22.
+    ram_float(boxes_addr + 0x68 * 1 + 0x38, 0.0f);
+    ram_float(boxes_addr + 0x68 * 1 + 0x54, -50.0f);
+    ram_float(boxes_addr + 0x68 * 1 + 0x60, 50.0f);
+    ram_float(boxes_addr + 0x68 * 1 + 0x58, -2000.0f);
+    ram_float(boxes_addr + 0x68 * 1 + 0x64, 2000.0f);
+    check(shown(500.0f, -2000.0f, 0) == 0x5, "Reduced: low but looking wide", shown(500.0f, -2000.0f, 0));
+    check(shown(500.0f, -20000.0f, 0) == 0x1, "Reduced: low and wide but far off", shown(500.0f, -20000.0f, 0));
+    check(shown(0.0f, -2000.0f, 0) == 0x1, "Original: a wide object only where the game lets it through",
+        shown(0.0f, -2000.0f, 0));
     rush2049::set_scenery_culling(-1.0f);
     check(rush2049_scenery_mask(0, 0) == (gpr)(int32_t)-1, "Off: every bit set", 0);
 

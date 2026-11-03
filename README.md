@@ -54,7 +54,7 @@ option has an Original value that runs the game as it shipped.
   couldn't be seen from the stretch of road you were on, so buildings, walls and signs popped in and out as you
   drove from one stretch into the next, some of them a few car lengths away. On a weaker PC, Reduced draws only what
   can be seen from the stretches around you, and the tallest towers and any building that already looks more than a
-  sliver tall from where you are, above you or down a slope, wherever it is in view (the game's lists leave out much
+  sliver tall from where you are, or low but wide, above you or down a slope, wherever it is in view (the game's lists leave out much
   that can be seen from far off), so scenery comes in well ahead of the car, while it is still small, for a fraction
   of the cost.
 - **See-through scenery in order**: trees, lamps, sails and glass are see-through pictures that the game draws
@@ -110,7 +110,7 @@ shipped, set every Original value:
 | Widescreen menus | Menu Aspect Ratio | `graphics.json` `menu_ratio` | `"Expand"` (up to about 21:9; needs Aspect Ratio at Expand) | `"Original"` (4:3, pillarboxed) |
 | Draw distance | Draw Distance | `graphics.json` `draw_distance` | `"Far"` (4×; `"Farthest"` is 16×) | `"Original"` |
 | Model detail | Level of Detail | `graphics.json` `level_of_detail` | `"High"` (4× the distances; `"Highest"`: always the most detailed) | `"Original"` |
-| No scenery culling | Scenery Culling | `graphics.json` `scenery_culling` | `"Off"` (`"Original"` in a browser; `"Reduced"`: what can be seen from the stretches around you, the tallest towers and any building that looks tall from where you are) | `"Original"` |
+| No scenery culling | Scenery Culling | `graphics.json` `scenery_culling` | `"Off"` (`"Original"` in a browser; `"Reduced"`: what can be seen from the stretches around you, the tallest towers and any building that looks tall or wide from where you are) | `"Original"` |
 | See-through scenery in order | See-Through Order | `graphics.json` `see_through_order` | `"Sorted"` | `"Original"` |
 | Whole ghost arrows | Ghost Arrows | `graphics.json` `ghost_arrows` | `"Whole"` | `"Original"` |
 | Rendering resolution | Resolution | `graphics.json` `res_option` | `"Auto"` (window size) | `"Original"` (320×240) |
