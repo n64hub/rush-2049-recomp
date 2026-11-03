@@ -15,7 +15,8 @@
 #   sync [<commit>]   send <commit> (default HEAD, with the uncommitted changes to tracked files; untracked files are
 #                     not sent) to the copy, check it out there with its submodules, patch them
 #                     (tools/apply_runtime_patches.sh: N64Recomp-browser's patches/, then runtime-patches/), and copy
-#                     roms/*.z64 when they differ. A commit on origin is fetched there, not sent.
+#                     roms/*.z64 when they differ. A commit on origin is fetched there, not sent, unless the host
+#                     can't fetch origin (a private repo): then origin's main is sent too.
 #   run "<command>"   run a bash command in the image, in the copy's root, the copy's own HOME (the rest of the
 #                     host's home isn't mounted)
 #   build [<target>]  regenerate the recompiled code (tools/recompile.sh) and build <target> (Rush2049Recompiled, the
@@ -67,14 +68,31 @@ in_image() {
 }
 
 sync() {
-    local commit="${1:-HEAD}" sha url diff=""
+    local commit="${1:-HEAD}" sha url diff="" private fetch="git fetch -q origin"
     sha="$(git -C "$checkout" rev-parse "$commit^{commit}")"
     url="$(git -C "$checkout" remote get-url origin)"
-    remote "mkdir -p ~/$base/ccache ~/$dir/home && chmod 700 ~/$base && cd ~/$dir && \
-        { [ -d repo/.git ] || git clone -q $url repo; }"
-    # The commit and what it stands on that origin's main hasn't, as a bundle (none if origin has it all).
+    # The host fetches origin itself when it can. A repo it can't (a private one: the host is shared, so it gets no
+    # credentials for it) prints "private" and the commit the copy's origin/main is at: the copy is made with git init,
+    # origin left at the URL for the submodules' relative URLs but never fetched, and origin's main goes over as a
+    # bundle of what the copy's origin/main lacks, fetched in its place.
+    private="$(remote "mkdir -p ~/$base/ccache ~/$dir/home && chmod 700 ~/$base && cd ~/$dir && \
+        if GIT_TERMINAL_PROMPT=0 git ls-remote $url HEAD > /dev/null 2>&1; then { [ -d repo/.git ] || git clone -q $url repo; }; \
+        else { [ -d repo/.git ] || { git init -q repo && git -C repo remote add origin $url; }; } && echo private && \
+            { git -C repo rev-parse -q --verify refs/remotes/origin/main || true; }; fi")"
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
+    if [[ -n "$private" ]]; then
+        local main="${private#private}" not=()
+        main="${main//[[:space:]]/}"
+        [[ -n "$main" ]] && git -C "$checkout" cat-file -e "$main^{commit}" 2> /dev/null && not=(--not "$main")
+        fetch=":"
+        if [[ -n "$(git -C "$checkout" rev-list -1 refs/remotes/origin/main "${not[@]}")" ]]; then
+            git -C "$checkout" bundle create -q "$tmp/main.bundle" refs/remotes/origin/main "${not[@]}"
+            scp -q "$tmp/main.bundle" "$host:$dir/main.bundle"
+            fetch="git fetch -q ../main.bundle +refs/remotes/origin/main:refs/remotes/origin/main && rm ../main.bundle"
+        fi
+    fi
+    # The commit and what it stands on that origin's main hasn't, as a bundle (none if origin has it all).
     git -C "$checkout" update-ref refs/remote-build-sync "$sha"
     if git -C "$checkout" bundle create -q "$tmp/head.bundle" refs/remote-build-sync --not origin/main 2> /dev/null; then
         scp -q "$tmp/head.bundle" "$host:$dir/head.bundle"
@@ -91,7 +109,7 @@ set -e
 # and spirv-cross commits GitHub no longer serves ("not our ref"), so the first fetch after a pin moved failed.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=fetch.recurseSubmodules GIT_CONFIG_VALUE_0=false
 cd repo
-git fetch -q origin
+$fetch
 [ -f ../head.bundle ] && git fetch -q ../head.bundle refs/remote-build-sync && rm ../head.bundle
 git checkout -q -f --detach $sha
 git clean -fdq
