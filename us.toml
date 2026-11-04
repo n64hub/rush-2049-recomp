@@ -21,6 +21,16 @@ stubs = [
     "__osMakeMotorData",
 ]
 
+# The attract screen's tips box (func_800F0100). When the attract race starts it sets the tip index (0x80154394) to
+# -1 and steps it every 90 s / 13 of the clock (0x8002EB90), drawing tip 0x80114A0C[index] (11 line pointers each)
+# with no bound: the table holds 13 tips, and at full speed the race ends before a 14th. A race run slowly (a GPU that
+# can't keep up) outlasts the 90 s, and the 14th reads the next data as a string pointer (0x00000001) and crashes in
+# func_800B3FA4. Before the stepped index is stored, it wraps to the first tip instead.
+[[patches.hook]]
+func = "func_800F0100"
+before_vram = 0x800F03F8
+text = "    if ((int32_t)ctx->r14 >= 13) ctx->r14 = 0;"
+
 # Frame rate. The game swaps a finished frame only when at least 2 retraces have passed since the last swap
 # (sltiu $at, $t3, 2 on the retrace count delta in $t3), once when the RDP finishes (func_80000C54) and again
 # on retrace for a swap left pending (func_80000880). That is the whole 30 fps cap: the frame kick follows the
