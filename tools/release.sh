@@ -25,9 +25,7 @@
 # 8192 in a 128-bit set (textures_used) and overwrote the shader, crashing at boot. It boots, but slowly: black for
 # about 60 s, then the attract race's first frame held for another 60 to 80 s while lavapipe's queue thread JIT-compiles
 # shader variants with its LLVM 15 (the game waits on the RDP meanwhile; nothing is stuck), then the attract races at a
-# few frames a second, so give it 4 minutes. About 7 minutes in the game itself crashes (func_800B3FA4, reading a
-# string at 0x00000001): the slow frames carry the attract race past the 90 s its tips box counts on, and the tips
-# index runs off its 13-entry table. No Linux GPU has run it.
+# few frames a second, so give it 4 minutes, and it plays the attract loop on until stopped. No Linux GPU has run it.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
