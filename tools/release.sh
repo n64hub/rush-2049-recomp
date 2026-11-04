@@ -21,9 +21,13 @@
 # NonUniform, and whose code compiled by lavapipe holds the texture set's address in some lanes and zero in others; the
 # validation layers report nothing, and with the ubershader alone it plays on. Debian 12's lavapipe (Mesa 22.3) has no
 # descriptor indexing, so RT64 binds textures per draw there (rt64-0007, perDrawTextures) with the shaders built for it
-# (rt64 7734fe4): it boots and draws the attract race, 90 s in two runs of two. With the 8192-texture array's shaders in
-# that layout, lavapipe's lowering set a bit for each of the 8192 in a 128-bit set (textures_used) and overwrote the
-# shader, crashing at boot. No Linux GPU has run it.
+# (rt64 7734fe4). With the 8192-texture array's shaders in that layout, lavapipe's lowering set a bit for each of the
+# 8192 in a 128-bit set (textures_used) and overwrote the shader, crashing at boot. It boots, but slowly: black for
+# about 60 s, then the attract race's first frame held for another 60 to 80 s while lavapipe's queue thread JIT-compiles
+# shader variants with its LLVM 15 (the game waits on the RDP meanwhile; nothing is stuck), then the attract races at a
+# few frames a second, so give it 4 minutes. About 7 minutes in the game itself crashes (func_800B3FA4, reading a
+# string at 0x00000001): the slow frames carry the attract race past the 90 s its tips box counts on, and the tips
+# index runs off its 13-entry table. No Linux GPU has run it.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
