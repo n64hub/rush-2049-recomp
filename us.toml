@@ -21,11 +21,12 @@ stubs = [
     "__osMakeMotorData",
 ]
 
-# The attract screen's tips box (func_800F0100). When the attract race starts it sets the tip index (0x80154394) to
-# -1 and steps it every 90 s / 13 of the clock (0x8002EB90), drawing tip 0x80114A0C[index] (11 line pointers each)
-# with no bound: the table holds 13 tips, and at full speed the race ends before a 14th. A race run slowly (a GPU that
-# can't keep up) outlasts the 90 s, and the 14th reads the next data as a string pointer (0x00000001) and crashes in
-# func_800B3FA4. Before the stepped index is stored, it wraps to the first tip instead.
+# The attract loop's credits (func_800F0100). Every 6th attract race (func_800FD024 counts them at 0x80114158 and
+# sets 0x80138660) shows a box of credits: the page index (0x80154394) starts at -1 and steps every 90 s / 13 of the
+# clock (0x8002EB90), drawing page 0x80114A0C[index] (11 line pointers each) with no bound. The table holds 13 pages,
+# and at full speed the race ends before a 14th. A race run slowly (a GPU that can't keep up) outlasts the 90 s, and
+# the 14th reads the next data as a string pointer (0x00000001) and crashes in func_800B3FA4. Before the stepped index
+# is stored, it wraps to the first page instead.
 [[patches.hook]]
 func = "func_800F0100"
 before_vram = 0x800F03F8
