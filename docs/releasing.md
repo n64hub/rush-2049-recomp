@@ -4,8 +4,8 @@ Shipping a change means both: the page and a desktop release, each by the agent 
 same work and without being asked, so a fix never reaches only one of them.
 
 - A merge that changes what the desktop game runs (the files the page is built from, below, less code only the
-  Emscripten build compiles) gets a desktop release, Windows and Linux. Several such merges in a day can share one
-  release, cut by the last of them.
+  Emscripten build compiles) gets a desktop release, Windows and Linux: one release carries every such merge since the
+  last (below).
 - A merge that changes what the page is built from gets the page played and republished: `src/`, `us.toml`,
   `patches/`, `assets/`, `CMakeLists.txt`, `runtime-patches/`, a submodule or `lib/N64Recomp-browser` pin that changes
   the page's code, the prebuilt shader list. Not docs, tests, CI or a tool the build doesn't run.
@@ -13,13 +13,24 @@ same work and without being asked, so a fix never reaches only one of them.
 
 ## A desktop release
 
-Cut on a machine with the ROM, never in CI (no ROM, so no link). Bump `version_string` in `src/main.cpp` and write
-`releases/v<version>.md` in the same PR, merge, then from a clean checkout of `origin/main` with a full setup
-(`docs/building.md`): `BUILD_HOST=<host> bash tools/release.sh` (`--dry-run` builds and packs only). It builds the
-Windows zip and, on the build host, the Linux `.tar.gz`, and publishes GitHub release `v<version>` with both and that
-file as its notes, refusing without one. Its header says what each holds and how the Linux build is checked: in
-distribution containers under Mesa's software Vulkan, which crashes on its own as the second attract race begins; no
-Linux GPU has run it.
+One release carries every change merged since the last, as N64Recomp-browser's CLAUDE.md (Releasing) has it for each
+of the project's own recomps. A change's PR adds what the player gets to `releases/next.md`, a line under the others
+(the first change after a release makes the file), and bumps no version. Once it merges, the work stays until a
+release that carries it is out: with none in flight it releases, unasked; with one in flight it waits for that one and
+looks again, since a release started meanwhile may carry it. A release is in flight from the moment its PR is opened
+until GitHub has the release (`gh pr list --search "Release v in:title"`, `gh release view v<main's version_string>`),
+and one left in flight by work that stopped is finished by whoever finds it. A change merged during one rides the
+next, and nobody holds a merge for one.
+
+A release is cut on a machine with the ROM, never in CI (no ROM, so no link). Its PR, titled `Release v<version>`,
+bumps `version_string` in `src/main.cpp` and moves `releases/next.md` to `releases/v<version>.md` (`git mv`, then the
+lines written into the last release's shape). Once it merges, from a clean checkout of that merge commit with a full
+setup (`docs/building.md`): `BUILD_HOST=<host> bash tools/release.sh` (`--dry-run` builds and packs only). It builds the
+Windows zip and, on the build host, the Linux `.tar.gz`, boots each from a new folder (N64Recomp-browser's
+`tools/boot_release.sh`; look at the captures in `out/boot-windows` and `out/boot-linux`), and publishes GitHub release
+`v<version>` with both and that file as its notes, refusing without one, with `releases/next.md` still there or at a
+commit not on `origin/main`. Its header says what each holds and how the Linux build boots: under Mesa's software
+Vulkan, which crashes on its own as the second attract race begins; no Linux GPU has run it.
 
 The notes are for someone downloading it: what changed in the desktop game since the last release, in the README's
 words, never the list of merged PRs (most are web support and other games' pages); `releases/v0.1.0.md` is the shape.
@@ -63,7 +74,8 @@ Nothing else moves it. The pull request moves `lib/N64Recomp-browser` to the tag
 `patches/patches.txt` names new upstream commits), resets each project whose patch changed and reruns
 `tools/apply_runtime_patches.sh` (it stops on one and says how; rebase a game patch that stops applying in the same
 PR), and builds and runs the desktop game. Once it has merged, whoever merged it ships it in the same work: publishes
-the page and records its runs (above), and cuts a desktop release when the tag changes native code (the generated
-`RecompiledFuncs/`, rt64, the runtime), never leaving either to a card of its own. A change only the desktop build
+the page and records its runs (above), and sees a desktop release carry it when the tag changes native code (the generated
+`RecompiledFuncs/`, rt64, the runtime), as above, never leaving either to a card of its own. The pin's PR is the tree
+the retest built, so it adds nothing to `releases/next.md`: the release the run cuts says what the move brings. A change only the desktop build
 compiles (rt64 7734fe4) is checked by a run of the desktop game and republishes no page; a web-only change needs no
 desktop release.
