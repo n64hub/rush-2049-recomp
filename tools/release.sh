@@ -17,12 +17,9 @@
 # in tools/docker/Dockerfile.linux, Ubuntu 22.04, so it needs glibc 2.35 or newer. It carries the libSDL2 it was built
 # with and libatomic (not on every system) beside the binary (RUNPATH $ORIGIN), as the Windows zip carries SDL2.dll, and
 # is a .tar.gz so the binary stays executable.
-# The Windows build goes through ccache when it is on PATH (tools/env.sh's is): its cache is the user's, outside the
-# tree, so a release built in a fresh clone compiles only what changed since the last one built here (the shaders dxc
-# builds always build). CCACHE_BASEDIR makes the tree's paths relative and CCACHE_NOHASHDIR leaves the working
-# directory out of the hash, so another clone's compiles match; their debug info then names the files where that
-# clone had them, which a crash's trace doesn't need (it names functions). Precompiled headers are off with it
-# (RmlUi's): ccache can't cache a file that includes one.
+# The Windows build goes through ccache when it is on PATH (tools/env.sh's is; CMakeLists.txt says how): its cache
+# is the user's, outside the tree, so a release built in a fresh clone compiles only what changed since the last one
+# built here (the shaders dxc builds always build).
 # Both archives are booted before anything is published, by lib/N64Recomp-browser's tools/boot_release.sh (BOOT_RELEASE
 # names another copy of it), which says how: unpacked into a new folder with the ROM stored, run with --boot for 30 s,
 # its window captured. The Windows one boots here (out/boot-windows), the Linux one on $BUILD_HOST beside its copy, in
@@ -72,12 +69,8 @@ build=build-release
 # Release's own flags plus debug info, which doesn't change the code: the .pdb ships beside the exe, so a crash's
 # trace in the player's rush2049.log names the game function it crashed in (src/crash_handler.cpp). The flags are
 # written -X, not /X, which Git Bash would turn into a path.
-cc= nopch=OFF
-command -v ccache > /dev/null && cc=ccache nopch=ON
-export CCACHE_BASEDIR="$(cygpath -w "$root")" CCACHE_NOHASHDIR=1
 cmake -S . -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl \
-    -DCMAKE_C_COMPILER_LAUNCHER="$cc" -DCMAKE_CXX_COMPILER_LAUNCHER="$cc" -DCMAKE_DISABLE_PRECOMPILE_HEADERS=$nopch \
     -DCMAKE_C_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" -DCMAKE_CXX_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" \
     -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-INCREMENTAL:NO -DEBUG -OPT:REF -OPT:ICF" \
     -DPATCHES_C_COMPILER="${MIPS_CC:-clang}" -DPATCHES_LD="${MIPS_LD:-ld.lld}" > "$build.log" 2>&1 || { tail -20 "$build.log"; exit 1; }
