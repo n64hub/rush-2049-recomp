@@ -88,12 +88,15 @@ cp -r assets "$stage"/
 (cd out && cmake -E tar cf "$name.zip" --format=zip "$name")
 echo "out/$name.zip ($(du -h "out/$name.zip" | cut -f1))"
 
-# Linux: HEAD (with any uncommitted changes, for a dry run) built from scratch in the copy's build-release.
+# Linux: HEAD (with any uncommitted changes, for a dry run) built in the copy's build-release, which the copy keeps
+# from one release to the next as it keeps every build dir, so only what changed rebuilds: its sync resets a
+# submodule that moved and patches them again, tools/recompile.sh keeps the times of the files that come out the same,
+# and paths in and out of the container read the same.
 rb() { bash tools/remote_build.sh -n release-linux -d tools/docker/Dockerfile.linux "$@"; }
 rb sync > /dev/null
 rb run "set -e
     bash tools/recompile.sh -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-    rm -rf build-release out
+    rm -rf out
     cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \\
         -DPATCHES_C_COMPILER=clang -DPATCHES_LD=ld.lld -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache > build-release.log 2>&1 ||
         { tail -20 build-release.log; exit 1; }
