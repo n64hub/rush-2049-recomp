@@ -21,23 +21,24 @@
 # tree, so a release built in a fresh clone compiles only what changed since the last one built here (the shaders dxc
 # builds always build). CCACHE_BASEDIR makes the tree's paths relative and CCACHE_NOHASHDIR leaves the working
 # directory out of the hash, so another clone's compiles match; their debug info then names the files where that
-# clone had them, which a crash's trace doesn't need (it names functions).
+# clone had them, which a crash's trace doesn't need (it names functions). Precompiled headers are off with it
+# (RmlUi's): ccache can't cache a file that includes one.
 # Both archives are booted before anything is published, by lib/N64Recomp-browser's tools/boot_release.sh (BOOT_RELEASE
-# names another copy of it), which says how: unpacked into a new folder with the ROM stored, run with --boot for 40 s,
+# names another copy of it), which says how: unpacked into a new folder with the ROM stored, run with --boot for 30 s,
 # its window captured. The Windows one boots here (out/boot-windows), the Linux one on $BUILD_HOST beside its copy, in
 # Ubuntu 24.04 under Xvfb with Mesa's software Vulkan, lavapipe (out/boot-linux, fetched back).
-# On lavapipe Ubuntu 24.04 and Arch boot it, find the
-# ROM and draw the title and the first attract race, and then lavapipe (Mesa 25, 26.2) crashes on one of its own
-# llvmpipe threads as the second race begins, about 50 s in. That is lavapipe's: it is the first draw with one of RT64's
-# specialized pixel shaders (two LOD tiles, S mirrored), whose SPIR-V passes spirv-val with every texture index
-# NonUniform, and whose code compiled by lavapipe holds the texture set's address in some lanes and zero in others; the
-# validation layers report nothing, and with the ubershader alone it plays on. Debian 12's lavapipe (Mesa 22.3) has no
-# descriptor indexing, so RT64 binds textures per draw there (rt64-0007, perDrawTextures) with the shaders built for it
-# (rt64 7734fe4). With the 8192-texture array's shaders in that layout, lavapipe's lowering set a bit for each of the
-# 8192 in a 128-bit set (textures_used) and overwrote the shader, crashing at boot. It boots, but slowly: black for
-# about 60 s, then the attract race's first frame held for another 60 to 80 s while lavapipe's queue thread JIT-compiles
-# shader variants with its LLVM 15 (the game waits on the RDP meanwhile; nothing is stuck), then the attract races at a
-# few frames a second, so give it 4 minutes, and it plays the attract loop on until stopped. No Linux GPU has run it.
+# On lavapipe Ubuntu 24.04 and Arch boot it, find the ROM and draw the title and the first attract race, and then
+# lavapipe (Mesa 25, 26.2) crashes on one of its own llvmpipe threads as the second race begins, about 50 s in. That is
+# lavapipe's: it is the first draw with one of RT64's specialized pixel shaders (two LOD tiles, S mirrored), whose
+# SPIR-V passes spirv-val with every texture index NonUniform, and whose code compiled by lavapipe holds the texture
+# set's address in some lanes and zero in others; the validation layers report nothing, and with the ubershader alone it
+# plays on. Debian 12's lavapipe (Mesa 22.3) has no descriptor indexing, so RT64 binds textures per draw there
+# (rt64-0007, perDrawTextures) with the shaders built for it (rt64 7734fe4). With the 8192-texture array's shaders in
+# that layout, lavapipe's lowering set a bit for each of the 8192 in a 128-bit set (textures_used) and overwrote the
+# shader, crashing at boot. It boots, but slowly: black for about 60 s, then the attract race's first frame held for
+# another 60 to 80 s while lavapipe's queue thread JIT-compiles shader variants with its LLVM 15 (the game waits on the
+# RDP meanwhile; nothing is stuck), then the attract races at a few frames a second, so give it 4 minutes, and it plays
+# the attract loop on until stopped. No Linux GPU has run it.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -71,12 +72,12 @@ build=build-release
 # Release's own flags plus debug info, which doesn't change the code: the .pdb ships beside the exe, so a crash's
 # trace in the player's rush2049.log names the game function it crashed in (src/crash_handler.cpp). The flags are
 # written -X, not /X, which Git Bash would turn into a path.
-cc=
-command -v ccache > /dev/null && cc=ccache
+cc= nopch=OFF
+command -v ccache > /dev/null && cc=ccache nopch=ON
 export CCACHE_BASEDIR="$(cygpath -w "$root")" CCACHE_NOHASHDIR=1
 cmake -S . -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl \
-    -DCMAKE_C_COMPILER_LAUNCHER="$cc" -DCMAKE_CXX_COMPILER_LAUNCHER="$cc" \
+    -DCMAKE_C_COMPILER_LAUNCHER="$cc" -DCMAKE_CXX_COMPILER_LAUNCHER="$cc" -DCMAKE_DISABLE_PRECOMPILE_HEADERS=$nopch \
     -DCMAKE_C_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" -DCMAKE_CXX_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" \
     -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-INCREMENTAL:NO -DEBUG -OPT:REF -OPT:ICF" \
     -DPATCHES_C_COMPILER="${MIPS_CC:-clang}" -DPATCHES_LD="${MIPS_LD:-ld.lld}" > "$build.log" 2>&1 || { tail -20 "$build.log"; exit 1; }
