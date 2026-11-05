@@ -65,8 +65,9 @@ anyone keeps ROMs.
   limiters, the MusyX side mix, Draw Distance's matrix scaling) has tests in `tests/` that CI runs; new pure code gets
   one.
 - A merge that changes what the desktop game runs is shipped by the agent whose merge it is, in the same work and
-  without being asked: a desktop release (Windows and Linux) and, if it changes what the page is built from, the page
-  played and republished. `docs/releasing.md` says which files count and how.
+  without being asked: a desktop release (Windows and Linux), one release carrying every merge since the last, and, if
+  it changes what the page is built from, the page played and republished. `docs/releasing.md` says which files count,
+  how a change's line waits in `releases/next.md` and who cuts the release.
 
 ## How it fits together
 
