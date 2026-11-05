@@ -150,7 +150,7 @@ with the MIPS target (MSYS2's is; llvm.org's Windows builds are not) plus `ld.ll
 **Build**, from the repo root in a bash shell:
 
 ```sh
-git submodule update --init --recursive
+git -c core.longpaths=true submodule update --init --recursive   # paths past Windows' 260 characters
 bash tools/apply_runtime_patches.sh            # the web support and our fixes, on the submodules
 .venv/Scripts/python -I tools/extract.py "<your Rush 2049 ROM>.z64"   # writes roms/
 bash tools/recompile.sh -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl   # the game's code as C
