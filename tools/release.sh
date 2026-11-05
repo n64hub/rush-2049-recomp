@@ -17,8 +17,16 @@
 # in tools/docker/Dockerfile.linux, Ubuntu 22.04, so it needs glibc 2.35 or newer. It carries the libSDL2 it was built
 # with and libatomic (not on every system) beside the binary (RUNPATH $ORIGIN), as the Windows zip carries SDL2.dll, and
 # is a .tar.gz so the binary stays executable.
-# The Linux build is checked by hand, by running it in distribution containers on $BUILD_HOST under Xvfb with Mesa's
-# software Vulkan (lavapipe), from another directory, the ROM beside it, --boot. Ubuntu 24.04 and Arch boot it, find the
+# The Windows build goes through ccache when it is on PATH (tools/env.sh's is): its cache is the user's, outside the
+# tree, so a release built in a fresh clone compiles only what changed since the last one built here (the shaders dxc
+# builds always build). CCACHE_BASEDIR makes the tree's paths relative and CCACHE_NOHASHDIR leaves the working
+# directory out of the hash, so another clone's compiles match; their debug info then names the files where that
+# clone had them, which a crash's trace doesn't need (it names functions).
+# Both archives are booted before anything is published, by lib/N64Recomp-browser's tools/boot_release.sh (BOOT_RELEASE
+# names another copy of it), which says how: unpacked into a new folder with the ROM stored, run with --boot for 40 s,
+# its window captured. The Windows one boots here (out/boot-windows), the Linux one on $BUILD_HOST beside its copy, in
+# Ubuntu 24.04 under Xvfb with Mesa's software Vulkan, lavapipe (out/boot-linux, fetched back).
+# On lavapipe Ubuntu 24.04 and Arch boot it, find the
 # ROM and draw the title and the first attract race, and then lavapipe (Mesa 25, 26.2) crashes on one of its own
 # llvmpipe threads as the second race begins, about 50 s in. That is lavapipe's: it is the first draw with one of RT64's
 # specialized pixel shaders (two LOD tiles, S mirrored), whose SPIR-V passes spirv-val with every texture index
@@ -63,8 +71,12 @@ build=build-release
 # Release's own flags plus debug info, which doesn't change the code: the .pdb ships beside the exe, so a crash's
 # trace in the player's rush2049.log names the game function it crashed in (src/crash_handler.cpp). The flags are
 # written -X, not /X, which Git Bash would turn into a path.
+cc=
+command -v ccache > /dev/null && cc=ccache
+export CCACHE_BASEDIR="$(cygpath -w "$root")" CCACHE_NOHASHDIR=1
 cmake -S . -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl \
+    -DCMAKE_C_COMPILER_LAUNCHER="$cc" -DCMAKE_CXX_COMPILER_LAUNCHER="$cc" \
     -DCMAKE_C_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" -DCMAKE_CXX_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" \
     -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-INCREMENTAL:NO -DEBUG -OPT:REF -OPT:ICF" \
     -DPATCHES_C_COMPILER="${MIPS_CC:-clang}" -DPATCHES_LD="${MIPS_LD:-ld.lld}" > "$build.log" 2>&1 || { tail -20 "$build.log"; exit 1; }
@@ -101,6 +113,15 @@ rb run "set -e
     tar -C out -czf out/$linux.tar.gz $linux"
 rb get out out
 echo "out/$linux.tar.gz ($(du -h "out/$linux.tar.gz" | cut -f1))"
+
+boot=${BOOT_RELEASE:-lib/N64Recomp-browser/tools/boot_release.sh}
+[ -f "$boot" ] ||
+    { echo "no $boot: set BOOT_RELEASE to tools/boot_release.sh in a checkout of N64Recomp-browser's main"; exit 1; }
+bash "$boot" "out/$name.zip" roms/rush2049.us.z64 rush2049.n64.us out/boot-windows
+scp -q "$boot" "${boot%.sh}.Dockerfile" "$BUILD_HOST:rush2049/release-linux/"
+ssh "$BUILD_HOST" "cd rush2049/release-linux/repo &&
+    bash ../boot_release.sh out/$linux.tar.gz roms/rush2049.us.z64 rush2049.n64.us out/boot-linux"
+rb get out/boot-linux out/boot-linux
 
 $dry_run && { echo "dry run: $tag not published"; exit 0; }
 gh release create "$tag" "out/$name.zip" "out/$linux.tar.gz" --target "$(git rev-parse HEAD)" --title "Rush 2049 Recompiled $tag" \
