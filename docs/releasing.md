@@ -26,10 +26,11 @@ A release is cut on a machine with the ROM, never in CI (no ROM, so no link). It
 bumps `version_string` in `src/main.cpp` and moves `releases/next.md` to `releases/v<version>.md` (`git mv`, then the
 lines written into the last release's shape). Once it merges, from a clean checkout of that merge commit with a full
 setup (`docs/building.md`): `BUILD_HOST=<host> bash tools/release.sh` (`--dry-run` builds and packs only). It builds the
-Windows zip and, on the build host, the Linux `.tar.gz`, and publishes GitHub release `v<version>` with both and that
-file as its notes, refusing without one, with `releases/next.md` still there or at a commit not on `origin/main`. Its header says what each holds and how the Linux build is checked: in
-distribution containers under Mesa's software Vulkan, which crashes on its own as the second attract race begins; no
-Linux GPU has run it.
+Windows zip and, on the build host, the Linux `.tar.gz`, boots each from a new folder (N64Recomp-browser's
+`tools/boot_release.sh`; look at the captures in `out/boot-windows` and `out/boot-linux`), and publishes GitHub release
+`v<version>` with both and that file as its notes, refusing without one, with `releases/next.md` still there or at a
+commit not on `origin/main`. Its header says what each holds and how the Linux build boots: under Mesa's software
+Vulkan, which crashes on its own as the second attract race begins; no Linux GPU has run it.
 
 The notes are for someone downloading it: what changed in the desktop game since the last release, in the README's
 words, never the list of merged PRs (most are web support and other games' pages); `releases/v0.1.0.md` is the shape.
