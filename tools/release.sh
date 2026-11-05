@@ -3,9 +3,13 @@
 # release. CI has no ROM (none is ever uploaded), so it can't link the game; releases are cut on a machine with the
 # ROM instead.
 # Usage: BUILD_HOST=<host> tools/release.sh [--dry-run]
-#   The tag is v<version_string> from src/main.cpp, so bump that first, and write the release's notes beside it in
-#   releases/v<version>.md: what a player gets, not a list of merged PRs (most are web support and other games'
-#   pages, which the zip doesn't have). Without that file it refuses. Needs a clean tree at origin/main, the
+#   One release carries every change merged since the last (docs/releasing.md): each change's PR adds what the
+#   player gets to releases/next.md, and a release is a PR titled "Release v<version>" that bumps version_string
+#   in src/main.cpp and moves releases/next.md to releases/v<version>.md: what a player gets, not a list of merged
+#   PRs (most are web support and other games' pages, which the zip doesn't have). The tag is v<version_string>.
+#   Without that file it refuses, and with releases/next.md still there. Run it from that PR's merge commit,
+#   checked out: it needs a clean tree at a commit on origin/main (a change merged meanwhile goes in the next
+#   release and doesn't stop this one), the
 #   setup from the README's build steps and docs/building.md (submodules, runtime patches, extract.py's roms/, the
 #   toolchain: tools/env.sh's, or one already on PATH with MIPS_CC and MIPS_LD set) and gh signed in. --dry-run builds and packs but publishes nothing and skips the checks on
 #   the tree and the tag.
@@ -45,7 +49,8 @@ if ! $dry_run; then
     # Submodule worktrees are dirty with the runtime patches applied; their pinned commits still count.
     [ -z "$(git status --porcelain --ignore-submodules=dirty)" ] || { echo "the tree has uncommitted changes"; exit 1; }
     git fetch -q origin main
-    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "HEAD is not origin/main"; exit 1; }
+    git merge-base --is-ancestor HEAD origin/main || { echo "HEAD is not on origin/main"; exit 1; }
+    [ ! -e releases/next.md ] || { echo "releases/next.md is still there: move it to $notes in the release's PR"; exit 1; }
     ! gh release view "$tag" > /dev/null 2>&1 || { echo "release $tag exists: bump version_string first"; exit 1; }
 fi
 
