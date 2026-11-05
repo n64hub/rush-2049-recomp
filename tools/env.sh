@@ -1,7 +1,8 @@
 # Source this from Git Bash: `. tools/env.sh`
 # Puts the per-user N64 toolchain (installed under %LOCALAPPDATA%\Programs\n64-toolchain:
-# clang-cl, CMake 3.31, Ninja, make, a portable MSVC and Windows SDK, a MIPS clang) on PATH and points clang-cl at the portable MSVC + Windows SDK. ccache is
-# only used by the web build (lib/N64Recomp-browser/frontend/build_speed.cmake).
+# clang-cl, CMake 3.31, Ninja, make, a portable MSVC and Windows SDK, a MIPS clang, ccache) on PATH and points clang-cl at
+# the portable MSVC + Windows SDK. With ccache on PATH every build's compiles go through it (CMakeLists.txt, and for the
+# web build lib/N64Recomp-browser/frontend/build_speed.cmake).
 N64TC="${LOCALAPPDATA:-$HOME/AppData/Local}/Programs/n64-toolchain"
 N64TC="$(cygpath -u "$N64TC")"
 # Without it the environment stays as it is: a toolchain already on PATH (clang-cl, CMake, Ninja, make, the MSVC
