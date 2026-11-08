@@ -85,11 +85,13 @@ namespace {
     enum class MouseCursor {
         Original,
         Shown,
+        Moving,
         OptionCount
     };
     const std::vector<recomp::config::ConfigOptionEnumOption> mouse_cursor_options = {
         {MouseCursor::Original, "Original", "Original"},
         {MouseCursor::Shown, "Shown", "Always Shown"},
+        {MouseCursor::Moving, "Moving", "Shown While Moving"},
     };
     const std::string mouse_cursor_option = "mouse_cursor";
 
@@ -441,7 +443,9 @@ void rush2049::init_config() {
         "Whether the mouse cursor stays on screen while you play with a controller or the keyboard."
         "<br/>"
         "<b>Original:</b> hidden as soon as a controller or a key is pressed, and shown again when the mouse moves. "
-        "<b>Always Shown:</b> stays where you left it, for pointing at things in a recording.",
+        "<b>Always Shown:</b> stays where you left it, for pointing at things in a recording. "
+        "<b>Shown While Moving:</b> shown whenever the mouse moves, with a controller too, and hidden once it has "
+        "been still for two seconds.",
         mouse_cursor_options,
         MouseCursor::Original
     );
@@ -455,11 +459,12 @@ void rush2049::init_config() {
         [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             rush2049::set_rewind(static_cast<Rewind>(std::get<uint32_t>(cur_value)) == Rewind::On);
         });
-    // RecompFrontend-0007.
+    // RecompFrontend-0007 and -0008.
     general.add_option_change_callback(mouse_cursor_option,
         [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            recompui::set_cursor_always_visible(
-                static_cast<MouseCursor>(std::get<uint32_t>(cur_value)) == MouseCursor::Shown);
+            MouseCursor cursor = static_cast<MouseCursor>(std::get<uint32_t>(cur_value));
+            recompui::set_cursor_always_visible(cursor == MouseCursor::Shown);
+            recompui::set_cursor_shown_while_moving(cursor == MouseCursor::Moving);
         });
 
     recomp::config::Config& graphics = recompui::config::create_graphics_tab();

@@ -1,0 +1,1 @@
+- **Mouse Cursor** on the General tab has a third value, **Shown While Moving**: the cursor shows whenever the mouse moves, while you play with a controller too, and hides once the mouse has been still for two seconds.
