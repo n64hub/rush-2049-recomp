@@ -199,12 +199,12 @@ namespace {
     // src/ghost_arrows.cpp.
     enum class GhostArrows {
         Original,
-        Whole,
+        AfterScenery,
         OptionCount
     };
     const std::vector<recomp::config::ConfigOptionEnumOption> ghost_arrows_options = {
         {GhostArrows::Original, "Original", "Original"},
-        {GhostArrows::Whole, "Whole", "Whole"},
+        {GhostArrows::AfterScenery, "AfterScenery", "After Scenery"},
     };
     const std::string ghost_arrows_option = "ghost_arrows";
 
@@ -607,14 +607,14 @@ void rush2049::init_config() {
         "The arrow over a ghost is drawn before part of the scenery in the original game, so buildings far behind a "
         "ghost can cover its arrow while the ghost is in plain view."
         "<br/>"
-        "<b>Whole:</b> the arrows are drawn after the scenery, each one whole, in front of everything, while its tip "
-        "above the ghost can be seen, and not at all while something hides the tip.",
+        "<b>After Scenery:</b> the arrows are drawn after the scenery, so only what is between you and an arrow covers "
+        "it, and only the part of it behind that.",
         ghost_arrows_options,
-        GhostArrows::Whole
+        GhostArrows::AfterScenery
     );
-    // Called on load too.
+    // Called on load too. A setting saved as Whole, which this replaced, loads as the default.
     on_apply(graphics, ghost_arrows_option, [](uint32_t value) {
-        rush2049::set_ghost_arrows_whole(static_cast<GhostArrows>(value) == GhostArrows::Whole);
+        rush2049::set_ghost_arrows_after_scenery(static_cast<GhostArrows>(value) == GhostArrows::AfterScenery);
     });
 
     graphics.add_enum_option(

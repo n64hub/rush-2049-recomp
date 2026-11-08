@@ -63,11 +63,11 @@ option has an Original value that runs the game as it shipped.
   after the rest of the scene, farthest first, so it shows over whatever is behind it: a street lamp and a sail at
   Track 1's start cover the boats behind them, not the other way round. The cars' effects and the ghosts' arrows are
   still drawn over it.
-- **Whole ghost arrows**: the arrow over a ghost was drawn before part of the scenery, which then painted over it
-  however far behind the ghost it was: on Track 1 the buildings beside the straight after the Slim Jim sign, and the
-  signal arm on the bridge at its end, cut into the arrows of ghosts in plain view. The arrows are now drawn after the
-  scenery, each one whole while its tip above the ghost can be seen, and not at all while something in front hides
-  it.
+- **Ghost arrows after the scenery**: the arrow over a ghost was drawn before part of the scenery, which then painted
+  over it however far behind the ghost it was: on Track 1 the buildings beside the straight after the Slim Jim sign,
+  and the signal arm on the bridge at its end, cut into the arrows of ghosts in plain view. The arrows are now drawn
+  after the scenery, so only what is between you and an arrow covers it, and only the part of it behind that: a sign a
+  ghost drives under no longer makes its arrow blink out.
 - **Enhanced audio**: MusyX music and sound effects are mixed at 44.1 kHz with a better interpolator instead of the
   game's 22.05 kHz mix, loud peaks are softly limited instead of clipping, and playback no longer skips or drops
   out when the audio output falls behind.
@@ -112,7 +112,7 @@ shipped, set every Original value:
 | Model detail | Level of Detail | `graphics.json` `level_of_detail` | `"High"` (4× the distances; `"Highest"`: always the most detailed) | `"Original"` |
 | No scenery culling | Scenery Culling | `graphics.json` `scenery_culling` | `"Off"` (`"Original"` in a browser; `"Reduced"`: what can be seen from the stretches around you, the tallest towers and any building that looks tall or wide from where you are) | `"Original"` |
 | See-through scenery in order | See-Through Order | `graphics.json` `see_through_order` | `"Sorted"` | `"Original"` |
-| Whole ghost arrows | Ghost Arrows | `graphics.json` `ghost_arrows` | `"Whole"` | `"Original"` |
+| Ghost arrows after the scenery | Ghost Arrows | `graphics.json` `ghost_arrows` | `"AfterScenery"` | `"Original"` |
 | Rendering resolution | Resolution | `graphics.json` `res_option` | `"Auto"` (window size) | `"Original"` (320×240) |
 | Anti-aliasing | MS Anti-Aliasing | `graphics.json` `msaa_option` | `"MSAA2X"` | `"None"` |
 | Hi-res menu and HUD text | Hi-res Font | `graphics.json` `hires_font` | `"On"` | `"Off"` |
