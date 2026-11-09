@@ -212,6 +212,9 @@ extern "C" float rush2049_draw_distance_cull(float cull) {
 
 static void dev_frame_tick(uint8_t* rdram);
 static void dev_log_mask(uint8_t* rdram, const uint32_t* mask);
+static void dev_reach_mask(bool first, bool in, uint32_t record, uint32_t row, uint8_t* rdram);
+static void dev_note(int n, float high, float wide, bool fixed, float x, float z);
+static void dev_counts(uint8_t* rdram);
 extern "C" void rush2049_scenery_camera(uint8_t* rdram, gpr position) {
     dev_frame_tick(rdram);
     const float* p = reinterpret_cast<const float*>(rdram + ((uint32_t)position - 0x80000000));
@@ -252,6 +255,7 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
                 reduced_mask[w] |= word(table + 16 * n + 4 * w);
             }
         }
+        dev_reach_mask(n == 0, d <= reach, record, table + 16 * n, rdram);
         float top = value(box + 0x38) + value(box + 0x60) - camera_y;
         float bottom = value(box + 0x38) + value(box + 0x54) - camera_y;
         float across = std::fmax(d, 1.0f);
@@ -261,6 +265,8 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
         if (value(box + 0x60) - value(box + 0x54) > tall || top > rise * d || high > span || high * wide > area) {
             reduced_mask[n / 32] |= 1u << (n % 32);
         }
+        dev_note(n, high, wide, value(box + 0x60) - value(box + 0x54) > tall || top > rise * d,
+            value(box + 0x34), value(box + 0x3C));
         int16_t next = (int16_t)(word((box + 0x44) & ~3u) >> 16);
         if (next < 0) {
             break;
@@ -268,6 +274,7 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
         box = boxes + 0x68 * next;
     }
     reduced_valid = true;
+    dev_counts(rdram);
     dev_log_mask(rdram, reduced_mask);
 }
 
@@ -373,7 +380,9 @@ static void dev_frame_tick(uint8_t* rdram) {
         // DEV_AB=K: Reduced and Off in turns of K frames, so a pair of captures K frames apart shows what Reduced hides.
         static float dev_saved = 0.0f;
         static int dev_ticks = 0;
-        if (const char* ab = std::getenv("DEV_AB")) {
+        if (std::getenv("DEV_OFF")) {
+            scenery_reach.store(-1.0f, std::memory_order_relaxed);
+        } else if (const char* ab = std::getenv("DEV_AB")) {
             if (dev_ticks == 0) dev_saved = scenery_reach.load(std::memory_order_relaxed);
             int k = std::atoi(ab);
             scenery_reach.store(((dev_ticks++ / k) & 1) ? -1.0f : dev_saved, std::memory_order_relaxed);
@@ -415,4 +424,44 @@ static void dev_log_mask(uint8_t* rdram, const uint32_t* mask) {
     }
     std::memcpy(dev_prev, mask, sizeof dev_prev);
     std::fflush(dev_log);
+}
+// DEV ONLY: objects within 50 degrees of the camera's heading that each rule set would let through, a frame.
+namespace {
+uint32_t dev_rec[4], dev_tab[4];
+float dev_high[128], dev_wide[128], dev_x[128], dev_z[128];
+bool dev_fix[128];
+int dev_n = 0;
+float dev_hist[32][2];
+int dev_hn = 0;
+}
+static void dev_reach_mask(bool first, bool in, uint32_t record, uint32_t row, uint8_t* rdram) {
+    if (first) {
+        for (int w = 0; w < 4; w++) dev_tab[w] = dev_rec[w] = dev_u32(rdram, record + 4 * w);
+        dev_n = 0;
+    }
+    if (in) for (int w = 0; w < 4; w++) dev_tab[w] |= dev_u32(rdram, row + 4 * w);
+}
+static void dev_note(int n, float high, float wide, bool fixed, float x, float z) {
+    dev_high[n] = high; dev_wide[n] = wide; dev_fix[n] = fixed; dev_x[n] = x; dev_z[n] = z;
+    if (n + 1 > dev_n) dev_n = n + 1;
+}
+static void dev_counts(uint8_t* rdram) {
+    if (!dev_log || !dev_attract(rdram)) return;
+    float* old = dev_hist[(dev_hn + 1) % 32];
+    float hx = camera_x - old[0], hz = camera_z - old[1];
+    dev_hist[dev_hn % 32][0] = camera_x; dev_hist[dev_hn % 32][1] = camera_z; dev_hn++;
+    if (dev_hn < 32 || hx * hx + hz * hz < 100.0f) return;
+    const float ks[4] = { 1.0f, 0.5f, 0.25f, 0.125f };
+    int orig = 0, tab = 0, all = 0, red[4] = { 0, 0, 0, 0 };
+    float hl = std::sqrt(hx * hx + hz * hz);
+    for (int n = 0; n < dev_n; n++) {
+        float ox = dev_x[n] - camera_x, oz = dev_z[n] - camera_z, ol = std::sqrt(ox * ox + oz * oz);
+        if (ol > 1.0f && (ox * hx + oz * hz) / (ol * hl) < std::cos(50.0f * 3.14159265f / 180.0f)) continue;
+        all++;
+        bool o = (dev_rec[n / 32] >> (n % 32)) & 1, t = (dev_tab[n / 32] >> (n % 32)) & 1;
+        orig += o; tab += t;
+        for (int k = 0; k < 4; k++)
+            red[k] += t || dev_fix[n] || dev_high[n] > span * std::sqrt(ks[k]) || dev_high[n] * dev_wide[n] > area * ks[k];
+    }
+    std::fprintf(dev_log, "C %d %d %d %d %d %d %d\n", orig, tab, red[0], red[1], red[2], red[3], all);
 }
