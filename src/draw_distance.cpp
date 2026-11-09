@@ -210,7 +210,10 @@ extern "C" float rush2049_draw_distance_cull(float cull) {
     return cull * distance();
 }
 
+static void dev_frame_tick(uint8_t* rdram);
+static void dev_log_mask(uint8_t* rdram, const uint32_t* mask);
 extern "C" void rush2049_scenery_camera(uint8_t* rdram, gpr position) {
+    dev_frame_tick(rdram);
     const float* p = reinterpret_cast<const float*>(rdram + ((uint32_t)position - 0x80000000));
     camera_x = p[0];
     camera_y = p[1];
@@ -225,6 +228,9 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
     int32_t stretch = (int32_t)word((uint32_t)ctx->r29 + 0x78);
     uint32_t boxes = word(0x80149B80);
     if (reach <= 0.0f || stretch < 0 || boxes == 0) {
+        uint32_t m[4];
+        for (int w = 0; w < 4; w++) m[w] = reach < 0.0f ? 0xFFFFFFFFu : word((uint32_t)ctx->r10 + 4 * w);
+        dev_log_mask(rdram, m);
         return;
     }
     uint32_t record = (uint32_t)ctx->r10;
@@ -262,6 +268,7 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
         box = boxes + 0x68 * next;
     }
     reduced_valid = true;
+    dev_log_mask(rdram, reduced_mask);
 }
 
 extern "C" gpr rush2049_scenery_mask(gpr mask, gpr offset) {
@@ -332,3 +339,71 @@ extern "C" void rush2049_far_matrix_end(uint8_t* rdram, gpr matrix) {
     }
 }
 
+
+// DEV ONLY (local, never committed): attract race on DEV_TRACK (index) / DEV_BACK, held past its 30 s with the view
+// pinned (DEV_VIEW), and a log (DEV_LOG) of the camera and of every object let in that was not the frame before.
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+namespace {
+uint8_t* dev_rdram = nullptr;
+FILE* dev_log = nullptr;
+uint32_t dev_prev[4] = { 0, 0, 0, 0 };
+int dev_frame = 0;
+uint8_t& dev_u8(uint8_t* rdram, uint32_t a) { return rdram[(a - 0x80000000u) ^ 3]; }
+uint32_t& dev_u32(uint8_t* rdram, uint32_t a) { return *reinterpret_cast<uint32_t*>(rdram + (a - 0x80000000u)); }
+float& dev_f32(uint8_t* rdram, uint32_t a) { return *reinterpret_cast<float*>(rdram + (a - 0x80000000u)); }
+bool dev_attract(uint8_t* rdram) { return (dev_u32(rdram, 0x801174B4) & 0x8) != 0; }
+}
+extern "C" void rush2049_dev_load_track(uint8_t* rdram) {
+    const char* t = std::getenv("DEV_TRACK");
+    const char* b = std::getenv("DEV_BACK");
+    if (!dev_attract(rdram)) return;
+    // The next demo's track: the counter is stepped before the track is taken from it.
+    if (t) *reinterpret_cast<int16_t*>(rdram + ((0x80114158u - 0x80000000u) ^ 2)) = (int16_t)(std::atoi(t) - 1);
+    if (b && t && dev_u8(rdram, 0x8014978C) == std::atoi(t)) dev_u8(rdram, 0x80152570) = (uint8_t)std::atoi(b);
+    std::fprintf(stderr, "DEV load_track track=%d back=%d\n", dev_u8(rdram, 0x8014978C), dev_u8(rdram, 0x80152570));
+}
+static void dev_frame_tick(uint8_t* rdram) {
+    if (!dev_attract(rdram)) return;
+    const char* t = std::getenv("DEV_TRACK");
+    if (std::getenv("DEV_HOLD") && t && dev_u8(rdram, 0x8014978C) == std::atoi(t)) {
+        dev_u32(rdram, 0x8002EB9C) = dev_u32(rdram, 0x8002EB64) + 0x10000000;
+        dev_f32(rdram, 0x801106B4) = 1.0e9f;
+        const char* v = std::getenv("DEV_VIEW");
+        if (v) {
+            uint8_t target = dev_u8(rdram, 0x80150C04);
+            dev_u8(rdram, 0x80152818 + 0x3B8 * target + 0x35D) = (uint8_t)std::atoi(v);
+        }
+    }
+}
+static void dev_log_mask(uint8_t* rdram, const uint32_t* mask) {
+    if (!dev_log) {
+        const char* p = std::getenv("DEV_LOG");
+        if (!p) return;
+        dev_log = std::fopen(p, "w");
+        if (!dev_log) return;
+    }
+    if (!dev_attract(rdram)) return;
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    std::fprintf(dev_log, "F %d %lld clock=%.3f track=%d back=%d cam=%.0f,%.0f,%.0f\n", dev_frame++, (long long)ms,
+        dev_f32(rdram, 0x801543CC), dev_u8(rdram, 0x8014978C), dev_u8(rdram, 0x80152570), camera_x, camera_y, camera_z);
+    uint32_t boxes = dev_u32(rdram, 0x80149B80);
+    uint32_t box = boxes;
+    for (int n = 0; n < 128 && boxes; n++) {
+        bool now = (mask[n / 32] >> (n % 32)) & 1, before = (dev_prev[n / 32] >> (n % 32)) & 1;
+        if (now && !before) {
+            float dx = camera_x - dev_f32(rdram, box + 0x34), dz = camera_z - dev_f32(rdram, box + 0x3C);
+            std::fprintf(dev_log, "  IN %d d=%.0f at=%.0f,%.0f,%.0f h=%.0f w=%.0f,%.0f\n", n, std::sqrt(dx * dx + dz * dz),
+                dev_f32(rdram, box + 0x34), dev_f32(rdram, box + 0x38), dev_f32(rdram, box + 0x3C),
+                dev_f32(rdram, box + 0x60) - dev_f32(rdram, box + 0x54), dev_f32(rdram, box + 0x5C) - dev_f32(rdram, box + 0x50),
+                dev_f32(rdram, box + 0x64) - dev_f32(rdram, box + 0x58));
+        }
+        int16_t next = (int16_t)(dev_u32(rdram, (box + 0x44) & ~3u) >> 16);
+        if (next < 0) break;
+        box = boxes + 0x68 * next;
+    }
+    std::memcpy(dev_prev, mask, sizeof dev_prev);
+    std::fflush(dev_log);
+}

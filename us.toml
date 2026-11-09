@@ -523,3 +523,9 @@ text = "    rush2049_scenery_stretch(rdram, ctx);"
 func = "func_8009EBC0"
 before_vram = 0x8009EFEC
 text = "    ctx->r12 = rush2049_scenery_mask(ctx->r12, ctx->r6);"
+
+# DEV ONLY (local, never committed): the attract race's track and direction from DEV_TRACK / DEV_BACK.
+[[patches.hook]]
+func = "func_800BB9B0"
+before_vram = 0x800BB9B0
+text = "    rush2049_dev_load_track(rdram);"
