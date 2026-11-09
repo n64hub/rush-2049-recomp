@@ -370,6 +370,14 @@ static void dev_frame_tick(uint8_t* rdram) {
     if (std::getenv("DEV_HOLD") && t && dev_u8(rdram, 0x8014978C) == std::atoi(t)) {
         dev_u32(rdram, 0x8002EB9C) = dev_u32(rdram, 0x8002EB64) + 0x10000000;
         dev_f32(rdram, 0x801106B4) = 1.0e9f;
+        // DEV_AB=K: Reduced and Off in turns of K frames, so a pair of captures K frames apart shows what Reduced hides.
+        static float dev_saved = 0.0f;
+        static int dev_ticks = 0;
+        if (const char* ab = std::getenv("DEV_AB")) {
+            if (dev_ticks == 0) dev_saved = scenery_reach.load(std::memory_order_relaxed);
+            int k = std::atoi(ab);
+            scenery_reach.store(((dev_ticks++ / k) & 1) ? -1.0f : dev_saved, std::memory_order_relaxed);
+        }
         const char* v = std::getenv("DEV_VIEW");
         if (v) {
             uint8_t target = dev_u8(rdram, 0x80150C04);
@@ -387,8 +395,9 @@ static void dev_log_mask(uint8_t* rdram, const uint32_t* mask) {
     if (!dev_attract(rdram)) return;
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
-    std::fprintf(dev_log, "F %d %lld clock=%.3f track=%d back=%d cam=%.0f,%.0f,%.0f\n", dev_frame++, (long long)ms,
-        dev_f32(rdram, 0x801543CC), dev_u8(rdram, 0x8014978C), dev_u8(rdram, 0x80152570), camera_x, camera_y, camera_z);
+    std::fprintf(dev_log, "F %d %lld clock=%.3f track=%d back=%d off=%d cam=%.0f,%.0f,%.0f\n", dev_frame++, (long long)ms,
+        dev_f32(rdram, 0x801543CC), dev_u8(rdram, 0x8014978C), dev_u8(rdram, 0x80152570),
+        scenery_reach.load() < 0.0f ? 1 : 0, camera_x, camera_y, camera_z);
     uint32_t boxes = dev_u32(rdram, 0x80149B80);
     uint32_t box = boxes;
     for (int n = 0; n < 128 && boxes; n++) {
