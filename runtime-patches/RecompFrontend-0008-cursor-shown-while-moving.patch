@@ -1,0 +1,106 @@
+diff --git a/recompui/include/recompui/recompui.h b/recompui/include/recompui/recompui.h
+--- a/recompui/include/recompui/recompui.h
++++ b/recompui/include/recompui/recompui.h
+@@ -100,6 +100,10 @@
+     // Keeps the cursor shown while a controller or the keyboard is used, which otherwise hides it until the mouse
+     // moves. The cursor lock for mouse aiming still hides it.
+     void set_cursor_always_visible(bool always_visible);
++    // Shows the cursor while the mouse moves, whatever input was used last, and hides it once the mouse has been still
++    // for two seconds, in place of hiding it on a controller or key press. The cursor lock still hides it.
++    void set_cursor_shown_while_moving(bool while_moving);
++    void note_mouse_moved();
+     void update_supported_options();
+ 
+     bool get_cont_active(void);
+diff --git a/recompui/src/base/ui_state.cpp b/recompui/src/base/ui_state.cpp
+--- a/recompui/src/base/ui_state.cpp
++++ b/recompui/src/base/ui_state.cpp
+@@ -35,6 +35,10 @@
+ 
+ static std::atomic_bool cursor_enabled = true;
+ static std::atomic_bool cursor_always_visible = false;
++static std::atomic_bool cursor_shown_while_moving = false;
++// steady_clock ticks of the last mouse motion; 0 is long ago, so the cursor starts hidden.
++static std::atomic<std::chrono::steady_clock::rep> last_mouse_motion = 0;
++static constexpr std::chrono::seconds cursor_still_hide_delay{2};
+ 
+ void recompui::open_quit_game_prompt() {
+     recompui::open_choice_prompt(
+@@ -69,7 +73,14 @@
+ }
+ 
+ bool recompui::get_cursor_visible() {
+-    return cursor_enabled.load() || cursor_always_visible.load();
++    if (cursor_always_visible.load()) {
++        return true;
++    }
++    if (cursor_shown_while_moving.load()) {
++        std::chrono::steady_clock::duration still{std::chrono::steady_clock::now().time_since_epoch().count() - last_mouse_motion.load()};
++        return still < cursor_still_hide_delay;
++    }
++    return cursor_enabled.load();
+ }
+ void recompui::set_cursor_visible(bool visible) {
+     cursor_enabled.store(visible);
+@@ -77,6 +88,12 @@
+ void recompui::set_cursor_always_visible(bool always_visible) {
+     cursor_always_visible.store(always_visible);
+ }
++void recompui::set_cursor_shown_while_moving(bool while_moving) {
++    cursor_shown_while_moving.store(while_moving);
++}
++void recompui::note_mouse_moved() {
++    last_mouse_motion.store(std::chrono::steady_clock::now().time_since_epoch().count());
++}
+ 
+ static bool can_focus(Rml::Element* element) {
+     return element->GetOwnerDocument() != nullptr && element->GetProperty(Rml::PropertyId::TabIndex)->Get<Rml::Style::TabIndex>() != Rml::Style::TabIndex::None;
+diff --git a/recompinput/src/input_events.cpp b/recompinput/src/input_events.cpp
+--- a/recompinput/src/input_events.cpp
++++ b/recompinput/src/input_events.cpp
+@@ -330,6 +330,7 @@
+         }
+         break;
+     case SDL_EventType::SDL_MOUSEMOTION:
++        recompui::note_mouse_moved();
+         if (!recompinput::game_input_disabled()) {
+             SDL_MouseMotionEvent* motion_event = &event->motion;
+             recompinput::add_mouse_deltas(motion_event->xrel, motion_event->yrel);
+@@ -367,22 +368,24 @@
+ #endif
+     while (SDL_PollEvent(&cur_event) && !exited) {
+         exited = sdl_event_filter(nullptr, &cur_event);
++    }
+ 
+-        bool has_mouse_sensitivity = recompui::config::general::has_mouse_sensitivity_option();
+-
+-        // Lock the cursor if all three conditions are true: mouse aiming is enabled, game input is not disabled, and the game has been started. 
+-        bool cursor_locked = (has_mouse_sensitivity && recompui::config::general::get_mouse_sensitivity() != 0) && !recompinput::game_input_disabled() && ultramodern::is_game_started();
+-
+-        // Hide the cursor based on its enable state, but override visibility to false if the cursor is locked.
+-        bool cursor_visible = recompui::get_cursor_visible();
+-        if (cursor_locked) {
+-            cursor_visible = false;
+-        }
+-
+-        SDL_ShowCursor(cursor_visible ? SDL_ENABLE : SDL_DISABLE);
+-        SDL_SetRelativeMouseMode(cursor_locked ? SDL_TRUE : SDL_FALSE);
++    // Set once a call, not only after an event: a cursor shown while the mouse moves hides once it has been still,
++    // which no event announces. Both SDL calls do nothing when the state is unchanged.
++    bool has_mouse_sensitivity = recompui::config::general::has_mouse_sensitivity_option();
++
++    // Lock the cursor if all three conditions are true: mouse aiming is enabled, game input is not disabled, and the game has been started.
++    bool cursor_locked = (has_mouse_sensitivity && recompui::config::general::get_mouse_sensitivity() != 0) && !recompinput::game_input_disabled() && ultramodern::is_game_started();
++
++    // Hide the cursor based on its enable state, but override visibility to false if the cursor is locked.
++    bool cursor_visible = recompui::get_cursor_visible();
++    if (cursor_locked) {
++        cursor_visible = false;
+     }
+ 
++    SDL_ShowCursor(cursor_visible ? SDL_ENABLE : SDL_DISABLE);
++    SDL_SetRelativeMouseMode(cursor_locked ? SDL_TRUE : SDL_FALSE);
++
+     binding::stop_skipping_events();
+ 
+     if (!started && ultramodern::is_game_started()) {

@@ -86,8 +86,9 @@ option has an Original value that runs the game as it shipped.
   driving-friendly defaults, rebindable on the Controls tab. Each controller is a player of its own, as on the
   console (see [Controls](#controls)).
 - **Mouse cursor on screen**: off by default. Set Mouse Cursor to Always Shown and the cursor stays where you left it
-  while you play with a controller or the keyboard, to point at things in a recording. Otherwise it hides as soon as a
-  controller or a key is pressed, until the mouse moves.
+  while you play with a controller or the keyboard, to point at things in a recording, or to Shown While Moving and it
+  shows whenever the mouse moves, with a controller too, and hides once the mouse has been still for two seconds.
+  Otherwise it hides as soon as a controller or a key is pressed, until the mouse moves.
 - **No frame copies to RAM**: each frame stays on the GPU instead of also being drawn again at 320×240 and copied
   back into the console's memory, which the game isn't known to read. Saves GPU time, and about 6 ms a frame in a
   browser.
@@ -123,7 +124,7 @@ shipped, set every Original value:
 | Large Controller Paks | Controller Pak Size | `general.json` `pak_size` | `"Large"` (62 banks, about 1.9 MB) | `"Original"` (32 KiB) |
 | Rewind | Rewind | `general.json` `rewind` | `"On"` | `"Off"` |
 | Save Ghosts | Save Ghosts | `general.json` `save_ghosts` | `"On"` | `"Original"` (no SAVE GHOST prompt) |
-| Mouse cursor on screen | Mouse Cursor | `general.json` `mouse_cursor` | `"Original"` (`"Shown"` keeps it on screen while a controller or the keyboard is used) | `"Original"` (hidden once a controller or a key is pressed, until the mouse moves) |
+| Mouse cursor on screen | Mouse Cursor | `general.json` `mouse_cursor` | `"Original"` (`"Shown"` keeps it on screen while a controller or the keyboard is used; `"Moving"` shows it while the mouse moves and hides it after two seconds still) | `"Original"` (hidden once a controller or a key is pressed, until the mouse moves) |
 
 Not options, because they don't change the game: the keyboard and gamepad layouts, playback at half the game's
 sample level so its mix doesn't clip, and the Expansion Pak, which the game was built for.
