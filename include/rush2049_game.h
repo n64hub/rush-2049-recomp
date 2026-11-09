@@ -61,10 +61,11 @@ namespace rush2049 {
     // above 0 also lets through what every stretch within that many units of the camera lets through (Reduced); a
     // negative one draws every scenery object from every stretch (Off).
     void set_scenery_culling(float reach);
-    // Ghost Arrows (src/ghost_arrows.cpp): whether the ghosts' arrows are drawn after the scenery, each whole or not at
-    // all by whether its tip can be seen (Whole), rather than amid it and covered pixel by pixel (Original).
-    void set_ghost_arrows_whole(bool on);
-    bool ghost_arrows_whole();
+    // Ghost Arrows (src/ghost_arrows.cpp): whether the ghosts' arrows are drawn after the scenery (After Scenery), so
+    // only what is in front of them covers them, rather than amid it, where scenery drawn later paints over them
+    // (Original).
+    void set_ghost_arrows_after_scenery(bool on);
+    bool ghost_arrows_after_scenery();
 }
 
 #endif
