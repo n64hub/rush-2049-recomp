@@ -85,11 +85,13 @@ namespace {
     enum class MouseCursor {
         Original,
         Shown,
+        Moving,
         OptionCount
     };
     const std::vector<recomp::config::ConfigOptionEnumOption> mouse_cursor_options = {
         {MouseCursor::Original, "Original", "Original"},
         {MouseCursor::Shown, "Shown", "Always Shown"},
+        {MouseCursor::Moving, "Moving", "Shown While Moving"},
     };
     const std::string mouse_cursor_option = "mouse_cursor";
 
@@ -199,12 +201,12 @@ namespace {
     // src/ghost_arrows.cpp.
     enum class GhostArrows {
         Original,
-        Whole,
+        AfterScenery,
         OptionCount
     };
     const std::vector<recomp::config::ConfigOptionEnumOption> ghost_arrows_options = {
         {GhostArrows::Original, "Original", "Original"},
-        {GhostArrows::Whole, "Whole", "Whole"},
+        {GhostArrows::AfterScenery, "AfterScenery", "After Scenery"},
     };
     const std::string ghost_arrows_option = "ghost_arrows";
 
@@ -441,7 +443,9 @@ void rush2049::init_config() {
         "Whether the mouse cursor stays on screen while you play with a controller or the keyboard."
         "<br/>"
         "<b>Original:</b> hidden as soon as a controller or a key is pressed, and shown again when the mouse moves. "
-        "<b>Always Shown:</b> stays where you left it, for pointing at things in a recording.",
+        "<b>Always Shown:</b> stays where you left it, for pointing at things in a recording. "
+        "<b>Shown While Moving:</b> shown whenever the mouse moves, with a controller too, and hidden once it has "
+        "been still for two seconds.",
         mouse_cursor_options,
         MouseCursor::Original
     );
@@ -455,11 +459,12 @@ void rush2049::init_config() {
         [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             rush2049::set_rewind(static_cast<Rewind>(std::get<uint32_t>(cur_value)) == Rewind::On);
         });
-    // RecompFrontend-0007.
+    // RecompFrontend-0007 and -0008.
     general.add_option_change_callback(mouse_cursor_option,
         [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            recompui::set_cursor_always_visible(
-                static_cast<MouseCursor>(std::get<uint32_t>(cur_value)) == MouseCursor::Shown);
+            MouseCursor cursor = static_cast<MouseCursor>(std::get<uint32_t>(cur_value));
+            recompui::set_cursor_always_visible(cursor == MouseCursor::Shown);
+            recompui::set_cursor_shown_while_moving(cursor == MouseCursor::Moving);
         });
 
     recomp::config::Config& graphics = recompui::config::create_graphics_tab();
@@ -607,14 +612,14 @@ void rush2049::init_config() {
         "The arrow over a ghost is drawn before part of the scenery in the original game, so buildings far behind a "
         "ghost can cover its arrow while the ghost is in plain view."
         "<br/>"
-        "<b>Whole:</b> the arrows are drawn after the scenery, each one whole, in front of everything, while its tip "
-        "above the ghost can be seen, and not at all while something hides the tip.",
+        "<b>After Scenery:</b> the arrows are drawn after the scenery, so only what is between you and an arrow covers "
+        "it, and only the part of it behind that.",
         ghost_arrows_options,
-        GhostArrows::Whole
+        GhostArrows::AfterScenery
     );
-    // Called on load too.
+    // Called on load too. A setting saved as Whole, which this replaced, loads as the default.
     on_apply(graphics, ghost_arrows_option, [](uint32_t value) {
-        rush2049::set_ghost_arrows_whole(static_cast<GhostArrows>(value) == GhostArrows::Whole);
+        rush2049::set_ghost_arrows_after_scenery(static_cast<GhostArrows>(value) == GhostArrows::AfterScenery);
     });
 
     graphics.add_enum_option(

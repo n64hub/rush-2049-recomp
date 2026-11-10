@@ -63,11 +63,11 @@ option has an Original value that runs the game as it shipped.
   after the rest of the scene, farthest first, so it shows over whatever is behind it: a street lamp and a sail at
   Track 1's start cover the boats behind them, not the other way round. The cars' effects and the ghosts' arrows are
   still drawn over it.
-- **Whole ghost arrows**: the arrow over a ghost was drawn before part of the scenery, which then painted over it
-  however far behind the ghost it was: on Track 1 the buildings beside the straight after the Slim Jim sign, and the
-  signal arm on the bridge at its end, cut into the arrows of ghosts in plain view. The arrows are now drawn after the
-  scenery, each one whole while its tip above the ghost can be seen, and not at all while something in front hides
-  it.
+- **Ghost arrows after the scenery**: the arrow over a ghost was drawn before part of the scenery, which then painted
+  over it however far behind the ghost it was: on Track 1 the buildings beside the straight after the Slim Jim sign,
+  and the signal arm on the bridge at its end, cut into the arrows of ghosts in plain view. The arrows are now drawn
+  after the scenery, so only what is between you and an arrow covers it, and only the part of it behind that: a sign a
+  ghost drives under no longer makes its arrow blink out.
 - **Enhanced audio**: MusyX music and sound effects are mixed at 44.1 kHz with a better interpolator instead of the
   game's 22.05 kHz mix, loud peaks are softly limited instead of clipping, and playback no longer skips or drops
   out when the audio output falls behind.
@@ -86,8 +86,9 @@ option has an Original value that runs the game as it shipped.
   driving-friendly defaults, rebindable on the Controls tab. Each controller is a player of its own, as on the
   console (see [Controls](#controls)).
 - **Mouse cursor on screen**: off by default. Set Mouse Cursor to Always Shown and the cursor stays where you left it
-  while you play with a controller or the keyboard, to point at things in a recording. Otherwise it hides as soon as a
-  controller or a key is pressed, until the mouse moves.
+  while you play with a controller or the keyboard, to point at things in a recording, or to Shown While Moving and it
+  shows whenever the mouse moves, with a controller too, and hides once the mouse has been still for two seconds.
+  Otherwise it hides as soon as a controller or a key is pressed, until the mouse moves.
 - **No frame copies to RAM**: each frame stays on the GPU instead of also being drawn again at 320×240 and copied
   back into the console's memory, which the game isn't known to read. Saves GPU time, and about 6 ms a frame in a
   browser.
@@ -112,7 +113,7 @@ shipped, set every Original value:
 | Model detail | Level of Detail | `graphics.json` `level_of_detail` | `"High"` (4× the distances; `"Highest"`: always the most detailed) | `"Original"` |
 | No scenery culling | Scenery Culling | `graphics.json` `scenery_culling` | `"Off"` (`"Original"` in a browser; `"Reduced"`: what can be seen from the stretches around you, the tallest towers and any building that looks tall or wide from where you are) | `"Original"` |
 | See-through scenery in order | See-Through Order | `graphics.json` `see_through_order` | `"Sorted"` | `"Original"` |
-| Whole ghost arrows | Ghost Arrows | `graphics.json` `ghost_arrows` | `"Whole"` | `"Original"` |
+| Ghost arrows after the scenery | Ghost Arrows | `graphics.json` `ghost_arrows` | `"AfterScenery"` | `"Original"` |
 | Rendering resolution | Resolution | `graphics.json` `res_option` | `"Auto"` (window size) | `"Original"` (320×240) |
 | Anti-aliasing | MS Anti-Aliasing | `graphics.json` `msaa_option` | `"MSAA2X"` | `"None"` |
 | Hi-res menu and HUD text | Hi-res Font | `graphics.json` `hires_font` | `"On"` | `"Off"` |
@@ -123,7 +124,7 @@ shipped, set every Original value:
 | Large Controller Paks | Controller Pak Size | `general.json` `pak_size` | `"Large"` (62 banks, about 1.9 MB) | `"Original"` (32 KiB) |
 | Rewind | Rewind | `general.json` `rewind` | `"On"` | `"Off"` |
 | Save Ghosts | Save Ghosts | `general.json` `save_ghosts` | `"On"` | `"Original"` (no SAVE GHOST prompt) |
-| Mouse cursor on screen | Mouse Cursor | `general.json` `mouse_cursor` | `"Original"` (`"Shown"` keeps it on screen while a controller or the keyboard is used) | `"Original"` (hidden once a controller or a key is pressed, until the mouse moves) |
+| Mouse cursor on screen | Mouse Cursor | `general.json` `mouse_cursor` | `"Original"` (`"Shown"` keeps it on screen while a controller or the keyboard is used; `"Moving"` shows it while the mouse moves and hides it after two seconds still) | `"Original"` (hidden once a controller or a key is pressed, until the mouse moves) |
 
 Not options, because they don't change the game: the keyboard and gamepad layouts, playback at half the game's
 sample level so its mix doesn't clip, and the Expansion Pak, which the game was built for.
@@ -317,8 +318,8 @@ root with a `portable.txt`), enables them when found, and the launcher's mod men
 `rush2049`. A mod can:
 
 - **hook any game function** with `RECOMP_HOOK("name")` (on entry, with the same arguments) or
-  `RECOMP_HOOK_RETURN("name")` (just before it returns), in the boot code, the main code and both overlays. Names
-  come from `syms/rush2049.us.syms.toml`;
+  `RECOMP_HOOK_RETURN("name")` (just before it returns, with no arguments: an entry hook keeps what it needs), in the
+  boot code, the main code and both overlays. Names come from `syms/rush2049.us.syms.toml`;
 - **call game functions and read or write game variables** by name, variables from
   `syms/rush2049.us.datasyms.toml` (`extern s32 current_song;`), or anything by its address;
 - **use what the game exports** (import from `"*"`, declared in `mod_template/include/rush2049_api.h`):
