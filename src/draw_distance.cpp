@@ -515,8 +515,25 @@ extern "C" void rush2049_dev_camera(uint8_t* rdram, gpr index, gpr cam) {
     uint8_t* p = rdram + ((uint32_t)cam - 0x80000000u);
     if (phase == 0) {
         std::array<uint8_t, 0x98> a;
-        if (clock >= t0 && clock < t1) { std::memcpy(a.data(), p, 0x98); rec.push_back(a); }
-        else if (clock >= t1 && rec.size() > 2) { phase = 1; saved = scenery_reach.load(); f = 0; }
+        // DEV_REC_FILE: the poses are saved there, or read from it when it exists, so every run replays the same path.
+        const char* rf = std::getenv("DEV_REC_FILE");
+        static bool loaded = false;
+        if (rf && !loaded) {
+            loaded = true;
+            if (FILE* in = std::fopen(rf, "rb")) {
+                while (std::fread(a.data(), 1, 0x98, in) == 0x98) rec.push_back(a);
+                std::fclose(in);
+                std::fprintf(stderr, "DEV rec loaded %d poses\n", (int)rec.size());
+            }
+        }
+        static bool from_file = !rec.empty();
+        if (!from_file && clock >= t0 && clock < t1) { std::memcpy(a.data(), p, 0x98); rec.push_back(a); }
+        else if (clock >= t1 && rec.size() > 2) {
+            if (rf && !from_file) {
+                if (FILE* o = std::fopen(rf, "wb")) { for (auto& x : rec) std::fwrite(x.data(), 1, 0x98, o); std::fclose(o); }
+            }
+            phase = 1; saved = scenery_reach.load(); f = 0;
+        }
         return;
     }
     if (phase != 1) return;
@@ -546,6 +563,18 @@ extern "C" void rush2049_dev_camera(uint8_t* rdram, gpr index, gpr cam) {
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         std::fprintf(dev_log, "P %d %lld pass=%d lat=%.0f pose=%d off=%d cam=%.0f,%.0f,%.0f\n", f, (long long)ms, pass, lats[pass],
             pose, off ? 1 : 0, q[0], q[1], q[2]);
+        // At the end of each pose's Reduced turn: every object the mask (as last worked out, at this pose) leaves out, with
+        // what the rules saw: its height and width as seen (degrees), their product and its distance.
+        if (f % (2 * hold) == hold - 1) {
+            std::fprintf(dev_log, "Q pose=%d pass=%d", pose, pass);
+            for (int n = 0; n < dev_n; n++) {
+                if ((reduced_mask[n / 32] >> (n % 32)) & 1) continue;
+                float dx = dev_x[n] - camera_x, dz = dev_z[n] - camera_z;
+                std::fprintf(dev_log, " %d:%.1f,%.1f,%.0f,%.0f", n, dev_high[n] * 57.29578f, dev_wide[n] * 57.29578f,
+                    dev_high[n] * dev_wide[n] * 3282.8f, std::sqrt(dx * dx + dz * dz));
+            }
+            std::fprintf(dev_log, "\n");
+        }
     }
     f++;
 }
