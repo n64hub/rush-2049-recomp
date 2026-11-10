@@ -74,10 +74,14 @@ sync() {
     # The host fetches origin itself when it can. A repo it can't (a private one: the host is shared, so it gets no
     # credentials for it) prints "private" and the commit the copy's origin/main is at: the copy is made with git init,
     # origin left at the URL for the submodules' relative URLs but never fetched, and origin's main goes over as a
-    # bundle of what the copy's origin/main lacks, fetched in its place.
+    # bundle of what the copy's origin/main lacks, fetched in its place. A copy takes the checkout's URL each time, so
+    # one made before its repo was renamed follows it: GitHub stops redirecting an old name once another repo takes it,
+    # or for a private repo, and a fetch from it asks for a password.
     private="$(remote "mkdir -p ~/$base/ccache ~/$dir/home && chmod 700 ~/$base && cd ~/$dir && \
-        if GIT_TERMINAL_PROMPT=0 git ls-remote $url HEAD > /dev/null 2>&1; then { [ -d repo/.git ] || git clone -q $url repo; }; \
-        else { [ -d repo/.git ] || { git init -q repo && git -C repo remote add origin $url; }; } && echo private && \
+        if GIT_TERMINAL_PROMPT=0 git ls-remote $url HEAD > /dev/null 2>&1; then { [ -d repo/.git ] || git clone -q $url repo; } && \
+            git -C repo remote set-url origin $url; \
+        else { [ -d repo/.git ] || { git init -q repo && git -C repo remote add origin $url; }; } && \
+            git -C repo remote set-url origin $url && echo private && \
             { git -C repo rev-parse -q --verify refs/remotes/origin/main || true; }; fi")"
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
