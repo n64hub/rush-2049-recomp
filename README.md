@@ -318,8 +318,8 @@ root with a `portable.txt`), enables them when found, and the launcher's mod men
 `rush2049`. A mod can:
 
 - **hook any game function** with `RECOMP_HOOK("name")` (on entry, with the same arguments) or
-  `RECOMP_HOOK_RETURN("name")` (just before it returns), in the boot code, the main code and both overlays. Names
-  come from `syms/rush2049.us.syms.toml`;
+  `RECOMP_HOOK_RETURN("name")` (just before it returns, with no arguments: an entry hook keeps what it needs), in the
+  boot code, the main code and both overlays. Names come from `syms/rush2049.us.syms.toml`;
 - **call game functions and read or write game variables** by name, variables from
   `syms/rush2049.us.datasyms.toml` (`extern s32 current_song;`), or anything by its address;
 - **use what the game exports** (import from `"*"`, declared in `mod_template/include/rush2049_api.h`):

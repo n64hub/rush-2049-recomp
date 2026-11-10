@@ -38,8 +38,9 @@
 // Runs when `mod` (or "*" for the game) raises `event`.
 #define RECOMP_CALLBACK(mod, event) __attribute__((retain, section(".recomp_callback." mod ":" #event)))
 
-// Runs with the same arguments when the game function `func` (a name from syms/rush2049.us.syms.toml)
-// is entered, or just before it returns.
+// Runs when the game function `func` is entered, with the same arguments, or just before it returns, with none (its
+// argument registers hold whatever the function left there: keep what a return hook needs from an entry hook). `func`
+// is a name from syms/rush2049.us.syms.toml.
 #define RECOMP_HOOK(func) __attribute__((retain, section(".recomp_hook." func)))
 #define RECOMP_HOOK_RETURN(func) __attribute__((retain, section(".recomp_hook_return." func)))
 
