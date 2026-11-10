@@ -36,7 +36,8 @@ What has been tried or measured and dropped, with why.
   up to 18 degrees tall as seen still pop in on Track 3. Nor does weighting by width instead help: letting through what
   looks bigger than 120 square degrees (height times width, the width capped at 45) in place of the height rule costs
   nearly as much and still lets buildings up to 12 degrees tall pop in. Reduced lets through what looks taller than 5
-  degrees from the camera, and besides that what looks bigger than 40 square degrees (`src/draw_distance.cpp`).- Caching texture hashes while TMEM is untouched: only 8% of hashes repeat without a TMEM change.
+  degrees from the camera, and besides that what looks bigger than 20 square degrees (`src/draw_distance.cpp`).
+- Caching texture hashes while TMEM is untouched: only 8% of hashes repeat without a TMEM change.
 - Merging or batching RT64's draws to cut the 240p floor (`start_gpu_profiler`'s table in `src/main.cpp`). Only ~5% of
   draws repeat the one before exactly; merging every run that shares a pipeline (wrong textures, timing only) halves
   the ~500 calls and the draws part moves less than ±4%. With a 1x1 viewport (no pixels) ~90k cycles stay, and the
