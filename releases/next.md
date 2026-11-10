@@ -1,1 +1,0 @@
-**Changed:** **Scenery Culling** at **Reduced** (Graphics tab) brings wide scenery in from farther off, while it is still small: on Track 2 the wooded hill on the skyline past the tunnel, and the ridge ahead when driving it the wrong way, no longer pop in where you can plainly see them. Reduced draws a little more than before; Off, the default, is unchanged.
