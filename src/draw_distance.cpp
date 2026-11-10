@@ -156,7 +156,7 @@ std::atomic<float> scenery_reach{ -1.0f };
 constexpr float tall = 600.0f;
 constexpr float rise = 0.15f;
 constexpr float span = 5.0f * 3.14159265f / 180.0f;
-constexpr float area = 40.0f * (3.14159265f / 180.0f) * (3.14159265f / 180.0f);
+constexpr float area = 20.0f * (3.14159265f / 180.0f) * (3.14159265f / 180.0f);
 float camera_x = 0.0f, camera_y = 0.0f, camera_z = 0.0f;
 uint32_t reduced_mask[4];
 bool reduced_valid = false;
@@ -265,7 +265,7 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
         float high = std::atan2(top, across) - std::atan2(bottom, across);
         float wide = 2.0f * std::atan(std::fmax(value(box + 0x5C) - value(box + 0x50),
             value(box + 0x64) - value(box + 0x58)) / 2.0f / across);
-        if (value(box + 0x60) - value(box + 0x54) > tall || top > rise * d || high > span * dev_k(true) || high * wide > area * dev_k(false)) {
+        if (value(box + 0x60) - value(box + 0x54) > tall || top > rise * d || high > span || high * wide > area * dev_k(false)) {
             reduced_mask[n / 32] |= 1u << (n % 32);
         }
         dev_note(n, high, wide, value(box + 0x60) - value(box + 0x54) > tall || top > rise * d,
@@ -482,7 +482,7 @@ static void dev_counts(uint8_t* rdram) {
     float hx = camera_x - old[0], hz = camera_z - old[1];
     dev_hist[dev_hn % 32][0] = camera_x; dev_hist[dev_hn % 32][1] = camera_z; dev_hn++;
     if (dev_hn < 32 || hx * hx + hz * hz < 100.0f) return;
-    const float ks[4] = { 1.0f, 0.5f, 0.25f, 0.125f };
+    const float ks[4] = { 2.0f, 1.0f, 0.5f, 0.25f };
     int orig = 0, tab = 0, all = 0, red[4] = { 0, 0, 0, 0 };
     float hl = std::sqrt(hx * hx + hz * hz);
     for (int n = 0; n < dev_n; n++) {
@@ -492,7 +492,7 @@ static void dev_counts(uint8_t* rdram) {
         bool o = (dev_rec[n / 32] >> (n % 32)) & 1, t = (dev_tab[n / 32] >> (n % 32)) & 1;
         orig += o; tab += t;
         for (int k = 0; k < 4; k++)
-            red[k] += t || dev_fix[n] || dev_high[n] > span * std::sqrt(ks[k]) || dev_high[n] * dev_wide[n] > area * ks[k];
+            red[k] += t || dev_fix[n] || dev_high[n] > span || dev_high[n] * dev_wide[n] > area * ks[k];
     }
     std::fprintf(dev_log, "C %d %d %d %d %d %d %d\n", orig, tab, red[0], red[1], red[2], red[3], all);
 }
