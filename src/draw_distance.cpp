@@ -130,6 +130,7 @@
 // 670 draws a frame to 490 and Off from 1960 to 840, and Off from 43 fps to 58 on a busy 6-core PC, where RT64's
 // thread was the limit (README, Performance).
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -494,4 +495,57 @@ static void dev_counts(uint8_t* rdram) {
             red[k] += t || dev_fix[n] || dev_high[n] > span * std::sqrt(ks[k]) || dev_high[n] * dev_wide[n] > area * ks[k];
     }
     std::fprintf(dev_log, "C %d %d %d %d %d %d %d\n", orig, tab, red[0], red[1], red[2], red[3], all);
+}
+// DEV ONLY: DEV_REC=T0,T1 records camera 0's struct (0x98 bytes at a3 of func_8009F058) every frame while the race clock
+// is in [T0, T1) on DEV_TRACK, then replays it: every DEV_STRIDE-th pose held DEV_HOLDF frames at the setting and then
+// DEV_HOLDF frames at Off, moved DEV_LAT... units to the side of the way it moved (one pass per value, comma-separated)
+// and DEV_UP up. So each pose along the race's own camera path is drawn both ways from exactly the same place.
+#include <vector>
+#include <array>
+extern "C" void rush2049_dev_camera(uint8_t* rdram, gpr index, gpr cam) {
+    static std::vector<std::array<uint8_t, 0x98>> rec;
+    static int phase = 0, f = 0;
+    static float saved = 0.0f;
+    const char* r = std::getenv("DEV_REC");
+    const char* t = std::getenv("DEV_TRACK");
+    if (!r || (int32_t)index != 0 || !dev_attract(rdram) || (t && dev_u8(rdram, 0x8014978C) != std::atoi(t))) return;
+    float t0 = 0.0f, t1 = 0.0f;
+    std::sscanf(r, "%f,%f", &t0, &t1);
+    float clock = dev_f32(rdram, 0x801543CC);
+    uint8_t* p = rdram + ((uint32_t)cam - 0x80000000u);
+    if (phase == 0) {
+        std::array<uint8_t, 0x98> a;
+        if (clock >= t0 && clock < t1) { std::memcpy(a.data(), p, 0x98); rec.push_back(a); }
+        else if (clock >= t1 && rec.size() > 2) { phase = 1; saved = scenery_reach.load(); f = 0; }
+        return;
+    }
+    if (phase != 1) return;
+    int stride = std::getenv("DEV_STRIDE") ? std::atoi(std::getenv("DEV_STRIDE")) : 4;
+    int hold = std::getenv("DEV_HOLDF") ? std::atoi(std::getenv("DEV_HOLDF")) : 24;
+    float up = std::getenv("DEV_UP") ? (float)std::atof(std::getenv("DEV_UP")) : 0.0f;
+    std::vector<float> lats;
+    for (const char* s = std::getenv("DEV_LAT") ? std::getenv("DEV_LAT") : "0"; s && *s;) {
+        lats.push_back((float)std::atof(s));
+        s = std::strchr(s, ',');
+        if (s) s++;
+    }
+    int poses = ((int)rec.size() + stride - 1) / stride, i = f / (2 * hold);
+    bool off = (f % (2 * hold)) >= hold;
+    int pass = i / poses, pose = (i % poses) * stride;
+    if (pass >= (int)lats.size()) { phase = 2; scenery_reach.store(saved); if (dev_log) std::fprintf(dev_log, "P done\n"); return; }
+    std::memcpy(p, rec[pose].data(), 0x98);
+    auto pos = [&](int k, int c) { float v; std::memcpy(&v, rec[std::clamp(k, 0, (int)rec.size() - 1)].data() + 0x24 + 4 * c, 4); return v; };
+    float fx = pos(pose + 4, 0) - pos(pose - 4, 0), fz = pos(pose + 4, 2) - pos(pose - 4, 2), fl = std::sqrt(fx * fx + fz * fz);
+    if (fl > 0.0f) { fx /= fl; fz /= fl; }
+    float* q = reinterpret_cast<float*>(p + 0x24);
+    q[0] += lats[pass] * fz;
+    q[1] += up;
+    q[2] -= lats[pass] * fx;
+    scenery_reach.store(off ? -1.0f : saved);
+    if (dev_log) {
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        std::fprintf(dev_log, "P %d %lld pass=%d lat=%.0f pose=%d off=%d cam=%.0f,%.0f,%.0f\n", f, (long long)ms, pass, lats[pass],
+            pose, off ? 1 : 0, q[0], q[1], q[2]);
+    }
+    f++;
 }

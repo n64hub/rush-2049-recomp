@@ -70,6 +70,7 @@ void rush2049_ghost_arrows_draw(uint8_t* rdram, recomp_context* ctx);
 void rush2049_scenery_camera(uint8_t* rdram, gpr position);
 void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx);
 void rush2049_dev_load_track(uint8_t* rdram);
+void rush2049_dev_camera(uint8_t* rdram, gpr index, gpr cam);
 gpr rush2049_scenery_mask(gpr mask, gpr offset);
 
 /* In busy-wait loops (us.toml): let the next ready game thread run, whatever its priority (src/spin_yield.cpp). */
