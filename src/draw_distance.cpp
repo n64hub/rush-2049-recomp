@@ -130,7 +130,6 @@
 // 670 draws a frame to 490 and Off from 1960 to 840, and Off from 43 fps to 58 on a busy 6-core PC, where RT64's
 // thread was the limit (README, Performance).
 
-#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -156,7 +155,7 @@ std::atomic<float> scenery_reach{ -1.0f };
 constexpr float tall = 600.0f;
 constexpr float rise = 0.15f;
 constexpr float span = 5.0f * 3.14159265f / 180.0f;
-constexpr float area = 20.0f * (3.14159265f / 180.0f) * (3.14159265f / 180.0f);
+constexpr float area = 40.0f * (3.14159265f / 180.0f) * (3.14159265f / 180.0f);
 float camera_x = 0.0f, camera_y = 0.0f, camera_z = 0.0f;
 uint32_t reduced_mask[4];
 bool reduced_valid = false;
@@ -211,15 +210,7 @@ extern "C" float rush2049_draw_distance_cull(float cull) {
     return cull * distance();
 }
 
-static void dev_frame_tick(uint8_t* rdram);
-static void dev_log_mask(uint8_t* rdram, const uint32_t* mask);
-static void dev_reach_mask(bool first, bool in, uint32_t record, uint32_t row, uint8_t* rdram);
-static void dev_note(int n, float high, float wide, bool fixed, float x, float z);
-static void dev_counts(uint8_t* rdram);
-// DEV ONLY: DEV_AREA_K scales the area limit (and span by its square root) without a rebuild.
-static float dev_k(bool root) { static float k = std::getenv("DEV_AREA_K") ? (float)std::atof(std::getenv("DEV_AREA_K")) : 1.0f; return root ? std::sqrt(k) : k; }
 extern "C" void rush2049_scenery_camera(uint8_t* rdram, gpr position) {
-    dev_frame_tick(rdram);
     const float* p = reinterpret_cast<const float*>(rdram + ((uint32_t)position - 0x80000000));
     camera_x = p[0];
     camera_y = p[1];
@@ -234,9 +225,6 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
     int32_t stretch = (int32_t)word((uint32_t)ctx->r29 + 0x78);
     uint32_t boxes = word(0x80149B80);
     if (reach <= 0.0f || stretch < 0 || boxes == 0) {
-        uint32_t m[4];
-        for (int w = 0; w < 4; w++) m[w] = reach < 0.0f ? 0xFFFFFFFFu : word((uint32_t)ctx->r10 + 4 * w);
-        dev_log_mask(rdram, m);
         return;
     }
     uint32_t record = (uint32_t)ctx->r10;
@@ -258,18 +246,15 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
                 reduced_mask[w] |= word(table + 16 * n + 4 * w);
             }
         }
-        dev_reach_mask(n == 0, d <= reach, record, table + 16 * n, rdram);
         float top = value(box + 0x38) + value(box + 0x60) - camera_y;
         float bottom = value(box + 0x38) + value(box + 0x54) - camera_y;
         float across = std::fmax(d, 1.0f);
         float high = std::atan2(top, across) - std::atan2(bottom, across);
         float wide = 2.0f * std::atan(std::fmax(value(box + 0x5C) - value(box + 0x50),
             value(box + 0x64) - value(box + 0x58)) / 2.0f / across);
-        if (value(box + 0x60) - value(box + 0x54) > tall || top > rise * d || high > span || high * wide > area * dev_k(false)) {
+        if (value(box + 0x60) - value(box + 0x54) > tall || top > rise * d || high > span || high * wide > area) {
             reduced_mask[n / 32] |= 1u << (n % 32);
         }
-        dev_note(n, high, wide, value(box + 0x60) - value(box + 0x54) > tall || top > rise * d,
-            value(box + 0x34), value(box + 0x3C));
         int16_t next = (int16_t)(word((box + 0x44) & ~3u) >> 16);
         if (next < 0) {
             break;
@@ -277,8 +262,6 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
         box = boxes + 0x68 * next;
     }
     reduced_valid = true;
-    dev_counts(rdram);
-    dev_log_mask(rdram, reduced_mask);
 }
 
 extern "C" gpr rush2049_scenery_mask(gpr mask, gpr offset) {
@@ -349,232 +332,3 @@ extern "C" void rush2049_far_matrix_end(uint8_t* rdram, gpr matrix) {
     }
 }
 
-
-// DEV ONLY (local, never committed): attract race on DEV_TRACK (index) / DEV_BACK, held past its 30 s with the view
-// pinned (DEV_VIEW), and a log (DEV_LOG) of the camera and of every object let in that was not the frame before.
-#include <chrono>
-#include <cstdio>
-#include <cstdlib>
-namespace {
-uint8_t* dev_rdram = nullptr;
-FILE* dev_log = nullptr;
-uint32_t dev_prev[4] = { 0, 0, 0, 0 };
-int dev_frame = 0;
-uint8_t& dev_u8(uint8_t* rdram, uint32_t a) { return rdram[(a - 0x80000000u) ^ 3]; }
-uint32_t& dev_u32(uint8_t* rdram, uint32_t a) { return *reinterpret_cast<uint32_t*>(rdram + (a - 0x80000000u)); }
-float& dev_f32(uint8_t* rdram, uint32_t a) { return *reinterpret_cast<float*>(rdram + (a - 0x80000000u)); }
-bool dev_attract(uint8_t* rdram) { return (dev_u32(rdram, 0x801174B4) & 0x8) != 0; }
-}
-extern "C" void rush2049_dev_load_track(uint8_t* rdram) {
-    const char* t = std::getenv("DEV_TRACK");
-    const char* b = std::getenv("DEV_BACK");
-    if (!dev_attract(rdram)) return;
-    // The next demo's track: the counter is stepped before the track is taken from it.
-    if (t) *reinterpret_cast<int16_t*>(rdram + ((0x80114158u - 0x80000000u) ^ 2)) = (int16_t)(std::atoi(t) - 1);
-    if (b && t && dev_u8(rdram, 0x8014978C) == std::atoi(t)) dev_u8(rdram, 0x80152570) = (uint8_t)std::atoi(b);
-    std::fprintf(stderr, "DEV load_track track=%d back=%d\n", dev_u8(rdram, 0x8014978C), dev_u8(rdram, 0x80152570));
-}
-static void dev_frame_tick(uint8_t* rdram) {
-    if (!dev_attract(rdram)) return;
-    const char* t = std::getenv("DEV_TRACK");
-    if (std::getenv("DEV_HOLD") && t && dev_u8(rdram, 0x8014978C) == std::atoi(t)) {
-        dev_u32(rdram, 0x8002EB9C) = dev_u32(rdram, 0x8002EB64) + 0x10000000;
-        dev_f32(rdram, 0x801106B4) = 1.0e9f;
-        // DEV_AB=K: Reduced and Off in turns of K frames, so a pair of captures K frames apart shows what Reduced hides.
-        static float dev_saved = 0.0f;
-        static int dev_ticks = 0;
-        if (std::getenv("DEV_OFF")) {
-            scenery_reach.store(-1.0f, std::memory_order_relaxed);
-        } else if (const char* ab = std::getenv("DEV_AB")) {
-            if (dev_ticks == 0) dev_saved = scenery_reach.load(std::memory_order_relaxed);
-            int k = std::atoi(ab);
-            scenery_reach.store(((dev_ticks++ / k) & 1) ? -1.0f : dev_saved, std::memory_order_relaxed);
-        }
-        // DEV_ROCK=T: from race clock T on, the followed car is held where it was then and rocked back and forth along
-        // its heading (DEV_ROCK_D units each way, a period of 480 frames), the way a player rolls to and fro over a spot.
-        static bool rock_on = false;
-        static float rock_p[3], rock_dir[2], rock_o[9];
-        static int rock_t = 0;
-        if (const char* rk = std::getenv("DEV_ROCK")) {
-            uint32_t car = 0x8014A250 + 0x808 * dev_u8(rdram, 0x80150C04);
-            if (!rock_on && dev_f32(rdram, 0x801543CC) >= (float)std::atof(rk)) {
-                rock_on = true;
-                for (int i = 0; i < 3; i++) rock_p[i] = dev_f32(rdram, car + 0x22C + 4 * i);
-                for (int i = 0; i < 9; i++) rock_o[i] = dev_f32(rdram, car + 0x2EC + 4 * i);
-                float vx = dev_f32(rdram, car + 0x220), vz = dev_f32(rdram, car + 0x228), vl = std::sqrt(vx * vx + vz * vz);
-                rock_dir[0] = vl > 0.0f ? vx / vl : 1.0f; rock_dir[1] = vl > 0.0f ? vz / vl : 0.0f;
-            }
-            if (rock_on) {
-                const char* rd = std::getenv("DEV_ROCK_D");
-                float s = (rd ? (float)std::atof(rd) : 250.0f) * std::sin(6.2831853f * (rock_t++ % 480) / 480.0f);
-                dev_f32(rdram, car + 0x22C) = rock_p[0] + rock_dir[0] * s;
-                dev_f32(rdram, car + 0x230) = rock_p[1];
-                dev_f32(rdram, car + 0x234) = rock_p[2] + rock_dir[1] * s;
-                for (int i = 0; i < 9; i++) dev_f32(rdram, car + 0x2EC + 4 * i) = rock_o[i];
-                for (int i = 0; i < 3; i++) {
-                    dev_f32(rdram, car + 0x220 + 4 * i) = 0.0f;
-                    dev_f32(rdram, car + 0x40 + 4 * i) = 0.0f;
-                    dev_f32(rdram, car + 0x4C + 4 * i) = 0.0f;
-                }
-            }
-        }
-        const char* v = std::getenv("DEV_VIEW");
-        if (v) {
-            uint8_t target = dev_u8(rdram, 0x80150C04);
-            dev_u8(rdram, 0x80152818 + 0x3B8 * target + 0x35D) = (uint8_t)std::atoi(v);
-        }
-    }
-}
-static void dev_log_mask(uint8_t* rdram, const uint32_t* mask) {
-    if (!dev_log) {
-        const char* p = std::getenv("DEV_LOG");
-        if (!p) return;
-        dev_log = std::fopen(p, "w");
-        if (!dev_log) return;
-    }
-    if (!dev_attract(rdram)) return;
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    std::fprintf(dev_log, "F %d %lld clock=%.3f track=%d back=%d off=%d cam=%.0f,%.0f,%.0f\n", dev_frame++, (long long)ms,
-        dev_f32(rdram, 0x801543CC), dev_u8(rdram, 0x8014978C), dev_u8(rdram, 0x80152570),
-        scenery_reach.load() < 0.0f ? 1 : 0, camera_x, camera_y, camera_z);
-    uint32_t boxes = dev_u32(rdram, 0x80149B80);
-    uint32_t box = boxes;
-    for (int n = 0; n < 128 && boxes; n++) {
-        bool now = (mask[n / 32] >> (n % 32)) & 1, before = (dev_prev[n / 32] >> (n % 32)) & 1;
-        if (now && !before) {
-            float dx = camera_x - dev_f32(rdram, box + 0x34), dz = camera_z - dev_f32(rdram, box + 0x3C);
-            std::fprintf(dev_log, "  IN %d d=%.0f at=%.0f,%.0f,%.0f h=%.0f w=%.0f,%.0f\n", n, std::sqrt(dx * dx + dz * dz),
-                dev_f32(rdram, box + 0x34), dev_f32(rdram, box + 0x38), dev_f32(rdram, box + 0x3C),
-                dev_f32(rdram, box + 0x60) - dev_f32(rdram, box + 0x54), dev_f32(rdram, box + 0x5C) - dev_f32(rdram, box + 0x50),
-                dev_f32(rdram, box + 0x64) - dev_f32(rdram, box + 0x58));
-        }
-        int16_t next = (int16_t)(dev_u32(rdram, (box + 0x44) & ~3u) >> 16);
-        if (next < 0) break;
-        box = boxes + 0x68 * next;
-    }
-    std::memcpy(dev_prev, mask, sizeof dev_prev);
-    std::fflush(dev_log);
-}
-// DEV ONLY: objects within 50 degrees of the camera's heading that each rule set would let through, a frame.
-namespace {
-uint32_t dev_rec[4], dev_tab[4];
-float dev_high[128], dev_wide[128], dev_x[128], dev_z[128];
-bool dev_fix[128];
-int dev_n = 0;
-float dev_hist[32][2];
-int dev_hn = 0;
-}
-static void dev_reach_mask(bool first, bool in, uint32_t record, uint32_t row, uint8_t* rdram) {
-    if (first) {
-        for (int w = 0; w < 4; w++) dev_tab[w] = dev_rec[w] = dev_u32(rdram, record + 4 * w);
-        dev_n = 0;
-    }
-    if (in) for (int w = 0; w < 4; w++) dev_tab[w] |= dev_u32(rdram, row + 4 * w);
-}
-static void dev_note(int n, float high, float wide, bool fixed, float x, float z) {
-    dev_high[n] = high; dev_wide[n] = wide; dev_fix[n] = fixed; dev_x[n] = x; dev_z[n] = z;
-    if (n + 1 > dev_n) dev_n = n + 1;
-}
-static void dev_counts(uint8_t* rdram) {
-    if (!dev_log || !dev_attract(rdram)) return;
-    float* old = dev_hist[(dev_hn + 1) % 32];
-    float hx = camera_x - old[0], hz = camera_z - old[1];
-    dev_hist[dev_hn % 32][0] = camera_x; dev_hist[dev_hn % 32][1] = camera_z; dev_hn++;
-    if (dev_hn < 32 || hx * hx + hz * hz < 100.0f) return;
-    const float ks[4] = { 2.0f, 1.0f, 0.5f, 0.25f };
-    int orig = 0, tab = 0, all = 0, red[4] = { 0, 0, 0, 0 };
-    float hl = std::sqrt(hx * hx + hz * hz);
-    for (int n = 0; n < dev_n; n++) {
-        float ox = dev_x[n] - camera_x, oz = dev_z[n] - camera_z, ol = std::sqrt(ox * ox + oz * oz);
-        if (ol > 1.0f && (ox * hx + oz * hz) / (ol * hl) < std::cos(50.0f * 3.14159265f / 180.0f)) continue;
-        all++;
-        bool o = (dev_rec[n / 32] >> (n % 32)) & 1, t = (dev_tab[n / 32] >> (n % 32)) & 1;
-        orig += o; tab += t;
-        for (int k = 0; k < 4; k++)
-            red[k] += t || dev_fix[n] || dev_high[n] > span || dev_high[n] * dev_wide[n] > area * ks[k];
-    }
-    std::fprintf(dev_log, "C %d %d %d %d %d %d %d\n", orig, tab, red[0], red[1], red[2], red[3], all);
-}
-// DEV ONLY: DEV_REC=T0,T1 records camera 0's struct (0x98 bytes at a3 of func_8009F058) every frame while the race clock
-// is in [T0, T1) on DEV_TRACK, then replays it: every DEV_STRIDE-th pose held DEV_HOLDF frames at the setting and then
-// DEV_HOLDF frames at Off, moved DEV_LAT... units to the side of the way it moved (one pass per value, comma-separated)
-// and DEV_UP up. So each pose along the race's own camera path is drawn both ways from exactly the same place.
-#include <vector>
-#include <array>
-extern "C" void rush2049_dev_camera(uint8_t* rdram, gpr index, gpr cam) {
-    static std::vector<std::array<uint8_t, 0x98>> rec;
-    static int phase = 0, f = 0;
-    static float saved = 0.0f;
-    const char* r = std::getenv("DEV_REC");
-    const char* t = std::getenv("DEV_TRACK");
-    if (!r || (int32_t)index != 0 || !dev_attract(rdram) || (t && dev_u8(rdram, 0x8014978C) != std::atoi(t))) return;
-    float t0 = 0.0f, t1 = 0.0f;
-    std::sscanf(r, "%f,%f", &t0, &t1);
-    float clock = dev_f32(rdram, 0x801543CC);
-    uint8_t* p = rdram + ((uint32_t)cam - 0x80000000u);
-    if (phase == 0) {
-        std::array<uint8_t, 0x98> a;
-        // DEV_REC_FILE: the poses are saved there, or read from it when it exists, so every run replays the same path.
-        const char* rf = std::getenv("DEV_REC_FILE");
-        static bool loaded = false;
-        if (rf && !loaded) {
-            loaded = true;
-            if (FILE* in = std::fopen(rf, "rb")) {
-                while (std::fread(a.data(), 1, 0x98, in) == 0x98) rec.push_back(a);
-                std::fclose(in);
-                std::fprintf(stderr, "DEV rec loaded %d poses\n", (int)rec.size());
-            }
-        }
-        static bool from_file = !rec.empty();
-        if (!from_file && clock >= t0 && clock < t1) { std::memcpy(a.data(), p, 0x98); rec.push_back(a); }
-        else if (clock >= t1 && rec.size() > 2) {
-            if (rf && !from_file) {
-                if (FILE* o = std::fopen(rf, "wb")) { for (auto& x : rec) std::fwrite(x.data(), 1, 0x98, o); std::fclose(o); }
-            }
-            phase = 1; saved = scenery_reach.load(); f = 0;
-        }
-        return;
-    }
-    if (phase != 1) return;
-    int stride = std::getenv("DEV_STRIDE") ? std::atoi(std::getenv("DEV_STRIDE")) : 4;
-    int hold = std::getenv("DEV_HOLDF") ? std::atoi(std::getenv("DEV_HOLDF")) : 24;
-    float up = std::getenv("DEV_UP") ? (float)std::atof(std::getenv("DEV_UP")) : 0.0f;
-    std::vector<float> lats;
-    for (const char* s = std::getenv("DEV_LAT") ? std::getenv("DEV_LAT") : "0"; s && *s;) {
-        lats.push_back((float)std::atof(s));
-        s = std::strchr(s, ',');
-        if (s) s++;
-    }
-    int poses = ((int)rec.size() + stride - 1) / stride, i = f / (2 * hold);
-    bool off = (f % (2 * hold)) >= hold;
-    int pass = i / poses, pose = (i % poses) * stride;
-    if (pass >= (int)lats.size()) { phase = 2; scenery_reach.store(saved); if (dev_log) std::fprintf(dev_log, "P done\n"); return; }
-    std::memcpy(p, rec[pose].data(), 0x98);
-    auto pos = [&](int k, int c) { float v; std::memcpy(&v, rec[std::clamp(k, 0, (int)rec.size() - 1)].data() + 0x24 + 4 * c, 4); return v; };
-    float fx = pos(pose + 4, 0) - pos(pose - 4, 0), fz = pos(pose + 4, 2) - pos(pose - 4, 2), fl = std::sqrt(fx * fx + fz * fz);
-    if (fl > 0.0f) { fx /= fl; fz /= fl; }
-    float* q = reinterpret_cast<float*>(p + 0x24);
-    q[0] += lats[pass] * fz;
-    q[1] += up;
-    q[2] -= lats[pass] * fx;
-    scenery_reach.store(off ? -1.0f : saved);
-    if (dev_log) {
-        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        std::fprintf(dev_log, "P %d %lld pass=%d lat=%.0f pose=%d off=%d cam=%.0f,%.0f,%.0f\n", f, (long long)ms, pass, lats[pass],
-            pose, off ? 1 : 0, q[0], q[1], q[2]);
-        // At the end of each pose's Reduced turn: every object the mask (as last worked out, at this pose) leaves out, with
-        // what the rules saw: its height and width as seen (degrees), their product and its distance.
-        if (f % (2 * hold) == hold - 1) {
-            std::fprintf(dev_log, "Q pose=%d pass=%d", pose, pass);
-            for (int n = 0; n < dev_n; n++) {
-                if ((reduced_mask[n / 32] >> (n % 32)) & 1) continue;
-                float dx = dev_x[n] - camera_x, dz = dev_z[n] - camera_z;
-                std::fprintf(dev_log, " %d:%.1f,%.1f,%.0f,%.0f", n, dev_high[n] * 57.29578f, dev_wide[n] * 57.29578f,
-                    dev_high[n] * dev_wide[n] * 3282.8f, std::sqrt(dx * dx + dz * dz));
-            }
-            std::fprintf(dev_log, "\n");
-        }
-    }
-    f++;
-}
