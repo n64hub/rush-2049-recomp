@@ -215,6 +215,8 @@ static void dev_log_mask(uint8_t* rdram, const uint32_t* mask);
 static void dev_reach_mask(bool first, bool in, uint32_t record, uint32_t row, uint8_t* rdram);
 static void dev_note(int n, float high, float wide, bool fixed, float x, float z);
 static void dev_counts(uint8_t* rdram);
+// DEV ONLY: DEV_AREA_K scales the area limit (and span by its square root) without a rebuild.
+static float dev_k(bool root) { static float k = std::getenv("DEV_AREA_K") ? (float)std::atof(std::getenv("DEV_AREA_K")) : 1.0f; return root ? std::sqrt(k) : k; }
 extern "C" void rush2049_scenery_camera(uint8_t* rdram, gpr position) {
     dev_frame_tick(rdram);
     const float* p = reinterpret_cast<const float*>(rdram + ((uint32_t)position - 0x80000000));
@@ -262,7 +264,7 @@ extern "C" void rush2049_scenery_stretch(uint8_t* rdram, recomp_context* ctx) {
         float high = std::atan2(top, across) - std::atan2(bottom, across);
         float wide = 2.0f * std::atan(std::fmax(value(box + 0x5C) - value(box + 0x50),
             value(box + 0x64) - value(box + 0x58)) / 2.0f / across);
-        if (value(box + 0x60) - value(box + 0x54) > tall || top > rise * d || high > span || high * wide > area) {
+        if (value(box + 0x60) - value(box + 0x54) > tall || top > rise * d || high > span * dev_k(true) || high * wide > area * dev_k(false)) {
             reduced_mask[n / 32] |= 1u << (n % 32);
         }
         dev_note(n, high, wide, value(box + 0x60) - value(box + 0x54) > tall || top > rise * d,
@@ -386,6 +388,34 @@ static void dev_frame_tick(uint8_t* rdram) {
             if (dev_ticks == 0) dev_saved = scenery_reach.load(std::memory_order_relaxed);
             int k = std::atoi(ab);
             scenery_reach.store(((dev_ticks++ / k) & 1) ? -1.0f : dev_saved, std::memory_order_relaxed);
+        }
+        // DEV_ROCK=T: from race clock T on, the followed car is held where it was then and rocked back and forth along
+        // its heading (DEV_ROCK_D units each way, a period of 480 frames), the way a player rolls to and fro over a spot.
+        static bool rock_on = false;
+        static float rock_p[3], rock_dir[2], rock_o[9];
+        static int rock_t = 0;
+        if (const char* rk = std::getenv("DEV_ROCK")) {
+            uint32_t car = 0x8014A250 + 0x808 * dev_u8(rdram, 0x80150C04);
+            if (!rock_on && dev_f32(rdram, 0x801543CC) >= (float)std::atof(rk)) {
+                rock_on = true;
+                for (int i = 0; i < 3; i++) rock_p[i] = dev_f32(rdram, car + 0x22C + 4 * i);
+                for (int i = 0; i < 9; i++) rock_o[i] = dev_f32(rdram, car + 0x2EC + 4 * i);
+                float vx = dev_f32(rdram, car + 0x220), vz = dev_f32(rdram, car + 0x228), vl = std::sqrt(vx * vx + vz * vz);
+                rock_dir[0] = vl > 0.0f ? vx / vl : 1.0f; rock_dir[1] = vl > 0.0f ? vz / vl : 0.0f;
+            }
+            if (rock_on) {
+                const char* rd = std::getenv("DEV_ROCK_D");
+                float s = (rd ? (float)std::atof(rd) : 250.0f) * std::sin(6.2831853f * (rock_t++ % 480) / 480.0f);
+                dev_f32(rdram, car + 0x22C) = rock_p[0] + rock_dir[0] * s;
+                dev_f32(rdram, car + 0x230) = rock_p[1];
+                dev_f32(rdram, car + 0x234) = rock_p[2] + rock_dir[1] * s;
+                for (int i = 0; i < 9; i++) dev_f32(rdram, car + 0x2EC + 4 * i) = rock_o[i];
+                for (int i = 0; i < 3; i++) {
+                    dev_f32(rdram, car + 0x220 + 4 * i) = 0.0f;
+                    dev_f32(rdram, car + 0x40 + 4 * i) = 0.0f;
+                    dev_f32(rdram, car + 0x4C + 4 * i) = 0.0f;
+                }
+            }
         }
         const char* v = std::getenv("DEV_VIEW");
         if (v) {
