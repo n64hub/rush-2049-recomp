@@ -110,12 +110,16 @@
 // Nor does that catch what is low and wide. Further down Track 2, a long building 1900 units out stood under 4 degrees
 // tall from the road but 17 wide, and came in at once as the car drove into the next stretch (GitHub #267). Its height
 // barely changes with distance (3 degrees 2500 units out), so `span` would have to drop under that to bring it in
-// sooner, for every object on the track. So Reduced also lets through every object
-// whose box looks bigger than `area` (40 square degrees) from the camera: its height as above times its width, the
-// longer of its x and z extents at the same distance. Along a lap of Track 2 driven the right way, that takes the
-// objects in view from 14.3 to 16.6 (Off 24.9), and the biggest that comes in from 165 square degrees to 42. In that lap
-// and in the attract race at 1920x1080 it adds about 11% to RT64's draw calls (729 against 656, 678 against 612) and 3%
-// to the GPU's time a frame, and on an RTX 2070 the frame rate doesn't move.
+// sooner, for every object on the track. So Reduced also lets through every object whose box looks bigger than `area`
+// (20 square degrees) from the camera: its height as above times its width, the longer of its x and z extents at the
+// same distance. What crosses that comes in at once all the same, so the limit sets how small it is by then. At 40
+// square degrees it was still plain on the skyline (GitHub #267): with the camera pinned to an attract race's own path
+// and moved on 11 units at a time, a wooded hill 5000 units out came in whole behind the town on Track 2 driven the
+// right way, past the tunnel toward the finish, and a ridge 2800 units out driven the wrong way. At 20 both are drawn
+// all along those stretches as they are at Off, and what comes in at the limit does so about 1.4 times as far out, at
+// half the size. In Track 2's attract race Reduced then lets through 24.4 objects in view a frame (40: 20.7, Off 29.6).
+// At 1600x1200 on an RTX 2070 that is about 10% more of RT64's draw calls than 40 there (773 against 705 a frame) and
+// 8% in the attract race (680 against 630), at the same GPU time and frame rate.
 //
 // Besides these limits and that table, func_8009DD88 skips a node only by its per-camera hidden bit (0x100 << camera
 // in its flags, func_8009DD18: hidden unless a child is visible) and its disable bit. The game sets and clears them
@@ -155,7 +159,7 @@ std::atomic<float> scenery_reach{ -1.0f };
 constexpr float tall = 600.0f;
 constexpr float rise = 0.15f;
 constexpr float span = 5.0f * 3.14159265f / 180.0f;
-constexpr float area = 40.0f * (3.14159265f / 180.0f) * (3.14159265f / 180.0f);
+constexpr float area = 20.0f * (3.14159265f / 180.0f) * (3.14159265f / 180.0f);
 float camera_x = 0.0f, camera_y = 0.0f, camera_z = 0.0f;
 uint32_t reduced_mask[4];
 bool reduced_valid = false;

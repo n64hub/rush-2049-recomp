@@ -300,7 +300,7 @@ of 590), most of it for Draw Distance; both at Original take about a fifth off d
 at its default (Off) draws every building and wall of the track that is in view wherever you are (what is behind the
 camera or off the sides is skipped, as on an N64): in the attract race about 840 calls a frame against Original's
 490, and 58 fps against 60 on a busy 6-core PC. That is work for the CPU as much as the GPU, so on a weaker PC that
-loses frames with Off, try Reduced (about 650 calls) before Original.
+loses frames with Off, try Reduced (about 680 calls) before Original.
 
 Nearly a third of the default frame's cost stays even at Resolution Original: mostly drawing the game's geometry
 (about 500 to 800 draws a frame), which costs about the same at any resolution, and drawing the finished frame into the
