@@ -25,6 +25,9 @@
 // runtime-patches/rt64-0001-viewport-edge-origins.patch) and the scissor anchored the same way. An edge in the left
 // quarter of the screen follows the window's left edge, one in the right quarter its right edge, and one in between
 // the centre, so the two 2-player views reach both sides of the window and the four 4-player views meet in the middle.
+// How far the origins move is HUD Placement's, so at 16:9 a wider window keeps bars beside the views; at Full Window,
+// each frame widened here tells RT64 to move them to the window's edges (runtime-patches/rt64-0012) and the rest keep
+// the player's placement.
 // RT64 widens the projection with the view. The HUD moves with the views: a rectangle in a view anchors to the view's
 // left edge, right edge or centre, whichever it's nearest, and a rectangle outside the views to the nearest view edge.
 // Text is a rectangle a letter, so rectangles drawn one after another along one line (a word, a line of the pause
@@ -901,6 +904,7 @@ extern "C" void rush2049_enable_extended_gbi(uint8_t* rdram, uint32_t task_addr)
     }
     split_screen_last_frame = scan.split_screen;
     bool widened = hud && scan.split_screen && !menu && rush2049::split_screen_expand() && widen_split_screen(rdram, scan);
+    rush2049::set_split_screen_full_width(widened);
     if (widened) {
         anchor_lines(rdram);
     }

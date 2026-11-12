@@ -1,0 +1,53 @@
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -9,6 +9,7 @@
+ 
+ #include "rt64_present_queue.h"
+ 
++#include <atomic>
+ #include <cstdio>
+ #include <cstdlib>
+ 
+@@ -19,6 +20,12 @@
+ #define ENABLE_HIGH_RESOLUTION_RENDERER 1
+ 
+ namespace RT64 {
++    static std::atomic<bool> extendedAspectFull{ false };
++
++    void setExtendedAspectFull(bool full) {
++        extendedAspectFull.store(full, std::memory_order_relaxed);
++    }
++
+     // WorkloadQueue
+ 
+     WorkloadQueue::WorkloadQueue() {
+@@ -394,7 +401,11 @@ namespace RT64 {
+         }
+ 
+         // Compute the extended GBI aspect ratio percentage to be used for the frame.
+-        const auto extRatioMode = ext.sharedResources->userConfig.extAspectRatio;
++        auto extRatioMode = ext.sharedResources->userConfig.extAspectRatio;
++        if ((extRatioMode == UserConfiguration::AspectRatio::Manual) && extendedAspectFull.load(std::memory_order_relaxed)) {
++            extRatioMode = UserConfiguration::AspectRatio::Expand;
++        }
++
+         switch (extRatioMode) {
+         case UserConfiguration::AspectRatio::Expand:
+             workloadConfig.extAspectPercentage = 1.0f;
+diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
+--- a/src/hle/rt64_state.h
++++ b/src/hle/rt64_state.h
+@@ -45,6 +45,12 @@ namespace RT64 {
+     // each workload.
+     void setTranslucentSort(uint32_t minListDepth);
+ 
++    // Rush 2049 patch: while set, a workload's extended GBI origins reach the window's edges as with the extended
++    // aspect ratio at Expand, whatever it is set to (a Manual target of 16:9 stops them short of a wider window). Set
++    // by the game for the frames it draws in split screen, so the views fill the window and a single view's HUD keeps
++    // the player's placement. Read with each workload; Original stays Original.
++    void setExtendedAspectFull(bool full);
++
+     struct State {
+         struct External {
+             Application *app;

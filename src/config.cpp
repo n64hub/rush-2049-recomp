@@ -24,6 +24,11 @@ namespace RT64 {
     void setTranslucentSort(uint32_t minListDepth);
 }
 
+// runtime-patches/rt64-0012: the HUD's origins at the window's edges, whatever HUD Placement says.
+namespace RT64 {
+    void setExtendedAspectFull(bool full);
+}
+
 namespace {
     enum class Accessory {
         ControllerPak,
@@ -212,11 +217,13 @@ namespace {
 
     enum class SplitScreenRatio {
         Expand,
+        Full,
         Original,
         OptionCount
     };
     const std::vector<recomp::config::ConfigOptionEnumOption> split_screen_ratio_options = {
         {SplitScreenRatio::Expand, "Expand", "Expand"},
+        {SplitScreenRatio::Full, "Full", "Full Window"},
         {SplitScreenRatio::Original, "Original", "Original"},
     };
     const std::string split_screen_ratio_option = "split_screen_ratio";
@@ -274,7 +281,12 @@ namespace {
 }
 
 bool rush2049::split_screen_expand() {
-    return split_screen_ratio_setting.load(std::memory_order_relaxed) == SplitScreenRatio::Expand;
+    SplitScreenRatio ratio = split_screen_ratio_setting.load(std::memory_order_relaxed);
+    return ratio == SplitScreenRatio::Expand || ratio == SplitScreenRatio::Full;
+}
+
+void rush2049::set_split_screen_full_width(bool widened) {
+    RT64::setExtendedAspectFull(widened && split_screen_ratio_setting.load(std::memory_order_relaxed) == SplitScreenRatio::Full);
 }
 
 bool rush2049::menu_expand() {
@@ -628,8 +640,14 @@ void rush2049::init_config() {
         "How the 2- and 4-player views fit a wide window. The original game splits a 4:3 screen, so at 16:9 the "
         "views sit inside a 4:3 area with bars at the sides."
         "<br/>"
-        "<b>Expand:</b> each view widens to fill its share of the window, and its HUD moves with it. Needs "
-        "<recomp-color primary>Aspect Ratio</recomp-color> at Expand and "
+        "<b>Expand:</b> each view widens to fill its share of the window, and its HUD moves with it, as far as "
+        "<recomp-color primary>HUD Placement</recomp-color> lets the HUD go: at 16:9, a wider window keeps bars at "
+        "the sides."
+        "<br/>"
+        "<b>Full Window:</b> the same, out to the window's edges whatever HUD Placement says, which then only sets "
+        "where a single player's HUD sits."
+        "<br/>"
+        "Both need <recomp-color primary>Aspect Ratio</recomp-color> at Expand and "
         "<recomp-color primary>HUD Placement</recomp-color> at something other than Original.",
         split_screen_ratio_options,
         SplitScreenRatio::Expand
