@@ -1,1 +1,0 @@
-**New:** **Split-Screen Aspect Ratio** on the Graphics tab has a third value, **Full Window**: in a window wider than 16:9 (21:9, say), 2- and 4-player split screen reaches the window's edges with no bars at the sides, while a single player's HUD stays where **HUD Placement** puts it. Expand, the default, is unchanged. Contributed by @IZIDIOZZ (#346).
