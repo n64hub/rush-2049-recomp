@@ -20,6 +20,8 @@ RecompFrontend-0007    set_cursor_always_visible: the cursor stays shown while a
                        still hides while the cursor is locked for mouse aiming)
 RecompFrontend-0008    set_cursor_shown_while_moving: the cursor shows while the mouse moves, whatever input was last,
                        and hides after two seconds still; the cursor's state is set every frame, not only on an event
+RecompFrontend-0009    the first press that joins a controller joins every connected one that isn't a player yet, in
+                       the order they were connected, so the second controller plugged in is player 2 as on a console
 plume-0005             a query pool read of only the queries written (Vulkan calls a read with an unwritten one not ready)
 rt64-0001              viewports with left and right edge origins (split screen); fill-rect fix
 rt64-0003              GPU timings for --gpu-profile, split into the parts of each pass (none read on the web)

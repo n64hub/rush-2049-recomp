@@ -41,9 +41,12 @@ the process you started, from a DPI-aware process (`SetProcessDPIAware()` first,
 --show-console               the log to a console (Windows: opens one; a redirect gets it too) or, on Linux, to a
                              redirect, which without it gets nothing; otherwise it goes to rush2049.log in the app
                              folder, the crash trace with it (Linux: unless started from a terminal)
---stacks / --probes          every few seconds: every thread's stack and the probes / the probes only
+--stacks / --probes          every few seconds: every thread's stack and the probes / the probes only, and with
+                             --probes each port's buttons as the game reads them
 --players <n>                ports 2..n copy port 1 (and --input), to drive split screen with one pad
 --input <file>               scripted port 1 input: "<seconds> <buttons hex> [x y]" lines; 0x10000 is Rewind
+--pad <file>                 plug in a virtual controller driven by the file (repeat for more, in plug order): as
+                             --input, but SDL controller button bits (0x1 A, 0x40 Start); --probes logs its rumble
 --window <w>x<h>             window size (default 1600x1200; Auto resolution follows it)
 --musyx hle|native|lle|compare   audio path; native is the HLE without the 44.1 kHz mix
 --dump-audio <wav>           the game's mix before resampling (float); --dump-output <wav>: what the device gets

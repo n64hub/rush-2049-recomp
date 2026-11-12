@@ -1,0 +1,1 @@
+**Changed:** with several controllers, players now go by the order the controllers were plugged in, as on the console: the first press of any of them makes the first one plugged in player 1 and the second player 2, where before whichever pressed first was player 1. **Assign Players** on the Controls tab still puts them in any order.

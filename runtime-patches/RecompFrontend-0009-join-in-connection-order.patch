@@ -1,0 +1,44 @@
+diff --git a/recompinput/src/players.cpp b/recompinput/src/players.cpp
+--- a/recompinput/src/players.cpp
++++ b/recompinput/src/players.cpp
+@@ -1,3 +1,6 @@
++#include <algorithm>
++#include <vector>
++
+ #include "recompinput/recompinput.h"
+ #include "recompinput/players.h"
+ #include "recompinput/profiles.h"
+@@ -292,9 +295,30 @@
+             keyboard_assigned |= PlayerState.players[i].keyboard_enabled;
+         }
+         if (controller != nullptr && !is_player && PlayerState.players.get_count() < PlayerState.max_players) {
+-            int player_index = (int)PlayerState.players.get_count();
+-            PlayerState.players.add_controller_player(controller);
+-            set_controller_player_profiles(player_index, keyboard_assigned);
++            // Every connected controller that isn't a player yet joins with it, in the order they were connected (SDL's
++            // instance IDs rise with each connection), as a console's ports go by where each pad is plugged in: the
++            // second controller plugged in is player 2 whichever presses first.
++            std::vector<SDL_JoystickID> joining;
++            for (int i = 0; i < SDL_NumJoysticks(); i++) {
++                SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(i);
++                SDL_GameController* other = recompinput::get_controller_from_joystick_id(id);
++                bool other_is_player = false;
++                for (size_t p = 0; p < PlayerState.players.get_count(); p++) {
++                    other_is_player |= PlayerState.players[p].controller == other;
++                }
++                if (other != nullptr && SDL_GameControllerGetAttached(other) && !other_is_player) {
++                    joining.push_back(id);
++                }
++            }
++            std::sort(joining.begin(), joining.end());
++            for (SDL_JoystickID id : joining) {
++                if (PlayerState.players.get_count() >= PlayerState.max_players) {
++                    break;
++                }
++                int player_index = (int)PlayerState.players.get_count();
++                PlayerState.players.add_controller_player(recompinput::get_controller_from_joystick_id(id));
++                set_controller_player_profiles(player_index, keyboard_assigned);
++            }
+             if (recompui::controls_page != nullptr) {
+                 recompui::controls_page->force_update();
+             }

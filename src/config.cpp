@@ -393,8 +393,8 @@ void rush2049::init_config() {
         Accessory::Both
     );
     // Per Player is RecompFrontend's multiplayer mode: each player has a port of their own and each controller a
-    // profile of its own, and a controller becomes the next player the first time it presses a button
-    // (RecompFrontend-0003), or players are put in order with Assign Players (Controls page). Nothing of it is saved,
+    // profile of its own, and the first press of a controller joins every connected one that isn't a
+    // player yet, in the order they were connected, and a later one on its own first press (RecompFrontend-0003, -0009), or players are put in order with Assign Players (Controls page). Nothing of it is saved,
     // so players join again each session. Until a controller joins it plays as One Player, which is its single-player
     // mode: every controller and the keyboard on port 1 through one shared profile, so the Controls page shows the
     // keyboard's keys then (RECOMPINPUT_SINGLE_PLAYER_UNTIL_ASSIGNED, CMakeLists.txt). Player 1 keeps those keyboard
@@ -406,8 +406,8 @@ void rush2049::init_config() {
         "Controllers",
         "How controllers and the keyboard map to players."
         "<br/>"
-        "<b>Per Player:</b> each controller is a player of its own, as on the console. The first controller to press a "
-        "button is player 1, the next player 2, and so on, and the keyboard drives player 1. Assign Players on the "
+        "<b>Per Player:</b> each controller is a player of its own, as on the console, in the order they were plugged "
+        "in: the first is player 1, the second player 2, and so on, and the keyboard drives player 1. Assign Players on the "
         "Controls tab puts them in another order or gives the keyboard to another player. "
         "<b>One Player:</b> every controller and the keyboard drive player 1.",
         controllers_options,
