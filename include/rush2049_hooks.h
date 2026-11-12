@@ -21,6 +21,12 @@ void rush2049_retrace_clients(uint8_t* rdram, recomp_context* ctx);
 void rush2049_task_queued(uint8_t* rdram);
 gpr rush2049_task_framebuffer(gpr next_framebuffer, gpr current_framebuffer);
 
+/* Select Mode (src/four_player_races.cpp): whether a mode is offered, given what the game's table says. */
+gpr rush2049_mode_offered(uint8_t* rdram, gpr mode, gpr offered);
+/* Race setup (src/four_player_races.cpp), after the game clears the computer cars for 3 or more players: the track's
+   number of them, to put back. */
+void rush2049_race_computer_cars(uint8_t* rdram, gpr track_cars);
+
 /* Widescreen race HUD (src/widescreen.cpp): around every texture rectangle, when the race timer is drawn, and
    before a graphics task starts (turns on RT64's extended GBI for that display list). */
 void rush2049_hud_rect_begin(uint8_t* rdram, recomp_context* ctx);

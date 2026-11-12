@@ -88,6 +88,18 @@ namespace {
     };
     const std::string save_ghosts_option = "save_ghosts";
 
+    // src/four_player_races.cpp.
+    enum class RacePlayers {
+        Original,
+        UpToFour,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> race_players_options = {
+        {RacePlayers::Original, "Original", "Original"},
+        {RacePlayers::UpToFour, "UpToFour", "Up to 4"},
+    };
+    const std::string race_players_option = "race_players";
+
     enum class MouseCursor {
         Original,
         Shown,
@@ -313,6 +325,11 @@ bool rush2049::save_ghosts() {
     return static_cast<SaveGhosts>(std::get<uint32_t>(value)) == SaveGhosts::On;
 }
 
+bool rush2049::races_up_to_four() {
+    auto value = recompui::config::get_general_config().get_option_value(race_players_option);
+    return static_cast<RacePlayers>(std::get<uint32_t>(value)) == RacePlayers::UpToFour;
+}
+
 bool rush2049::large_controller_pak() {
     auto value = recompui::config::get_general_config().get_option_value(pak_size_option);
     return static_cast<PakSize>(std::get<uint32_t>(value)) == PakSize::Large;
@@ -450,6 +467,19 @@ void rush2049::init_config() {
         "The game saves one only for a developer's profile.",
         save_ghosts_options,
         SaveGhosts::On
+    );
+    general.add_enum_option(
+        race_players_option,
+        "Race Players",
+        "How many players can race each other in Single Race and Practice. The game's split screen draws four views, "
+        "and Stunt and Battle take four players."
+        "<br/>"
+        "<b>Up to 4:</b> 3 and 4 players can race too, each in a quarter of the screen; with 3, the fourth quarter "
+        "shows the track map and the clock. Computer cars fill the field as they do for 1 and 2 players: 3 of them "
+        "with 3 players, and 1 with 4. "
+        "<b>Original:</b> as the game shipped, Select Mode offers a race to 1 or 2 players only.",
+        race_players_options,
+        RacePlayers::UpToFour
     );
     general.add_enum_option(
         mouse_cursor_option,

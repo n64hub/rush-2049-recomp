@@ -537,3 +537,20 @@ text = "    rush2049_scenery_stretch(rdram, ctx);"
 func = "func_8009EBC0"
 before_vram = 0x8009EFEC
 text = "    ctx->r12 = rush2049_scenery_mask(ctx->r12, ctx->r6);"
+
+# Races for 3 and 4 players (src/four_player_races.cpp). Select Mode offers a mode when ovl1_func_80399394 returns
+# nonzero: a byte from a table of 7 modes per player count at 0x803B4679 ($s0 holds it here, every path through the
+# function returns it), where Single Race and Practice are for 1 or 2 players. $a0 is still the mode except on
+# Obstacle's path, which has called the unlock check with 0x12.
+[[patches.hook]]
+func = "ovl1_func_80399394"
+before_vram = 0x803993E0
+text = "    ctx->r16 = rush2049_mode_offered(rdram, ctx->r4, ctx->r16);"
+
+# Computer-driven cars in races for 3 and 4 players (src/four_player_races.cpp). Setting up a race, the game copies the
+# track's number of computer cars (byte 0x16 of its entry, $t5) to the halfword at 0x80142724, then clears it when
+# there are 3 or more players; the race fills the field up to 6 cars from it. Put back, capped at 1 for 4 players.
+[[patches.hook]]
+func = "func_800C9BE0"
+before_vram = 0x800C9DE0
+text = "    rush2049_race_computer_cars(rdram, ctx->r13);"
