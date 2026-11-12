@@ -78,6 +78,9 @@ option has an Original value that runs the game as it shipped.
   It shows the ghost each pak already holds for that track and asks before replacing it.
   As shipped, the game kept a ghost only until you quit (as GHOST 1) and showed the prompt only for a developer's
   profile name. Saving needs a player profile on the pak: Just Play has none, so it keeps the ghost for the session.
+- **Large 4-player map**: where the four views of a 4-player split screen meet, the track map is the 64-pixel one 1
+  to 3 players see, see-through as theirs, instead of a 32-pixel picture on a dark square with the cars' markers on
+  top of each other.
 - **Races for 3 and 4 players**: Single Race and Practice are offered to 3 and 4 players, each in a quarter of the
   screen (with 3, the fourth quarter shows the track map and the clock). As shipped they were for 1 or 2 players,
   and only Stunt and Battle took more. Computer cars race with them as with 1 and 2 players: 3 with 3 players, 1
@@ -111,6 +114,7 @@ shipped, set every Original value:
 | Lower input lag | Input Lag | `graphics.json` `input_lag` | `"Reduced"` (60 fps and above) | `"Original"` |
 | Widescreen 3D | Aspect Ratio | `graphics.json` `ar_option` | `"Expand"` | `"Original"` (4:3) |
 | Widescreen race HUD | HUD Placement | `graphics.json` `hr_option` | `"Clamp16x9"` | `"Original"` |
+| Large 4-player map | Split-Screen Map | `graphics.json` `split_screen_map` | `"Large"` | `"Original"` (32 pixels, on a dark square) |
 | Widescreen split screen | Split-Screen Aspect Ratio | `graphics.json` `split_screen_ratio` | `"Expand"` (as wide as HUD Placement allows; `"Full"`: the whole window, whatever HUD Placement says; both need Aspect Ratio at Expand and HUD Placement other than Original) | `"Original"` (4:3, pillarboxed) |
 | Widescreen menus | Menu Aspect Ratio | `graphics.json` `menu_ratio` | `"Expand"` (up to about 21:9; needs Aspect Ratio at Expand) | `"Original"` (4:3, pillarboxed) |
 | Draw distance | Draw Distance | `graphics.json` `draw_distance` | `"Far"` (4×; `"Farthest"` is 16×) | `"Original"` |

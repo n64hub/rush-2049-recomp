@@ -38,6 +38,8 @@ namespace rush2049 {
     // menu whose background is mirrored out (Menu Aspect Ratio at Expand), which reaches the window's edges whatever
     // HUD Placement says.
     void set_full_width(bool split_widened, bool menu_widened);
+    // Whether the track map between four split-screen views is drawn larger ("Split-Screen Map" at Large).
+    bool split_screen_map_large();
     // Whether the menus' background is mirrored out to a wide window's edges ("Menu Aspect Ratio" at Expand).
     bool menu_expand();
     // Where the game's own commands start in a graphics task's list: after the two commands the frame's list starts with

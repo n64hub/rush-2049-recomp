@@ -31,6 +31,8 @@ void rush2049_race_computer_cars(uint8_t* rdram, gpr track_cars);
    before a graphics task starts (turns on RT64's extended GBI for that display list). */
 void rush2049_hud_rect_begin(uint8_t* rdram, recomp_context* ctx);
 void rush2049_hud_rect_end(uint8_t* rdram);
+/* The name of the track map picture a 4-player split screen loads (src/widescreen.cpp). */
+gpr rush2049_split_map_name(gpr name);
 void rush2049_hud_race_mark(uint8_t* rdram);
 /* At the start of the music thread's retrace tick (us.toml): nonzero while another retrace is already queued for the
    thread, and the tick should return (src/music_thread.cpp). */

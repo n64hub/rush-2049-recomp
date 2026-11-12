@@ -554,3 +554,10 @@ text = "    ctx->r16 = rush2049_mode_offered(rdram, ctx->r4, ctx->r16);"
 func = "func_800C9BE0"
 before_vram = 0x800C9DE0
 text = "    rush2049_race_computer_cars(rdram, ctx->r13);"
+
+# The 4-player track map (src/widescreen.cpp, Split-Screen Map): func_80109468 loads MAP_MD, a 32-pixel picture of the
+# track, in place of MAP_LG, the 64-pixel one 1 to 3 players see, when 0x80151AD0 is 4. Its name is in $a1 here.
+[[patches.hook]]
+func = "func_80109468"
+before_vram = 0x80109510
+text = "    ctx->r5 = rush2049_split_map_name(ctx->r5);"

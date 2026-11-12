@@ -243,6 +243,20 @@ namespace {
     // Read on the game thread with every display list.
     std::atomic<SplitScreenRatio> split_screen_ratio_setting{ SplitScreenRatio::Expand };
 
+    // src/widescreen.cpp.
+    enum class SplitScreenMap {
+        Large,
+        Original,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> split_screen_map_options = {
+        {SplitScreenMap::Large, "Large", "Large"},
+        {SplitScreenMap::Original, "Original", "Original"},
+    };
+    const std::string split_screen_map_option = "split_screen_map";
+    // Read on the game thread with every texture rectangle.
+    std::atomic<SplitScreenMap> split_screen_map_setting{ SplitScreenMap::Large };
+
     enum class MenuRatio {
         Expand,
         Original,
@@ -301,6 +315,10 @@ bool rush2049::split_screen_expand() {
 void rush2049::set_full_width(bool split_widened, bool menu_widened) {
     RT64::setExtendedAspectFull(menu_widened ||
         (split_widened && split_screen_ratio_setting.load(std::memory_order_relaxed) == SplitScreenRatio::Full));
+}
+
+bool rush2049::split_screen_map_large() {
+    return split_screen_map_setting.load(std::memory_order_relaxed) == SplitScreenMap::Large;
 }
 
 bool rush2049::menu_expand() {
@@ -686,6 +704,21 @@ void rush2049::init_config() {
     );
     on_apply(graphics, split_screen_ratio_option, [](uint32_t value) {
         split_screen_ratio_setting = static_cast<SplitScreenRatio>(value);
+    });
+
+    graphics.add_enum_option(
+        split_screen_map_option,
+        "Split-Screen Map",
+        "The track map in the middle of a 4-player split screen, where the four views meet. The original game draws a "
+        "smaller picture of the track there than 1 to 3 players see, 32 pixels square on a dark square, with the "
+        "cars' markers on top of each other."
+        "<br/>"
+        "<b>Large:</b> the 64-pixel map 1 to 3 players see, see-through as theirs, with no dark square behind it.",
+        split_screen_map_options,
+        SplitScreenMap::Large
+    );
+    on_apply(graphics, split_screen_map_option, [](uint32_t value) {
+        split_screen_map_setting = static_cast<SplitScreenMap>(value);
     });
 
     graphics.add_enum_option(
