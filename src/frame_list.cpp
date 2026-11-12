@@ -20,6 +20,15 @@
 // gEXEnable and gEXSetRDRAMExtended(1), and the game's list follows them: in that mode RT64 reads an address with
 // the top bit set (0x80000000 and up) as physical, which for the game's own addresses, all in 0x80000000-0x80800000,
 // is what masking them gave. The task's list is the buffer's start; the game is pointed after the two commands.
+//
+// The frame's matrices. Each frame also takes a 64-byte matrix for every scenery node it draws from its block of frame
+// data: the pointer at 0x8015B260 is set to the block + 0x6C0 where the list slot is set up, and func_8009DD88 adds 64
+// to it for each node, with no end. A block has room for about 1100, which one or two views never reach, but four
+// views of a city track pass it: the last matrices are written over the other block's start, its viewports among
+// them, while the renderer reads that frame, and from the third view on a view's scenery goes missing for a frame and
+// it flashes the colour of the sky. So each block's matrices go in a buffer of their own in the recomp heap too, with
+// room for four times as many, which the extended RDRAM mode above lets RT64 read. The pointer is set there in the
+// same hooks, right after the game sets it.
 
 #include <cstdint>
 
@@ -38,11 +47,14 @@ constexpr uint32_t frame_data_addr = 0x8015B250;  // the frame data being built
 constexpr uint32_t slot_offset = 0x9CC0;
 constexpr uint32_t prefix_bytes = 2 * 8;
 constexpr uint32_t list_bytes = prefix_bytes + 16000 * 8;
+constexpr uint32_t matrix_pointer_addr = 0x8015B260;  // where the frame's next node matrix goes
+constexpr uint32_t matrix_bytes = 4096 * 64;
 
 // A buffer for each slot, by the slot's address (the game has two).
 struct Buffer {
     uint32_t slot = 0;
     uint32_t list = 0;
+    uint32_t matrices = 0;
 };
 Buffer buffers[4];
 
@@ -61,8 +73,10 @@ uint32_t buffer_for(uint8_t* rdram, uint32_t slot) {
             if (list == nullptr) {
                 return 0;
             }
+            void* matrices = recomp::alloc(rdram, matrix_bytes);
             b.slot = slot;
             b.list = (uint32_t)((uint8_t*)list - rdram) + 0x80000000;
+            b.matrices = matrices ? (uint32_t)((uint8_t*)matrices - rdram) + 0x80000000 : 0;
             GfxCommand prefix[2]{};
             gEXEnable(&prefix[0]);
             gEXSetRDRAMExtended(&prefix[1], 1);
@@ -87,8 +101,21 @@ uint32_t rush2049::frame_list_game_start(uint32_t task_list) {
     return task_list;
 }
 
+// The matrix buffer of the block whose list slot is at slot; 0 if it has none.
+uint32_t matrices_for(uint32_t slot) {
+    for (const Buffer& b : buffers) {
+        if (b.slot == slot) {
+            return b.matrices;
+        }
+    }
+    return 0;
+}
+
 extern "C" gpr rush2049_frame_list(uint8_t* rdram, gpr slot) {
     uint32_t list = buffer_for(rdram, (uint32_t)slot);
+    if (uint32_t matrices = matrices_for((uint32_t)slot); matrices != 0) {
+        write_word(rdram, matrix_pointer_addr, matrices);
+    }
     return list != 0 ? (gpr)(int32_t)(list + prefix_bytes) : slot;
 }
 
