@@ -56,8 +56,9 @@ anyone keeps ROMs.
   BanjoRecomp, Zelda64Recomp or Donkey-Kong-64-Recompiled: their CONTRIBUTING.md asks for no LLM-written code
   (plume's, no AI-made contribution and no AI talking to its maintainers). The web forks stay forks.
 - Code from a repo without a license is never copied: facts learned from one only.
-- Priority is by what it breaks: high for a crash, high or med for a GitHub issue (high when it stops someone
-  playing), low for a small improvement. Work without one gets one from whoever first can tell (often its title
+- Priority is by what it breaks: high for a crash, low for a small improvement the project finds itself. Work that
+  comes from GitHub (an issue, a comment on one, a pull request from outside) is med, or high when it is a crash or
+  stops someone playing, and never low. Work without one gets one from whoever first can tell (often its title
   says), before anything else they do on it; a priority found wrong is changed at once, in the same work. This recomp
   is the project's own, so its work comes before N64Recomp-browser's of the same kind.
 - CI (`.github/workflows/ci.yml`) has no ROM: it builds everything but the recompiled code and stops short of linking.
