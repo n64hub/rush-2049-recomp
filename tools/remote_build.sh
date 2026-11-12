@@ -11,6 +11,13 @@
 # container is capped at $BUILD_CPUS cores (12) and 24 GB, so it leaves room for whatever else the host runs. Runs on
 # one copy wait for each other (flock), and its container is named rush2049-<name>, so `docker stop` names it.
 #
+# A copy is the work's own, and the work forgets it when it ends: copies left behind filled the host's disk (140 of
+# them, ~300 GB). So every command touches its copy's .lock, and every sync first deletes the copies nobody has used
+# for $BUILD_KEEP_DAYS days (3), by that and the copy's own mtime, unless a run holds the lock. The usual copies stay
+# however long they idle, since what they keep is the incremental build: publish (tools/publish_page.sh),
+# release-linux (tools/release.sh) and pages-<game> (N64Recomp-browser's tools/publish_pages.sh). Only copies are
+# looked at (a folder with a .lock), so the ccache and anything else under ~/rush2049 stays.
+#
 # Usage: BUILD_HOST=<host> tools/remote_build.sh [-C <checkout>] [-n <name>] <command>
 #   sync [<commit>]   send <commit> (default HEAD, with the uncommitted changes to tracked files; untracked files are
 #                     not sent) to the copy, check it out there with its submodules, patch them
@@ -25,6 +32,7 @@
 #   web [<target>]    sync, then build
 #   get <dir> <local dir>   copy the files at the top of <dir> (relative to the copy) here, build files left out
 #   clean             delete the copy (ccache stays)
+#   prune [<days>]    delete every copy but the usual ones unused for <days> (default $BUILD_KEEP_DAYS, 3); sync runs it
 # -C works on another checkout, a game fork for one (only sync, run, get and clean mean anything there); -n names the
 # copy, for one shared by several runs, as tools/publish_page.sh does; -d runs in another image, the Dockerfile given
 # (tools/release.sh's Linux build, tools/docker/Dockerfile.linux).
@@ -62,12 +70,23 @@ ensure_image() {
 # paths in logs and caches read the same in and out of the container.
 in_image() {
     ensure_image
-    remote "set -e; cd ~/$dir; exec flock .lock docker run --rm --name $base-$name --cpus $cpus --memory 24g \
+    remote "set -e; cd ~/$dir; touch .lock; exec flock .lock docker run --rm --name $base-$name --cpus $cpus --memory 24g \
         -u \$(id -u):\$(id -g) -v \$HOME/$base:\$HOME/$base -w \$HOME/$dir/repo -e HOME=\$HOME/$dir/home \
         -e CCACHE_DIR=\$HOME/$base/ccache $image bash -c $(printf %q "$1")"
 }
 
+# Deletes the copies unused for $1 days (see the header): not this one, not a usual one, not one a run holds.
+prune() {
+    remote "cd ~/$base 2> /dev/null || exit 0
+        for d in */; do d=\${d%/}
+            case \$d in $name | publish | release-linux | pages-*) continue ;; esac
+            [ -f \$d/.lock ] && [ -z \"\$(find \$d \$d/.lock -maxdepth 0 -mtime -$1)\" ] || continue
+            flock -n \$d/.lock rm -rf \$d && echo \"pruned \$d, unused for $1 days\" || true
+        done"
+}
+
 sync() {
+    prune "${BUILD_KEEP_DAYS:-3}"
     local commit="${1:-HEAD}" sha url diff="" private fetch="git fetch -q origin"
     sha="$(git -C "$checkout" rev-parse "$commit^{commit}")"
     url="$(git -C "$checkout" remote get-url origin)"
@@ -106,7 +125,7 @@ sync() {
         git -C "$checkout" diff HEAD --binary --ignore-submodules > "$tmp/work.diff"
         [[ -s "$tmp/work.diff" ]] && scp -q "$tmp/work.diff" "$host:$dir/work.diff" && diff=1
     fi
-    remote "set -e; cd ~/$dir; exec flock .lock bash -s" << EOF
+    remote "set -e; cd ~/$dir; touch .lock; exec flock .lock bash -s" << EOF
 set -e
 # No fetch recurses into submodules: the submodule update below fetches what the checkout names. A recursing fetch
 # walks every branch new to a submodule for the commits its own submodules name, and rt64's old branches name plume
@@ -173,5 +192,6 @@ get)
         ! -name '*.cmake' ! -name '.*' | tar cf - -T -" | tar xf - -C "$2"
     ;;
 clean) remote "cd ~/$base && flock $name/.lock rm -rf $name" ;;
+prune) prune "${1:-${BUILD_KEEP_DAYS:-3}}" ;;
 *) sed -n 2,26p "$0"; exit 1 ;;
 esac
