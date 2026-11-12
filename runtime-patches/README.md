@@ -38,4 +38,6 @@ rt64-0010              those see-through surfaces go in after the last other cal
                        a shallower call drawn after them (an effect, a Ghost Race's arrows) is still drawn after them
 rt64-0011              and among themselves picture by picture (a call's triangles that share corners), far to near by
                        each picture's farthest corner, a call drawn as one call per run of its pictures in that order
+rt64-0012              setExtendedAspectFull: while the game says so, the extended GBI origins reach the window's edges
+                       as at Expand, whatever the HUD Placement (split screen at the full width of a wide window)
 ```
