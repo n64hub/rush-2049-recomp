@@ -253,8 +253,9 @@ recomp menu       Esc                    Back
 These are defaults: rebind them on the Controls tab, and the game's own CONTROLS screen still applies. A pad with
 a saved profile keeps its bindings until "Reset to defaults".
 
-**Several players.** Each controller is a player of its own, as on the console: the first controller to press a
-button is player 1, the next one player 2, and so on up to 4, and the keyboard drives player 1. To put players in
+**Several players.** Each controller is a player of its own, as on the console, in the order they were plugged in:
+the first press of any of them makes the first controller player 1, the second player 2, and so on up to 4, and one
+plugged in later joins as the next player on its first press. The keyboard drives player 1. To put players in
 another order, or give the keyboard to another player, press Assign Players on the Controls tab, then a button on
 each controller (or a key, for the keyboard) in player order, and confirm. Each kind of controller has bindings of its
 own on the Controls tab, starting from the one-player ones, and a second player on the same kind has their own too,

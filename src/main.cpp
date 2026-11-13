@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cinttypes>
@@ -81,6 +82,8 @@ void exit_error(const char* str, Ts ...args) {
     ultramodern::error_handling::quick_exit(__FILE__, __LINE__, __FUNCTION__);
 }
 
+static void attach_virtual_pads();
+
 ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
     SDL_SetHint(SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS, "0");
@@ -115,10 +118,11 @@ ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
     }
 
     fprintf(stdout, "SDL Video Driver: %s\n", SDL_GetCurrentVideoDriver());
+    attach_virtual_pads();
     return {};
 }
 
-// --probes: log each change of player 1's buttons as the game reads them.
+// --probes: log each change of a port's buttons as the game reads them.
 static bool log_input = false;
 static int fake_players = 0;
 
@@ -148,19 +152,100 @@ static void load_input_script(const char* path) {
     fclose(f);
 }
 
-static const ScriptedInput* scripted_input() {
-    if (input_script.empty()) {
-        return nullptr;
+// The clock of --input and --pad: seconds since the game first read its controllers, -1 before.
+static std::atomic<int64_t> script_clock_start{ 0 };
+
+static void start_script_clock() {
+    int64_t unset = 0;
+    script_clock_start.compare_exchange_strong(unset, std::chrono::steady_clock::now().time_since_epoch().count());
+}
+
+static double script_seconds() {
+    int64_t start = script_clock_start.load();
+    if (start == 0) {
+        return -1.0;
     }
-    static const auto start = std::chrono::steady_clock::now();
-    double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    auto elapsed = std::chrono::steady_clock::now().time_since_epoch() - std::chrono::steady_clock::duration(start);
+    return std::chrono::duration<double>(elapsed).count();
+}
+
+static const ScriptedInput* script_line(const std::vector<ScriptedInput>& script) {
+    double now = script_seconds();
     const ScriptedInput* current = nullptr;
-    for (const ScriptedInput& in : input_script) {
-        if (in.at <= now) {
+    for (const ScriptedInput& in : script) {
+        if (now >= 0.0 && in.at <= now) {
             current = &in;
         }
     }
     return current;
+}
+
+static const ScriptedInput* scripted_input() {
+    return script_line(input_script);
+}
+
+// --pad <file>: plugs in an SDL virtual game controller driven by the file, one per --pad and in their order (so SDL
+// connects them in that order too), to play several controllers through the game's real controller path without
+// having them. Lines as --input's and on its clock, but the buttons are SDL_GameControllerButton bits (0x1 A, 0x2 B,
+// 0x4 X, 0x8 Y, 0x40 Start, 0x200 LB, 0x400 RB, 0x800 D-pad up) and x y the left stick (-1 to 1, y up). With --probes
+// each pad's first rumble is logged. Not on the web, where the page has stand-in pads.
+struct VirtualPad {
+    std::vector<ScriptedInput> script;
+    std::string name;
+    SDL_Joystick* joystick = nullptr;
+    bool rumbled = false;
+};
+static std::vector<VirtualPad> virtual_pads;
+
+static void add_virtual_pad(const char* path) {
+    std::vector<ScriptedInput> saved = std::move(input_script);
+    input_script.clear();
+    load_input_script(path);
+    VirtualPad pad{};
+    pad.script = std::move(input_script);
+    pad.name = "Rush 2049 virtual pad " + std::to_string(virtual_pads.size() + 1);
+    input_script = std::move(saved);
+    virtual_pads.push_back(std::move(pad));
+}
+
+static void attach_virtual_pads() {
+#ifndef __EMSCRIPTEN__
+    for (VirtualPad& pad : virtual_pads) {
+        SDL_VirtualJoystickDesc desc{};
+        desc.version = SDL_VIRTUAL_JOYSTICK_DESC_VERSION;
+        desc.type = SDL_JOYSTICK_TYPE_GAMECONTROLLER;
+        desc.naxes = SDL_CONTROLLER_AXIS_MAX;
+        desc.nbuttons = SDL_CONTROLLER_BUTTON_MAX;
+        desc.name = pad.name.c_str();
+        desc.userdata = &pad;
+        // Called as SDL reads its joysticks, before it takes their state.
+        desc.Update = [](void* userdata) {
+            VirtualPad* pad = static_cast<VirtualPad*>(userdata);
+            const ScriptedInput* in = script_line(pad->script);
+            uint32_t buttons = in != nullptr ? in->buttons : 0;
+            for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX; b++) {
+                SDL_JoystickSetVirtualButton(pad->joystick, b, (buttons >> b) & 1);
+            }
+            float x = in != nullptr ? in->x : 0.0f;
+            float y = in != nullptr ? in->y : 0.0f;
+            SDL_JoystickSetVirtualAxis(pad->joystick, SDL_CONTROLLER_AXIS_LEFTX, (Sint16)std::clamp(x * 32767.0f, -32767.0f, 32767.0f));
+            SDL_JoystickSetVirtualAxis(pad->joystick, SDL_CONTROLLER_AXIS_LEFTY, (Sint16)std::clamp(-y * 32767.0f, -32767.0f, 32767.0f));
+        };
+        desc.Rumble = [](void* userdata, Uint16 low, Uint16 high) {
+            VirtualPad* pad = static_cast<VirtualPad*>(userdata);
+            if (log_input && (low != 0 || high != 0) && !pad->rumbled) {
+                pad->rumbled = true;
+                fprintf(stderr, "[pad] %s: first rumble\n", pad->name.c_str());
+            }
+            return 0;
+        };
+        int index = SDL_JoystickAttachVirtualEx(&desc);
+        pad.joystick = index < 0 ? nullptr : SDL_JoystickOpen(index);
+        if (pad.joystick == nullptr) {
+            fprintf(stderr, "--pad: can't attach %s: %s\n", pad.name.c_str(), SDL_GetError());
+        }
+    }
+#endif
 }
 
 bool rush2049::scripted_rewind() {
@@ -185,6 +270,7 @@ static bool get_n64_input_logged(int player_index, uint16_t* buttons_out, float*
         *y_out = 0.0f;
         return true;
     }
+    start_script_clock();
     bool ret = recompinput::profiles::get_n64_input(player_index, buttons_out, x_out, y_out);
     if (const ScriptedInput* in = scripted_input(); in != nullptr && (player_index == 0 || player_index < fake_players)) {
         *buttons_out = (uint16_t)in->buttons;
@@ -192,12 +278,14 @@ static bool get_n64_input_logged(int player_index, uint16_t* buttons_out, float*
         *y_out = in->y;
         ret = true;
     }
-    if (log_input && player_index == 0) {
-        rush2049::probe_input_reads++;
-        static uint16_t last_buttons = 0;
-        if (*buttons_out != last_buttons) {
-            last_buttons = *buttons_out;
-            fprintf(stderr, "[input] p1 buttons %04X\n", last_buttons);
+    if (log_input && player_index >= 0 && player_index < 4) {
+        if (player_index == 0) {
+            rush2049::probe_input_reads++;
+        }
+        static uint16_t last_buttons[4] = {};
+        if (*buttons_out != last_buttons[player_index]) {
+            last_buttons[player_index] = *buttons_out;
+            fprintf(stderr, "[input] p%d buttons %04X\n", player_index + 1, last_buttons[player_index]);
         }
     }
     return ret;
@@ -672,6 +760,9 @@ int main(int argc, char** argv) {
         }
         if (strcmp(argv[i], "--input") == 0 && i + 1 < argc) {
             load_input_script(argv[++i]);
+        }
+        if (strcmp(argv[i], "--pad") == 0 && i + 1 < argc) {
+            add_virtual_pad(argv[++i]);
         }
         if (strcmp(argv[i], "--players") == 0 && i + 1 < argc) {
             fake_players = atoi(argv[++i]);
