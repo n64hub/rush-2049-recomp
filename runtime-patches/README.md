@@ -46,4 +46,8 @@ rt64-0012              setExtendedAspectFull: while the game says so, the extend
 rt64-0013              split screen's CPU cost: a texture whose bytes all came from one load is hashed once per full
                        sync, not once per view, and a list drawn without render to RAM ends its full sync (loads,
                        texture uploads, submission) on a thread of its own while the next list is recorded
+rt64-0014              split screen's frame matching: scenes (one a view) whose matrices, tiles and projections are
+                       apart are matched against the last frame's at once, each on a thread
+rt64-0015              split screen's list thread: FixedRect inline, a triangle's texcoord bounds taken once, a vertex
+                       load's arrays grown once, and the viewport rect rounded without a library call
 ```

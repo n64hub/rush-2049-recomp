@@ -1,0 +1,258 @@
+diff --git a/src/hle/rt64_game_frame.cpp b/src/hle/rt64_game_frame.cpp
+index 795a9f9..1ead6f8 100644
+--- a/src/hle/rt64_game_frame.cpp
++++ b/src/hle/rt64_game_frame.cpp
+@@ -11,7 +11,88 @@
+ 
+ #include "xxHash/xxh3.h"
+ 
++#include <condition_variable>
++#include <functional>
++#include <mutex>
++#include <thread>
++
+ namespace RT64 {
++#if !defined(__EMSCRIPTEN__)
++    // Runs the jobs of a call on the calling thread and on helpers kept for it, and returns when all are done.
++    class SceneMatchPool {
++    public:
++        static SceneMatchPool &get() {
++            // Never destroyed: its threads wait on it until the process ends.
++            static SceneMatchPool *pool = new SceneMatchPool();
++            return *pool;
++        }
++
++        void run(uint32_t jobCount, const std::function<void(uint32_t)> &jobFunction) {
++            uint64_t runGeneration;
++            {
++                std::scoped_lock<std::mutex> lock(mutex);
++                job = &jobFunction;
++                count = jobCount;
++                next = 0;
++                done = 0;
++                runGeneration = ++generation;
++            }
++
++            wakeCondition.notify_all();
++            work(runGeneration);
++
++            std::unique_lock<std::mutex> lock(mutex);
++            doneCondition.wait(lock, [&]() { return done == count; });
++            job = nullptr;
++        }
++
++    private:
++        static constexpr uint32_t HelperCount = 3;
++        std::mutex mutex;
++        std::condition_variable wakeCondition;
++        std::condition_variable doneCondition;
++        const std::function<void(uint32_t)> *job = nullptr;
++        uint32_t count = 0;
++        uint32_t next = 0;
++        uint32_t done = 0;
++        uint64_t generation = 0;
++
++        SceneMatchPool() {
++            for (uint32_t i = 0; i < HelperCount; i++) {
++                std::thread([this]() { helperLoop(); }).detach();
++            }
++        }
++
++        void work(uint64_t runGeneration) {
++            std::unique_lock<std::mutex> lock(mutex);
++            while ((generation == runGeneration) && (next < count)) {
++                const uint32_t index = next++;
++                const std::function<void(uint32_t)> *runJob = job;
++                lock.unlock();
++                (*runJob)(index);
++                lock.lock();
++                done++;
++                if (done == count) {
++                    doneCondition.notify_all();
++                }
++            }
++        }
++
++        void helperLoop() {
++            uint64_t seenGeneration = 0;
++            while (true) {
++                {
++                    std::unique_lock<std::mutex> lock(mutex);
++                    wakeCondition.wait(lock, [&]() { return generation != seenGeneration; });
++                    seenGeneration = generation;
++                }
++
++                work(seenGeneration);
++            }
++        }
++    };
++#endif
++
+     // GameFrame
+     
+     bool GameFrame::areFramebufferPairsCompatible(const WorkloadQueue &workloadQueue, const GameIndices::FramebufferPair &first, const GameIndices::FramebufferPair &second) {
+@@ -534,6 +615,107 @@ namespace RT64 {
+             }
+         }
+ 
++        // Rush 2049 patch: the split screen draws a scene for each player, and matching four scenes of about 1,800
++        // calls each took 12-14 ms of the render thread a frame, most of a 4-player race's frame. Scenes whose calls
++        // reach apart ranges of matrices, tiles and projections, on both sides, write apart entries of the maps (and
++        // the vertices under those matrices), so they are matched at once, each on a thread. A look at can be reached from any
++        // scene, so those are matched under a lock (matchScene()). Scenes that share a range are matched in turn.
++        constexpr uint32_t SpanKinds = 6;
++        struct SceneSpans {
++            uint32_t lo[SpanKinds];
++            uint32_t hi[SpanKinds];
++        };
++
++        auto widen = [](SceneSpans &spans, uint32_t kind, uint32_t low, uint32_t high) {
++            spans.lo[kind] = std::min(spans.lo[kind], low);
++            spans.hi[kind] = std::max(spans.hi[kind], high);
++        };
++
++        auto sceneSpans = [&](const GameScene &scene, uint32_t side, SceneSpans &spans) {
++            for (const GameIndices::Projection &projIndices : scene.projections) {
++                const Workload &workload = workloadQueue.workloads[projIndices.workloadIndex];
++                const Projection &proj = workload.fbPairs[projIndices.fbPairIndex].projections[projIndices.projectionIndex];
++                widen(spans, side + 4, proj.transformsIndex, proj.transformsIndex);
++                for (uint32_t c = 0; c < proj.gameCallCount; c++) {
++                    const DrawCall &callDesc = proj.gameCalls[c].callDesc;
++                    if (callDesc.minWorldMatrix <= callDesc.maxWorldMatrix) {
++                        widen(spans, side, callDesc.minWorldMatrix, callDesc.maxWorldMatrix);
++                    }
++
++                    if (callDesc.tileCount > 0) {
++                        widen(spans, side + 2, callDesc.tileIndex, callDesc.tileIndex + callDesc.tileCount - 1);
++                    }
++                }
++            }
++        };
++
++        auto scenesMatchApart = [&](const std::vector<GameScene> &curScenes, const std::vector<GameScene> &prevScenes, const std::vector<std::pair<uint32_t, uint32_t>> &scenePairs) {
++#if defined(__EMSCRIPTEN__)
++            return false;
++#else
++            if (scenePairs.size() < 2) {
++                return false;
++            }
++
++            thread_local std::vector<SceneSpans> spans;
++            spans.clear();
++            for (const std::pair<uint32_t, uint32_t> &scenePair : scenePairs) {
++                SceneSpans &pairSpans = spans.emplace_back();
++                for (uint32_t k = 0; k < SpanKinds; k++) {
++                    pairSpans.lo[k] = UINT32_MAX;
++                    pairSpans.hi[k] = 0;
++                }
++
++                sceneSpans(curScenes[scenePair.first], 0, pairSpans);
++                sceneSpans(prevScenes[scenePair.second], 1, pairSpans);
++            }
++
++            for (size_t a = 0; a < spans.size(); a++) {
++                for (size_t b = a + 1; b < spans.size(); b++) {
++                    for (uint32_t k = 0; k < SpanKinds; k++) {
++                        const bool bothReach = (spans[a].lo[k] <= spans[a].hi[k]) && (spans[b].lo[k] <= spans[b].hi[k]);
++                        if (bothReach && (spans[a].lo[k] <= spans[b].hi[k]) && (spans[b].lo[k] <= spans[a].hi[k])) {
++                            return false;
++                        }
++                    }
++                }
++            }
++
++            return true;
++#endif
++        };
++
++        auto matchScenesTogether = [&](const std::vector<GameScene> &curScenes, const std::vector<GameScene> &prevScenes, const std::vector<std::pair<uint32_t, uint32_t>> &scenePairs) {
++#if !defined(__EMSCRIPTEN__)
++            struct SceneResult {
++                std::unordered_map<uint32_t, ModifiedBuffers> modified;
++                bool tileInterpolation = false;
++                bool lookAtInterpolation = false;
++            };
++
++            thread_local std::vector<SceneResult> results;
++            results.clear();
++            results.resize(scenePairs.size());
++            // Named through pointers: on a helper thread a thread_local's name is that thread's own.
++            std::vector<SceneResult> *pairResults = &results;
++            const std::vector<std::pair<uint32_t, uint32_t>> *pairs = &scenePairs;
++            const std::function<void(uint32_t)> matchOne = [&, pairResults, pairs](uint32_t i) {
++                SceneResult &result = (*pairResults)[i];
++                matchScene(workloadQueue, prevFrame, curScenes[(*pairs)[i].first], prevScenes[(*pairs)[i].second], result.modified, result.tileInterpolation, result.lookAtInterpolation);
++            };
++
++            SceneMatchPool::get().run(uint32_t(scenePairs.size()), matchOne);
++            for (const SceneResult &result : results) {
++                for (const auto &it : result.modified) {
++                    workloadsModified[it.first].merge(it.second);
++                }
++
++                tileInterpolationUsed = tileInterpolationUsed || result.tileInterpolation;
++                lookAtInterpolationUsed = lookAtInterpolationUsed || result.lookAtInterpolation;
++            }
++#endif
++        };
++
+         thread_local std::vector<MatchCandidate> matchCandidates;
+         thread_local std::vector<bool> curScenesMatched;
+         thread_local std::vector<bool> prevScenesMatched;
+@@ -604,6 +786,8 @@ namespace RT64 {
+                 }
+             }
+ 
++            thread_local std::vector<std::pair<uint32_t, uint32_t>> scenePairs;
++            scenePairs.clear();
+             std::stable_sort(matchCandidates.begin(), matchCandidates.end());
+             for (const MatchCandidate &candidate : matchCandidates) {
+                 if (curScenesMatched[candidate.curIndex]) {
+@@ -614,10 +798,19 @@ namespace RT64 {
+                     continue;
+                 }
+ 
+-                matchScene(workloadQueue, prevFrame, curScenes[candidate.curIndex], prevScenes[candidate.prevIndex], workloadsModified, tileInterpolationUsed, lookAtInterpolationUsed);
++                scenePairs.emplace_back(candidate.curIndex, candidate.prevIndex);
+                 curScenesMatched[candidate.curIndex] = true;
+                 prevScenesMatched[candidate.prevIndex] = true;
+             }
++
++            if (scenesMatchApart(curScenes, prevScenes, scenePairs)) {
++                matchScenesTogether(curScenes, prevScenes, scenePairs);
++                return;
++            }
++
++            for (const std::pair<uint32_t, uint32_t> &scenePair : scenePairs) {
++                matchScene(workloadQueue, prevFrame, curScenes[scenePair.first], prevScenes[scenePair.second], workloadsModified, tileInterpolationUsed, lookAtInterpolationUsed);
++            }
+         };
+ 
+         matchScenes(perspectiveScenes, prevFrame.perspectiveScenes);
+@@ -1170,6 +1363,8 @@ namespace RT64 {
+         }
+ 
+         // Check for look at matches.
++        static std::mutex lookAtMutex;
++        std::scoped_lock<std::mutex> lookAtLock(lookAtMutex);
+         for (const IndexPair &indices : lookAtCheckSet) {
+             if (firstCurWorkloadMap.lookAt[indices.first].mapped) {
+                 continue;
+diff --git a/src/hle/rt64_game_frame.h b/src/hle/rt64_game_frame.h
+index 5e899ab..9189fb3 100644
+--- a/src/hle/rt64_game_frame.h
++++ b/src/hle/rt64_game_frame.h
+@@ -90,9 +90,10 @@ namespace RT64 {
+             std::vector<TransformMap> transforms;
+             std::vector<TileMap> tiles;
+             std::vector<LookAtMap> lookAt;
+-            std::vector<bool> prevTransformsMapped;
+-            std::vector<bool> prevTilesMapped;
+-            std::vector<bool> prevLookAtMapped;
++            // Bytes, not bits: GameFrame::match() matches scenes on several threads, each marking its own entries.
++            std::vector<uint8_t> prevTransformsMapped;
++            std::vector<uint8_t> prevTilesMapped;
++            std::vector<uint8_t> prevLookAtMapped;
+             uint32_t prevWorkloadIndex = 0;
+             bool mapped = false;
+         };

@@ -99,7 +99,7 @@ option has an Original value that runs the game as it shipped.
 - **No frame copies to RAM**: each frame stays on the GPU instead of also being drawn again at 320×240 and copied
   back into the console's memory, which the game isn't known to read. Saves GPU time, and about 6 ms a frame in a
   browser.
-- **Light on the CPU**: the game holds 60 fps on a single CPU core, and a 4-player race uses a second one. On a weak
+- **Light on the CPU**: the game holds 60 fps on a single CPU core, and a 4-player race spreads over a few more. On a weak
   GPU, see [Performance](#performance).
 
 Settings are saved as JSON in `%LOCALAPPDATA%\Rush2049Recompiled\` (`~/.config/Rush2049Recompiled/` on Linux), or
@@ -314,9 +314,11 @@ camera or off the sides is skipped, as on an N64): in the attract race about 840
 loses frames with Off, try Reduced (about 680 calls) before Original.
 
 A 4-player race is the CPU's heaviest load: four views of about 1,800 draws each, some 7,000 a frame on the busiest
-stretches, and RT64 finishes each frame on a second thread while it reads the next. On a desktop PC the races hold
-60 fps on most tracks, and Track 3 at night drops to about 50 on its busiest stretch. Resolution, MSAA, the window's
-size and the draw settings change it little: the cost is RT64's CPU work per draw.
+stretches. RT64 finishes each frame on a second thread while it reads the next, and, when the monitor runs faster
+than the game and frames are drawn in between, matches each view against the last frame's on a thread of its own. On
+a desktop PC the races hold 60 fps, with the odd second at 55-59 on the busiest stretches of Track 3 at night and
+Track 5. Resolution, MSAA, the window's size and the draw settings change it little: the cost is RT64's CPU work per
+draw.
 
 Nearly a third of the default frame's cost stays even at Resolution Original: mostly drawing the game's geometry
 (about 500 to 800 draws a frame), which costs about the same at any resolution, and drawing the finished frame into the

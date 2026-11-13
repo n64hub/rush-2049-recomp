@@ -46,6 +46,9 @@ What has been tried or measured and dropped, with why.
   more than the hashes they saved (the worst stretch went from about 28 to 20 fps). Tags per 4 bytes cost about as
   much as they save on their own; what pays is skipping the texture cache's bookkeeping for a hash already used in the
   same sync (rt64-0013).
+- Replaying TMEM loads only when a texture hash misses, to make the sync thread of rt64-0013 cheaper: in a 4-player
+  race at night it took about 11 ms a frame and nothing waited on it. The frames were held by the render thread's frame
+  matching (rt64-0014), then by the list thread (rt64-0015).
 - Merging or batching RT64's draws to cut the 240p floor (`start_gpu_profiler`'s table in `src/main.cpp`). Only ~5% of
   draws repeat the one before exactly; merging every run that shares a pipeline (wrong textures, timing only) halves
   the ~500 calls and the draws part moves less than ±4%. With a 1x1 viewport (no pixels) ~90k cycles stay, and the
