@@ -1,1 +1,0 @@
-**Changed:** in a window wider than 16:9, such as 21:9, the menus' circuit-board background is now carried out to about 21:9 at the default HUD Placement, where before it stopped at 16:9's edges and left black bars beyond.
