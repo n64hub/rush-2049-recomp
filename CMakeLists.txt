@@ -217,6 +217,7 @@ target_sources(Rush2049Recompiled PRIVATE
     ${CMAKE_SOURCE_DIR}/src/debug_probe.cpp
     ${CMAKE_SOURCE_DIR}/src/dl_dump.cpp
     ${CMAKE_SOURCE_DIR}/src/frame_list.cpp
+    ${CMAKE_SOURCE_DIR}/src/node_interpolation.cpp
     ${CMAKE_SOURCE_DIR}/src/widescreen.cpp
     ${CMAKE_SOURCE_DIR}/src/draw_distance.cpp
     ${CMAKE_SOURCE_DIR}/src/ghost_arrows.cpp
