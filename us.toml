@@ -467,6 +467,20 @@ func = "func_8009DD88"
 before_vram = 0x8009E504
 text = "    ctx->f16.fl = rush2049_draw_distance_cull(ctx->f16.fl);"
 
+# Frame interpolation of the scene's moving objects (src/node_interpolation.cpp): where the walk writes a node flagged
+# 0x10 or 0x20 (a car, or an object that moves or animates, the start line's flags among them), a matrix group of its
+# own before the culling box's G_VTX (into the list at 0x114($sp)), so the rt64 fork leaves the vertices of its
+# keyframes alone, and the group's pop after it, before the G_CULLDL.
+[[patches.hook]]
+func = "func_8009DD88"
+before_vram = 0x8009E37C
+text = "    rush2049_node_group_push(rdram, ctx);"
+
+[[patches.hook]]
+func = "func_8009DD88"
+before_vram = 0x8009E3D8
+text = "    rush2049_node_group_pop(rdram, ctx);"
+
 # The node matrix builders reject a node whose offset from the camera (f0, f2, f12) is 2048 or more on any axis:
 # s15.16 can't hold its translation. Before the test the offset can be divided down, and before the return the
 # rest of the matrix written at a3 (func_8009D99C) or a2 (func_8009D45C) is divided by the same number.

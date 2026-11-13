@@ -42,6 +42,11 @@ gpr rush2049_frame_list(uint8_t* rdram, gpr slot);
 gpr rush2049_frame_task_list(uint8_t* rdram, gpr slot);
 gpr rush2049_frame_list_bytes(uint8_t* rdram, gpr bytes);
 
+/* Frame interpolation of the scene's moving objects (src/node_interpolation.cpp, us.toml): in the scene-node walk
+   func_8009DD88, a matrix group of their own before a moving object's culling box, and its pop after. */
+void rush2049_node_group_push(uint8_t* rdram, recomp_context* ctx);
+void rush2049_node_group_pop(uint8_t* rdram, recomp_context* ctx);
+
 /* Before the scheduler starts a task (us.toml); writes it out when --dump-dl is due. */
 void rush2049_dump_task(uint8_t* rdram, uint32_t task_addr);
 
