@@ -29,6 +29,14 @@
 // it flashes the colour of the sky. So each block's matrices go in a buffer of their own in the recomp heap too, with
 // room for four times as many, which the extended RDRAM mode above lets RT64 read. The pointer is set there in the
 // same hooks, right after the game sets it.
+//
+// The frame's 2D list. Text, the HUD and the result screens go in a second list, which the top level calls: two of
+// 0x4B00 bytes (2400 commands) from 0x80124FE8, used in turn (func_800A4934 points 0x80149438 at one, func_800A48C8
+// closes it and returns its start), and nothing checks their end either. The second is followed by the track's
+// table of computer-car routes at 0x8012E5E8. Four players' result screens, where every view draws its own times
+// over the race, pass 2400 commands: the first list runs into the second, the views show the wrong frame's colours,
+// and the second runs into the route table, so the computer cars, still driving behind the screens, read a route
+// from nowhere and the game crashes. So the 2D lists go in heap buffers with four times the room as well.
 
 #include <cstdint>
 
@@ -90,6 +98,26 @@ uint32_t buffer_for(uint8_t* rdram, uint32_t slot) {
     return 0;
 }
 
+constexpr uint32_t hud_list_ptr_addr = 0x80149438;
+constexpr uint32_t hud_lists_addr = 0x80124FE8;
+constexpr uint32_t hud_list_bytes = 0x4B00;
+constexpr int hud_list_count = 2;
+uint32_t hud_lists[hud_list_count];
+
+uint32_t hud_list_for(uint8_t* rdram, uint32_t index) {
+    if (index >= hud_list_count) {
+        return 0;
+    }
+    if (hud_lists[index] == 0) {
+        void* list = recomp::alloc(rdram, hud_list_bytes * 4);
+        if (list == nullptr) {
+            return 0;
+        }
+        hud_lists[index] = (uint32_t)((uint8_t*)list - rdram) + 0x80000000;
+    }
+    return hud_lists[index];
+}
+
 }  // namespace
 
 uint32_t rush2049::frame_list_game_start(uint32_t task_list) {
@@ -134,3 +162,14 @@ extern "C" gpr rush2049_frame_list_bytes(uint8_t* rdram, gpr bytes) {
     return (gpr)(int32_t)((head - list) & ~7u);
 }
 
+extern "C" void rush2049_hud_list_opened(uint8_t* rdram, gpr index) {
+    if (uint32_t list = hud_list_for(rdram, (uint32_t)index); list != 0) {
+        write_word(rdram, hud_list_ptr_addr, list);
+    }
+}
+
+extern "C" gpr rush2049_hud_list_closed(uint8_t* rdram, gpr start) {
+    uint32_t index = ((uint32_t)start - hud_lists_addr) / hud_list_bytes;
+    uint32_t list = hud_list_for(rdram, index);
+    return list != 0 ? (gpr)(int32_t)list : start;
+}

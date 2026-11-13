@@ -49,6 +49,9 @@ void rush2049_hires_font_scan(uint8_t* rdram, uint32_t task_addr);
 gpr rush2049_frame_list(uint8_t* rdram, gpr slot);
 gpr rush2049_frame_task_list(uint8_t* rdram, gpr slot);
 gpr rush2049_frame_list_bytes(uint8_t* rdram, gpr bytes);
+/* The frame's 2D list (src/frame_list.cpp): a heap buffer in place of each of the game's two. */
+void rush2049_hud_list_opened(uint8_t* rdram, gpr index);
+gpr rush2049_hud_list_closed(uint8_t* rdram, gpr start);
 
 /* Frame interpolation of the scene's moving objects (src/node_interpolation.cpp, us.toml): in the scene-node walk
    func_8009DD88, a matrix group of their own before a moving object's culling box, and its pop after. */
