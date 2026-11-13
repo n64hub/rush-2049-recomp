@@ -1,0 +1,331 @@
+{
+ "header": [
+  "The pads' plan for N64Recomp-browser's tools/play_page.mjs, played with its tools/gamepad_probe.js as the preload",
+  "(--preload): two stand-in pads plugged in at the launcher, before Start Game, as a player's pads are there when the",
+  "game starts, each playing a port of its own in the order they were plugged in (README, Several players; the",
+  "Controllers option's Per Player). Pad 1 presses Start through the attract race to the main menu and right to PLAYERS 2,",
+  "and A to its PLAYER 1 screen, where the game then waits for player 2; the need after it is that pad 2's A alone",
+  "moves the game on to SELECT MODE (0x801174B4, a bit a screen: 0x10 the main menu, 0x20 the player screens, 0x40",
+  "SELECT MODE, 0x80 SELECT TRACK, 0x100 the car select, 0x400000 a race). Pad 1 picks SINGLE RACE, track 1 and its car,",
+  "and pad 2's A its own car, which starts the two-player race. Both pads then hold the gas (A) and weave against each",
+  "other into the walls for about 30 s of the race clock (0x801543CC, seconds), and the last need is that the game's",
+  "rumble reached both pads (padRumbles(): plays per pad, in the order they were plugged in). About 90 s from the",
+  "launcher on."
+ ],
+ "page": "index.html",
+ "load": [
+  [
+   "until",
+   "RT64: all \\d+ prebuilt shaders built|once the game draws",
+   45000
+  ],
+  [
+   "wait",
+   1000
+  ]
+ ],
+ "setup": [
+  [
+   "rom",
+   628,
+   364
+  ],
+  [
+   "wait",
+   2000
+  ]
+ ],
+ "start": [
+  [
+   "eval",
+   "plugPads([\"Xbox 360 Controller (XInput STANDARD GAMEPAD)\",\"Xbox 360 Controller (XInput STANDARD GAMEPAD)\"])"
+  ],
+  [
+   "eval",
+   "self.st = () => 'state ' + n64r(0x801174B4).toString(16) + ' track ' + (n64r(0x8014978C) >>> 24) + ' rumble ' + padRumbles(); self.state = () => n64r(0x801174B4); self.pp = async (i, b, ms = 150) => { padSet(i, { buttons: { [b]: 1 } }); await new Promise((r) => setTimeout(r, ms)); padSet(i); await new Promise((r) => setTimeout(r, 150)); }; self.ppUntil = async (i, b, test, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (test()) return true; await pp(i, b); await new Promise((r) => setTimeout(r, 1200)); } const ok = test(); if (!ok) console.log('[plan] timed out: ' + st()); return ok; }; self.gas = (i, x) => padSet(i, { buttons: { 0: 1 }, axes: [x, 0, 0, 0] }); true"
+  ],
+  [
+   "click",
+   628,
+   364
+  ]
+ ],
+ "play": [
+  [
+   "need",
+   "new Promise((ok) => { const t0 = Date.now(); const t = setInterval(() => { let y = false; try { y = (n64r(0x801174B4) & 0x8) != 0; } catch (e) {} if (y) { clearInterval(t); ok(true); } else if (Date.now() - t0 > 12000) { clearInterval(t); let w = ''; try { w = 'state ' + n64r(0x801174B4).toString(16) + ' track ' + (n64r(0x8014978C) >>> 24) + ' mode ' + (n64r(0x803B469C) & 255) + ' clock ' + (Math.floor(new Float32Array(new Uint32Array([n64r(0x801543CC)]).buffer)[0] * 60) / 60).toFixed(1); } catch (e) { w = String(e); } console.log('[plan] attract timed out: ' + w); ok(false); } }, 100); })"
+  ],
+  [
+   "wait",
+   3000
+  ],
+  [
+   "need",
+   "ppUntil(0, 9, () => (state() & 0x10) != 0, 12000)"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "eval",
+   "pp(0, 15)"
+  ],
+  [
+   "wait",
+   1000
+  ],
+  [
+   "shot",
+   "players.png"
+  ],
+  [
+   "need",
+   "ppUntil(0, 0, () => (state() & 0x20) != 0, 6000)"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "eval",
+   "pp(0, 0)"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "shot",
+   "player_screens.png"
+  ],
+  [
+   "eval",
+   "console.log('[plan] pad 1 joined: ' + st())"
+  ],
+  [
+   "need",
+   "ppUntil(1, 0, () => (state() & 0x40) != 0, 8000)"
+  ],
+  [
+   "eval",
+   "console.log('[plan] pad 2 joined: ' + st())"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "shot",
+   "select_mode.png"
+  ],
+  [
+   "need",
+   "ppUntil(0, 0, () => (state() & 0x80) != 0, 6000)"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "need",
+   "ppUntil(0, 0, () => (state() & 0x100) != 0, 6000)"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "eval",
+   "pp(0, 0)"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "shot",
+   "car_select.png"
+  ],
+  [
+   "eval",
+   "console.log('[plan] car 1 chosen: ' + st())"
+  ],
+  [
+   "need",
+   "ppUntil(1, 0, () => (state() & 0x400000) != 0, 40000)"
+  ],
+  [
+   "eval",
+   "console.log('[plan] race: ' + st())"
+  ],
+  [
+   "clock",
+   "Math.floor(new Float32Array(new Uint32Array([n64r(0x801543CC)]).buffer)[0] * 60)",
+   60
+  ],
+  [
+   "wait",
+   4000
+  ],
+  [
+   "eval",
+   "gas(0, 0); gas(1, 0); true"
+  ],
+  [
+   "wait",
+   3000
+  ],
+  [
+   "shot",
+   "race.png"
+  ],
+  [
+   "eval",
+   "gas(0, -1); gas(1, 1); true"
+  ],
+  [
+   "wait",
+   2500
+  ],
+  [
+   "eval",
+   "gas(0, 0); gas(1, 0); true"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "eval",
+   "gas(0, 1); gas(1, -1); true"
+  ],
+  [
+   "wait",
+   2500
+  ],
+  [
+   "eval",
+   "gas(0, 0); gas(1, 0); true"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "eval",
+   "gas(0, -1); gas(1, 1); true"
+  ],
+  [
+   "wait",
+   2500
+  ],
+  [
+   "eval",
+   "gas(0, 0); gas(1, 0); true"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "eval",
+   "gas(0, 1); gas(1, -1); true"
+  ],
+  [
+   "wait",
+   2500
+  ],
+  [
+   "eval",
+   "gas(0, 0); gas(1, 0); true"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "eval",
+   "gas(0, -1); gas(1, 1); true"
+  ],
+  [
+   "wait",
+   2500
+  ],
+  [
+   "eval",
+   "gas(0, 0); gas(1, 0); true"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "eval",
+   "gas(0, 1); gas(1, -1); true"
+  ],
+  [
+   "wait",
+   2500
+  ],
+  [
+   "eval",
+   "gas(0, 0); gas(1, 0); true"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "eval",
+   "gas(0, -1); gas(1, 1); true"
+  ],
+  [
+   "wait",
+   2500
+  ],
+  [
+   "eval",
+   "gas(0, 0); gas(1, 0); true"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "eval",
+   "gas(0, 1); gas(1, -1); true"
+  ],
+  [
+   "wait",
+   2500
+  ],
+  [
+   "eval",
+   "gas(0, 0); gas(1, 0); true"
+  ],
+  [
+   "wait",
+   1500
+  ],
+  [
+   "shot",
+   "race_end.png"
+  ],
+  [
+   "clock"
+  ],
+  [
+   "eval",
+   "padSet(0); padSet(1); true"
+  ],
+  [
+   "eval",
+   "`${st()} calls ${padRumbleCalls()}`"
+  ],
+  [
+   "need",
+   "(() => { const plays = padRumbles().split(' ').slice(1, 3).map(Number); return plays[0] > 0 && plays[1] > 0; })()"
+  ]
+ ]
+}

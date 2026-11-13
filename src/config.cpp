@@ -24,7 +24,8 @@ namespace RT64 {
     void setTranslucentSort(uint32_t minListDepth);
 }
 
-// runtime-patches/rt64-0012: the HUD's origins at the window's edges, whatever HUD Placement says.
+// runtime-patches/rt64-0012: the HUD's origins at the window's edges, whatever HUD Placement says (split screen at
+// Full Window, and the menus' mirrored background).
 namespace RT64 {
     void setExtendedAspectFull(bool full);
 }
@@ -285,8 +286,9 @@ bool rush2049::split_screen_expand() {
     return ratio == SplitScreenRatio::Expand || ratio == SplitScreenRatio::Full;
 }
 
-void rush2049::set_split_screen_full_width(bool widened) {
-    RT64::setExtendedAspectFull(widened && split_screen_ratio_setting.load(std::memory_order_relaxed) == SplitScreenRatio::Full);
+void rush2049::set_full_width(bool split_widened, bool menu_widened) {
+    RT64::setExtendedAspectFull(menu_widened ||
+        (split_widened && split_screen_ratio_setting.load(std::memory_order_relaxed) == SplitScreenRatio::Full));
 }
 
 bool rush2049::menu_expand() {

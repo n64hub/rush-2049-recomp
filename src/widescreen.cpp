@@ -45,8 +45,11 @@
 // Menus. Their background is a 4:3 picture drawn as texture rectangles, and the menu sits on it, so the menu stays
 // where it is and the picture is extended: with "Menu Aspect Ratio" at Expand, each strip of it at the screen's left
 // or right edge becomes a call to a list that draws the strip and its mirror image across the edge, so the side bars
-// show the circuit-board pattern carried on rather than black. A car select's panels each draw their car under a
-// viewport of their own, laid out like split screen, so a frame that draws the background is a menu, not split screen.
+// show the circuit-board pattern carried on rather than black. The strips' scissor is anchored to the extended GBI's
+// left and right origins, which HUD Placement stops at 16:9's edges by default, so a menu frame tells RT64 to put them
+// at the window's (runtime-patches/rt64-0012), and a 21:9 window gets the pattern rather than bars past 16:9. A car
+// select's panels each draw their car under a viewport of their own, laid out like split screen, so a frame that draws
+// the background is a menu, not split screen.
 
 #include <algorithm>
 #include <cmath>
@@ -904,7 +907,7 @@ extern "C" void rush2049_enable_extended_gbi(uint8_t* rdram, uint32_t task_addr)
     }
     split_screen_last_frame = scan.split_screen;
     bool widened = hud && scan.split_screen && !menu && rush2049::split_screen_expand() && widen_split_screen(rdram, scan);
-    rush2049::set_split_screen_full_width(widened);
+    rush2049::set_full_width(widened, extended && menu && menus);
     if (widened) {
         anchor_lines(rdram);
     }

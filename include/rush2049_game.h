@@ -32,8 +32,10 @@ namespace rush2049 {
     void set_reduced_input_lag(bool reduced);
     // Whether 2- and 4-player views widen with the window ("Split-Screen Aspect Ratio" at Expand).
     bool split_screen_expand();
-    // Called with each display list: whether its split-screen views were widened, for Full Window.
-    void set_split_screen_full_width(bool widened);
+    // Called with each display list: whether its split-screen views were widened, for Full Window, and whether it is a
+    // menu whose background is mirrored out (Menu Aspect Ratio at Expand), which reaches the window's edges whatever
+    // HUD Placement says.
+    void set_full_width(bool split_widened, bool menu_widened);
     // Whether the menus' background is mirrored out to a wide window's edges ("Menu Aspect Ratio" at Expand).
     bool menu_expand();
     // Where the game's own commands start in a graphics task's list: after the two commands the frame's list starts with

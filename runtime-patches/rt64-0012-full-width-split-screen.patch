@@ -45,7 +45,7 @@ diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
 +    // Rush 2049 patch: while set, a workload's extended GBI origins reach the window's edges as with the extended
 +    // aspect ratio at Expand, whatever it is set to (a Manual target of 16:9 stops them short of a wider window). Set
 +    // by the game for the frames it draws in split screen, so the views fill the window and a single view's HUD keeps
-+    // the player's placement. Read with each workload; Original stays Original.
++    // the player's placement, and for its menus. Read with each workload; Original stays Original.
 +    void setExtendedAspectFull(bool full);
 +
      struct State {
