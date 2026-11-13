@@ -43,4 +43,7 @@ rt64-0011              and among themselves picture by picture (a call's triangl
 rt64-0012              setExtendedAspectFull: while the game says so, the extended GBI origins reach the window's edges
                        as at Expand, whatever the HUD Placement (split screen at the full width of a wide window, and the
                        menus' mirrored background past 16:9)
+rt64-0013              split screen's CPU cost: a texture whose bytes all came from one load is hashed once per full
+                       sync, not once per view, and a list drawn without render to RAM ends its full sync (loads,
+                       texture uploads, submission) on a thread of its own while the next list is recorded
 ```

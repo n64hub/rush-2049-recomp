@@ -1,0 +1,1032 @@
+diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
+--- a/src/hle/rt64_application.cpp
++++ b/src/hle/rt64_application.cpp
+@@ -596,10 +596,15 @@ namespace RT64 {
+ 
+         appWindow->sdlCheckFilterInstallation();
+         screenApiProfiler.logAndRestart();
+-        state->updateScreen(core.decodeVI(), false);
++        const VI vi = core.decodeVI();
++        state->afterSync([this, vi]() { state->updateScreen(vi, false); });
+     }
+ 
+     void Application::destroyShaderCache() {
++        if (state != nullptr) {
++            state->waitForSync();
++        }
++
+         workloadQueue->waitForWorkloadId(state->workloadId);
+         presentQueue->waitForPresentId(state->presentId);
+         workloadQueue->waitForIdle();
+@@ -609,6 +614,10 @@ namespace RT64 {
+     }
+ 
+     void Application::updateMultisampling() {
++        if (state != nullptr) {
++            state->waitForSync();
++        }
++
+ #   if SAMPLE_LOCATIONS_REQUIRED
+         // This operation does nothing if sample locations isn't supported.
+         if (!device->getCapabilities().sampleLocations) {
+@@ -707,6 +716,10 @@ namespace RT64 {
+     }
+ 
+     void Application::processDeveloperShortcut(DeveloperShortcut developerShortcut) {
++        if (state != nullptr) {
++            state->waitForSync();
++        }
++
+         switch (developerShortcut) {
+         case DeveloperShortcut::Inspector: {
+             if (userConfig.developerMode) {
+@@ -747,6 +760,10 @@ namespace RT64 {
+     }
+ 
+     void Application::end() {
++        if (state != nullptr) {
++            state->waitForSync();
++        }
++
+ #   if SCRIPT_ENABLED
+         if (currentScript != nullptr) {
+             currentScript->finalize();
+@@ -855,18 +872,34 @@ namespace RT64 {
+     }
+ 
+     void Application::updateUserConfig(bool discardFBs) {
++        if (state != nullptr) {
++            state->waitForSync();
++        }
++
+         sharedQueueResources->setUserConfig(userConfig, discardFBs);
+     }
+ 
+     void Application::updateEmulatorConfig() {
++        if (state != nullptr) {
++            state->waitForSync();
++        }
++
+         sharedQueueResources->setEmulatorConfig(emulatorConfig);
+     }
+ 
+     void Application::updateEnhancementConfig() {
++        if (state != nullptr) {
++            state->waitForSync();
++        }
++
+         sharedQueueResources->setEnhancementConfig(enhancementConfig);
+     }
+ 
+     void Application::setFullScreen(bool fullscreen) {
++        if (state != nullptr) {
++            state->waitForSync();
++        }
++
+         appWindow->setFullScreen(fullscreen);
+     }
+ };
+diff --git a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_manager.cpp
+--- a/src/hle/rt64_framebuffer_manager.cpp
++++ b/src/hle/rt64_framebuffer_manager.cpp
+@@ -30,8 +30,19 @@ namespace RT64 {
+ 
+     FramebufferManager::~FramebufferManager() {}
+ 
++    Framebuffer *FramebufferManager::findLocked(uint32_t address) {
++        const std::scoped_lock lock(framebuffersMutex);
++        return find(address);
++    }
++
+     Framebuffer &FramebufferManager::get(uint32_t address, uint8_t siz, uint32_t width, uint32_t height) {
+-        auto &fb = framebuffers[address];
++        auto fbIt = framebuffers.find(address);
++        if (fbIt == framebuffers.end()) {
++            const std::scoped_lock lock(framebuffersMutex);
++            fbIt = framebuffers.try_emplace(address).first;
++        }
++
++        auto &fb = fbIt->second;
+         fb.widthChanged = (fb.width != width);
+         fb.sizChanged = (fb.siz != siz);
+ 
+@@ -1194,7 +1205,10 @@ namespace RT64 {
+         for (uint32_t address : discards) {
+             auto it = framebuffers.find(address);
+             if (it != framebuffers.end()) {
+-                framebuffers.erase(it);
++                {
++                    const std::scoped_lock lock(framebuffersMutex);
++                    framebuffers.erase(it);
++                }
+             }
+         }
+     }
+diff --git a/src/hle/rt64_framebuffer_manager.h b/src/hle/rt64_framebuffer_manager.h
+--- a/src/hle/rt64_framebuffer_manager.h
++++ b/src/hle/rt64_framebuffer_manager.h
+@@ -5,6 +5,7 @@
+ #pragma once
+ 
+ #include <map>
++#include <mutex>
+ #include <set>
+ #include <vector>
+ 
+@@ -165,6 +166,9 @@ namespace RT64 {
+         };
+ 
+         std::unordered_map<uint32_t, Framebuffer> framebuffers;
++        // Rush 2049 patch: held where framebuffers is added to or erased from, and by findLocked(), which the thread that
++        // ends a pipelined full sync calls while the list thread goes on (State::fullSyncPipelined()).
++        std::mutex framebuffersMutex;
+         std::unordered_map<uint64_t, TileCopy> tileCopies;
+         uint64_t tileCopyIdCounter = 0;
+         std::unordered_map<uint64_t, uint64_t> reinterpretTileCache;
+@@ -182,6 +186,7 @@ namespace RT64 {
+         ~FramebufferManager();
+         Framebuffer &get(uint32_t address, uint8_t siz, uint32_t width, uint32_t height);
+         Framebuffer *find(uint32_t address) const;
++        Framebuffer *findLocked(uint32_t address);
+         Framebuffer *findMostRecentContaining(uint32_t addressStart, uint32_t addressEnd);
+         void writeChanges(RenderWorker *renderWorker, const FramebufferChangePool &fbChangePool, const FramebufferOperation &op, RenderTargetManager &targetManager, const ShaderLibrary *shaderLibrary);
+         void clearUsedTileCopies();
+diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
+--- a/src/hle/rt64_rdp.cpp
++++ b/src/hle/rt64_rdp.cpp
+@@ -61,6 +61,7 @@ namespace RT64 {
+ 
+     RDP::RDP(State *state) : state(state) {
+         memset(TMEM, 0, sizeof(TMEM));
++        memset(tmemTags, 0, sizeof(tmemTags));
+         crashed = false;
+         crashReason = CrashReason::None;
+ 
+@@ -120,7 +121,7 @@ namespace RT64 {
+             state->flush();
+             state->submitFramebufferPair(colorImage.changed ? FramebufferPair::FlushReason::ColorImageChanged : FramebufferPair::FlushReason::DepthImageChanged);
+ 
+-            const int workloadCursor = state->ext.workloadQueue->writeCursor;
++            const int workloadCursor = state->interpretCursor();
+             Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+             workload.addFramebufferPair(colorImage.address, colorImage.fmt, colorImage.siz, colorImage.width, depthImage.address);
+             colorImage.changed = false;
+@@ -185,7 +186,7 @@ namespace RT64 {
+     }
+     
+     void RDP::checkImageOverlap(uint32_t addressStart, uint32_t addressEnd) {
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         FramebufferPair &fbPair = workload.fbPairs[workload.currentFramebufferPairIndex()];
+         const FixedRect colorRect = fbPair.drawColorRect;
+@@ -422,7 +423,7 @@ namespace RT64 {
+     }
+     
+     template<bool RGBA32 = false, bool TLUT = false>
+-    __forceinline void loadWord(uint8_t *TMEM, uint32_t tmemAddress, uint32_t tmemXorMask, const uint8_t *RDRAM, uint32_t textureAddress) {
++    __forceinline void loadWord(uint8_t *TMEM, uint32_t *tags, uint32_t tag, uint32_t tmemAddress, uint32_t tmemXorMask, const uint8_t *RDRAM, uint32_t textureAddress) {
+         // Only sample the first two bytes in TLUT mode.
+         uint32_t offsetMask;
+         if constexpr (TLUT) {
+@@ -443,6 +444,11 @@ namespace RT64 {
+             TMEM[((tmemAddress + 1) ^ tmemXorMask) | UpperTMEM] = RDRAM[(textureAddress + (3 & offsetMask)) ^ 3];
+             TMEM[((tmemAddress + 2) ^ tmemXorMask) | UpperTMEM] = RDRAM[(textureAddress + (6 & offsetMask)) ^ 3];
+             TMEM[((tmemAddress + 3) ^ tmemXorMask) | UpperTMEM] = RDRAM[(textureAddress + (7 & offsetMask)) ^ 3];
++            const uint32_t unitTag = ((tmemAddress & 0x3) == 0) ? tag : 0;
++            for (uint32_t i = 0; i < 4; i += 3) {
++                tags[(((tmemAddress + i) ^ tmemXorMask) >> 2) & 0x3FF] = unitTag;
++                tags[((((tmemAddress + i) ^ tmemXorMask) | UpperTMEM) >> 2) & 0x3FF] = unitTag;
++            }
+         }
+ #if defined(__EMSCRIPTEN__)
+         // A word from a word-aligned address (nearly every load block and tile) as two 32-bit reads, byteswapped from
+@@ -455,6 +461,8 @@ namespace RT64 {
+             words[1] = __builtin_bswap32(words[1]);
+             memcpy(&TMEM[tmemAddress ^ tmemXorMask], &words[0], 4);
+             memcpy(&TMEM[(tmemAddress + 4) ^ tmemXorMask], &words[1], 4);
++            tags[(tmemAddress >> 2) & 0x3FF] = tag;
++            tags[((tmemAddress >> 2) + 1) & 0x3FF] = tag;
+         }
+ #endif
+         else {
+@@ -462,11 +470,22 @@ namespace RT64 {
+             for (uint32_t i = 0; i < 8; i++) {
+                 TMEM[(tmemAddress + i) ^ tmemXorMask] = RDRAM[(textureAddress + (i & offsetMask)) ^ 3];
+             }
++
++            // A word from an unaligned address covers parts of three 4-byte units, the ends of which hold older bytes.
++            if ((tmemAddress & 0x7) == 0) {
++                tags[(tmemAddress >> 2) & 0x3FF] = tag;
++                tags[((tmemAddress >> 2) + 1) & 0x3FF] = tag;
++            }
++            else {
++                for (uint32_t i = 0; i < 8; i++) {
++                    tags[(((tmemAddress + i) ^ tmemXorMask) >> 2) & 0x3FF] = 0;
++                }
++            }
+         }
+     }
+ 
+     template<bool RGBA32 = false, bool BLOCK = false, bool TLUT = false>
+-    __forceinline void loadToTMEMCommon(uint8_t *TMEM, const uint8_t *RDRAM, uint32_t textureStart, uint32_t textureStride, uint32_t tmemStart,
++    __forceinline void loadToTMEMCommon(uint8_t *TMEM, uint32_t *tags, uint32_t tag, const uint8_t *RDRAM, uint32_t textureStart, uint32_t textureStride, uint32_t tmemStart,
+         uint32_t tmemStride, uint32_t wordsPerRow, uint32_t rowCount, uint32_t dxtIncrement = 0)
+     {
+         assert((!BLOCK || (rowCount == 1)) && "Load block must behave as if it only loads one row of data.");
+@@ -533,7 +552,7 @@ namespace RT64 {
+             tmemAddress = tmemAddressRow;
+             wordCount = wordsPerRow;
+             while (wordCount > 0) {
+-                loadWord<RGBA32, TLUT>(TMEM, tmemAddress, tmemXorMask, RDRAM, textureAddress);
++                loadWord<RGBA32, TLUT>(TMEM, tags, tag, tmemAddress, tmemXorMask, RDRAM, textureAddress);
+                 loadWordStep();
+                 wordCount--;
+             }
+@@ -574,10 +593,10 @@ namespace RT64 {
+             uint8_t *TMEM8 = reinterpret_cast<uint8_t *>(TMEM);
+             const uint8_t *RDRAM = state->RDRAM;
+             if (RGBA32) {
+-                loadToTMEMCommon<true>(TMEM8, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordsPerRow, rowCount);
++                loadToTMEMCommon<true>(TMEM8, tmemTags, tmemTag, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordsPerRow, rowCount);
+             }
+             else {
+-                loadToTMEMCommon<false>(TMEM8, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordsPerRow, rowCount);
++                loadToTMEMCommon<false>(TMEM8, tmemTags, tmemTag, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordsPerRow, rowCount);
+             }
+         }
+     }
+@@ -610,10 +629,10 @@ namespace RT64 {
+             uint8_t *TMEM8 = reinterpret_cast<uint8_t *>(TMEM);
+             const uint8_t *RDRAM = state->RDRAM;
+             if (RGBA32) {
+-                loadToTMEMCommon<true, true>(TMEM8, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordCount, 1, loadTile.lrt);
++                loadToTMEMCommon<true, true>(TMEM8, tmemTags, tmemTag, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordCount, 1, loadTile.lrt);
+             }
+             else {
+-                loadToTMEMCommon<false, true>(TMEM8, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordCount, 1, loadTile.lrt);
++                loadToTMEMCommon<false, true>(TMEM8, tmemTags, tmemTag, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordCount, 1, loadTile.lrt);
+             }
+         }
+     }
+@@ -650,10 +669,10 @@ namespace RT64 {
+             uint8_t *TMEM8 = reinterpret_cast<uint8_t *>(TMEM);
+             const uint8_t *RDRAM = state->RDRAM;
+             if (RGBA32) {
+-                loadToTMEMCommon<true, false, true>(TMEM8, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordsPerRow, rowCount);
++                loadToTMEMCommon<true, false, true>(TMEM8, tmemTags, tmemTag, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordsPerRow, rowCount);
+             }
+             else {
+-                loadToTMEMCommon<false, false, true>(TMEM8, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordsPerRow, rowCount);
++                loadToTMEMCommon<false, false, true>(TMEM8, tmemTags, tmemTag, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordsPerRow, rowCount);
+             }
+         }
+     }
+@@ -684,7 +703,7 @@ namespace RT64 {
+         assert(((t.siz != G_IM_SIZ_32b) || (t.fmt == G_IM_FMT_RGBA)) && "Other 32-bit formats than RGBA32 are not currently supported.");
+ #   endif
+ 
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         const bool warningsEnabled = state->ext.userConfig->developerMode;
+         if (warningsEnabled) {
+@@ -812,7 +831,7 @@ namespace RT64 {
+ #   endif
+ 
+         // Check for warnings in developer mode.
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         const bool warningsEnabled = state->ext.userConfig->developerMode;
+         if (warningsEnabled) {
+@@ -863,7 +882,7 @@ namespace RT64 {
+ #   endif
+         
+         // Check for warnings in developer mode.
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         const bool warningsEnabled = state->ext.userConfig->developerMode;
+         if (warningsEnabled) {
+@@ -1177,7 +1196,7 @@ namespace RT64 {
+         checkFramebufferPair();
+ 
+         // Change projection to triangles.
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         FramebufferPair &fbPair = workload.fbPairs[workload.currentFramebufferPairIndex()];
+         if (!fbPair.inProjection(0, Projection::Type::Triangle)) {
+@@ -1282,7 +1301,7 @@ namespace RT64 {
+         state->flush();
+ 
+         // Change projection to rectangle.
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         FramebufferPair &fbPair = workload.fbPairs[workload.currentFramebufferPairIndex()];
+         if (!fbPair.inProjection(0, Projection::Type::Rectangle)) {
+@@ -1443,7 +1462,7 @@ namespace RT64 {
+     }
+ 
+     void RDP::updateCallTexcoords(float u, float v) {
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         for (uint32_t t = 0; t < state->drawCall.tileCount; t++) {
+             DrawCallTile &callTile = workload.drawData.callTiles[state->drawCall.tileIndex + t];
+diff --git a/src/hle/rt64_rdp.h b/src/hle/rt64_rdp.h
+--- a/src/hle/rt64_rdp.h
++++ b/src/hle/rt64_rdp.h
+@@ -70,6 +70,12 @@ namespace RT64 {
+         };
+ 
+         uint64_t TMEM[RDP_TMEM_WORDS] = {};
++
++        // Rush 2049 patch: which load wrote each 4 bytes of TMEM since the full sync began (0: unknown), by an id the
++        // state gives each distinct load (State::tmemLoadTag). A tile whose bytes all came from one load hashes to the
++        // same value as when that load was last hashed in the same sync (TextureManager::uploadTexture).
++        uint32_t tmemTags[RDP_TMEM_BYTES / 4] = {};
++        uint32_t tmemTag = 0;
+         LoadTexture texture = {};
+         LoadTile tiles[RDP_TILES] = {};
+         uint64_t tileReplacementHashes[RDP_TILES] = {};
+diff --git a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
+--- a/src/hle/rt64_rdp_tmem.cpp
++++ b/src/hle/rt64_rdp_tmem.cpp
+@@ -66,9 +66,98 @@ namespace RT64 {
+         return hash;
+     }
+ 
++    // The one load every byte of a span came from, or 0 when there is none: a byte no load wrote in this sync, two
++    // loads, or a span that wraps around TMEM.
++    static uint32_t spanTag(const uint32_t *tags, uint32_t start, uint32_t count, uint32_t limit) {
++        if ((count == 0) || ((start + count) > limit)) {
++            return 0;
++        }
++
++        const uint32_t first = start >> 2;
++        const uint32_t last = (start + count - 1) >> 2;
++        const uint32_t tag = tags[first];
++        uint32_t differ = 0;
++        for (uint32_t u = first + 1; u <= last; u++) {
++            differ |= tags[u] ^ tag;
++        }
++
++        return (differ == 0) ? tag : 0;
++    }
++
++    // A key for a tile's hash made of the loads its bytes came from and what the hash reads of the tile, or 0 if some of
++    // its bytes didn't all come from one load. Within a full sync a load reads the same RDRAM each time, so the same
++    // loads leave the same bytes where the tile reads them.
++    uint64_t TextureManager::syncHashKey(const uint32_t *tags, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut) {
++        const uint32_t TMEMBytes = 4096;
++        const bool RGBA32 = (loadTile.siz == G_IM_SIZ_32b) && (loadTile.fmt == G_IM_FMT_RGBA);
++        const bool usesTLUT = tlut > 0;
++        const bool halfTMEM = RGBA32 || usesTLUT;
++        const uint32_t tmemSize = halfTMEM ? (TMEMBytes >> 1) : TMEMBytes;
++        const uint32_t drawBytesPerRow = std::max(uint32_t(width) << (RGBA32 ? G_IM_SIZ_16b : loadTile.siz) >> 1U, 1U);
++        const uint32_t drawBytesTotal = (loadTile.line << 3) * (height - 1) + drawBytesPerRow;
++        const uint32_t tmemAddress = (loadTile.tmem << 3) & (tmemSize - 1);
++        struct {
++            uint32_t texels = 0, upper = 0, palette = 0, tlut = 0;
++            uint16_t width = 0, height = 0, line = 0, tmem = 0;
++            uint8_t siz = 0, fmt = 0, palettIndex = 0, pad = 0;
++        } key;
++
++        if (height == 0) {
++            return 0;
++        }
++
++        key.texels = spanTag(tags, tmemAddress, drawBytesTotal, tmemSize);
++        if (key.texels == 0) {
++            return 0;
++        }
++
++        if (RGBA32) {
++            key.upper = spanTag(tags, tmemAddress + tmemSize, drawBytesTotal, TMEMBytes);
++            if (key.upper == 0) {
++                return 0;
++            }
++        }
++
++        if (usesTLUT) {
++            const bool CI4 = (loadTile.siz == G_IM_SIZ_4b);
++            const uint32_t paletteAddress = (TMEMBytes >> 1) + (CI4 ? (loadTile.palette << 7) : 0);
++            key.palette = spanTag(tags, paletteAddress, CI4 ? 0x80 : 0x800, TMEMBytes);
++            if (key.palette == 0) {
++                return 0;
++            }
++        }
++
++        key.tlut = tlut;
++        key.width = width;
++        key.height = height;
++        key.line = loadTile.line;
++        key.tmem = loadTile.tmem;
++        key.siz = loadTile.siz;
++        key.fmt = loadTile.fmt;
++        key.palettIndex = loadTile.palette;
++        const uint64_t keyHash = XXH3_64bits(&key, sizeof(key));
++        return (keyHash != 0) ? keyHash : 1;
++    }
++
+     uint64_t TextureManager::uploadTexture(State *state, const LoadTile &loadTile, TextureCache *textureCache, uint64_t creationFrame, uint16_t width, uint16_t height, uint32_t tlut) {
+         const uint8_t *TMEM = reinterpret_cast<const uint8_t *>(state->rdp->TMEM);
+-        uint64_t hash = TMEMHasher::hash(TMEM, loadTile, width, height, tlut, TMEMHasher::CurrentHashVersion);
++        const uint64_t syncKey = syncHashKey(state->rdp->tmemTags, loadTile, width, height, tlut);
++        uint64_t hash;
++        auto syncIt = (syncKey != 0) ? syncHashes.find(syncKey) : syncHashes.end();
++        if (syncIt != syncHashes.end()) {
++            // The first tile with this key was already uploaded or marked used in this sync.
++            if (state->dumpingTexturesDirectory.empty()) {
++                return syncIt->second;
++            }
++
++            hash = syncIt->second;
++        }
++        else {
++            hash = TMEMHasher::hash(TMEM, loadTile, width, height, tlut, TMEMHasher::CurrentHashVersion);
++            if (syncKey != 0) {
++                syncHashes.emplace(syncKey, hash);
++            }
++        }
+         if (hashSet.find(hash) == hashSet.end()) {
+             hashSet.insert(hash);
+             textureCache->queueGPUUploadTMEM(hash, creationFrame, TMEM, RDP_TMEM_BYTES, width, height, tlut, loadTile, true);
+diff --git a/src/hle/rt64_rdp_tmem.h b/src/hle/rt64_rdp_tmem.h
+--- a/src/hle/rt64_rdp_tmem.h
++++ b/src/hle/rt64_rdp_tmem.h
+@@ -4,6 +4,8 @@
+ 
+ #pragma once
+ 
++#include <unordered_map>
++
+ #include <set>
+ 
+ #include "hle/rt64_draw_call.h"
+@@ -16,8 +18,13 @@ namespace RT64 {
+         std::set<uint64_t> hashSet;
+         std::set<uint64_t> dumpedSet;
+ 
++        // Rush 2049 patch: the hashes of tiles whose bytes each came from one load (RDP::tmemTags), by the loads and the
++        // tile, for the rest of the full sync. Four split-screen views load and hash every texture four times a frame.
++        std::unordered_map<uint64_t, uint64_t> syncHashes;
++
+         void uploadEmpty(State *state, TextureCache *textureCache, uint64_t creationFrame, uint16_t width, uint16_t height, uint64_t replacementHash);
+         uint64_t uploadTMEM(State *state, const LoadTile &loadTile, TextureCache *textureCache, uint64_t creationFrame, uint16_t byteOffset, uint16_t byteCount, uint16_t width, uint16_t height, uint32_t tlut);
++        static uint64_t syncHashKey(const uint32_t *tags, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut);
+         uint64_t uploadTexture(State *state, const LoadTile &loadTile, TextureCache *textureCache, uint64_t creationFrame, uint16_t width, uint16_t height, uint32_t tlut);
+         void dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut);
+         void removeHashes(const std::vector<uint64_t> &hashes);
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -409,7 +409,7 @@ namespace RT64 {
+             return;
+         }
+ 
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         const uint32_t rdramAddress = fromSegmentedMasked(address);
+         const VertexEXV1 *dlVerts = reinterpret_cast<const VertexEXV1 *>(state->fromRDRAM(rdramAddress));
+@@ -450,7 +450,7 @@ namespace RT64 {
+     }
+     
+     void RSP::addCurrentProjection(Projection::Type type) {
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         if (extended.viewProjMatrixIdStackChanged) {
+             extended.curViewProjMatrixIdGroupIndex = int(workload.drawData.transformGroups.size());
+@@ -505,7 +505,7 @@ namespace RT64 {
+ 
+     template<bool addEmptyVelocity, uint32_t vertexSize>
+     void RSP::setVertexCommon(uint32_t rdramAddress, uint32_t dstIndex, uint32_t dstMax) {
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+ 
+         if (extended.modelMatrixIdStackChanged) {
+@@ -743,7 +743,7 @@ namespace RT64 {
+         }
+ 
+         // If the vertex was used already in the frame, then we create a new copy instead.
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         auto &normColBytes = workload.drawData.normColBytes;
+         auto &tcFloats = workload.drawData.tcFloats;
+@@ -838,7 +838,7 @@ namespace RT64 {
+     
+     void RSP::branchZ(uint32_t branchDl, uint16_t vtxIndex, uint32_t zValue, DisplayList **dl) {
+         const bool forceBranch = state->ext.enhancementConfig->f3dex.forceBranch || extended.forceBranch;
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         const Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         const uint32_t globalIndex = indices[vtxIndex];
+         const float screenZ = workload.drawData.posScreen[globalIndex][2] * DepthRange;
+@@ -851,7 +851,7 @@ namespace RT64 {
+ 
+     void RSP::branchW(uint32_t branchDl, uint16_t vtxIndex, uint32_t wValue, DisplayList **dl) {
+         const bool forceBranch = state->ext.enhancementConfig->f3dex.forceBranch || extended.forceBranch;
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         const Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         const uint32_t globalIndex = indices[vtxIndex];
+         const float posW = workload.drawData.posTransformed[globalIndex][3];
+@@ -887,7 +887,7 @@ namespace RT64 {
+         const float Margin = 1.25f;
+         const float xBound = Margin * aspect * 0.75f;
+         const float yBound = Margin;
+-        const Workload &workload = state->ext.workloadQueue->workloads[state->ext.workloadQueue->writeCursor];
++        const Workload &workload = state->ext.workloadQueue->workloads[state->interpretCursor()];
+         uint32_t outside = 0x1F;
+         for (uint32_t i = vstart; (i <= vend) && (outside != 0); i++) {
+             const hlslpp::float4 &p = workload.drawData.posTransformed[indices[i]];
+@@ -1112,7 +1112,7 @@ namespace RT64 {
+         state->rdp->checkFramebufferPair();
+         
+         // We must add the current projection again if we're not in the right state.
+-        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+         FramebufferPair &fbPair = workload.fbPairs[workload.currentFramebufferPairIndex()];
+         const Projection::Type projType = getCurrentProjectionType();
+@@ -1358,7 +1358,7 @@ namespace RT64 {
+ 
+         if (idIsAddress && editGroup) {
+             const uint32_t rdramAddress = fromSegmentedMasked(id);
+-            const int workloadCursor = state->ext.workloadQueue->writeCursor;
++            const int workloadCursor = state->interpretCursor();
+             Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+ 
+             auto range = workload.physicalAddressTransformMap.equal_range(rdramAddress);
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -276,7 +276,125 @@ namespace RT64 {
+         reset();
+     }
+ 
+-    State::~State() { }
++    State::~State() {
++        waitForSync();
++    }
++
++    SyncWorker::SyncWorker() {
++        thread = std::thread([this]() {
++            std::unique_lock<std::mutex> lock(mutex);
++            while (true) {
++                condition.wait(lock, [this]() { return !tasks.empty() || !running; });
++                if (tasks.empty()) {
++                    return;
++                }
++
++                std::function<void()> task = std::move(tasks.front());
++                tasks.pop_front();
++                lock.unlock();
++                task();
++                lock.lock();
++                pending--;
++                condition.notify_all();
++            }
++        });
++    }
++
++    SyncWorker::~SyncWorker() {
++        {
++            std::scoped_lock lock(mutex);
++            running = false;
++        }
++
++        condition.notify_all();
++        thread.join();
++    }
++
++    void SyncWorker::run(std::function<void()> task) {
++        {
++            std::scoped_lock lock(mutex);
++            tasks.emplace_back(std::move(task));
++            pending++;
++        }
++
++        condition.notify_all();
++    }
++
++    bool SyncWorker::busy() {
++        std::scoped_lock lock(mutex);
++        return pending > 0;
++    }
++
++    void SyncWorker::waitIdle() {
++        std::unique_lock<std::mutex> lock(mutex);
++        condition.wait(lock, [this]() { return pending == 0; });
++    }
++
++    int State::interpretCursor() const {
++        return (pipelinedCursor >= 0) ? pipelinedCursor : ext.workloadQueue->writeCursor;
++    }
++
++    void State::waitForSync() {
++        if (syncWorker != nullptr) {
++            syncWorker->waitIdle();
++        }
++
++        pipelinedCursor = -1;
++    }
++
++    // What the list thread does with what a pending sync uses (the VI, the presents), the worker does after the sync.
++    void State::afterSync(std::function<void()> task) {
++        if ((syncWorker != nullptr) && syncWorker->busy()) {
++            syncWorker->run(std::move(task));
++        }
++        else {
++            task();
++        }
++    }
++
++    // Rush 2049 patch: a list that draws without render to RAM ends its full sync on syncWorker: replaying its loads,
++    // hashing and uploading its textures, and submitting its workload, while this thread records the next list into the
++    // next workload. Four split-screen views make lists of some 7000 draw calls, which took RT64 up to twice a frame's
++    // time on one thread. Everything the worker touches is either the ended workload's, or only touched again by this
++    // thread after it waits for the worker (waitForSync()): the next full sync, configuration changes, the end. A VI
++    // update while the worker is busy runs after it there (afterSync()). The game is told the RDP is done before the
++    // worker replays the list's loads from RDRAM, so a texture the CPU rewrites at once can show its next bytes a frame
++    // early. Lists that use tile copies, and render to RAM, developer mode and texture dumping, stay on this thread.
++    bool State::fullSyncPipelined(Workload &workload, uint32_t loadOpCursor, uint32_t rdpTileCursor) {
++#   if defined(__EMSCRIPTEN__)
++        return false;
++#   else
++        if (ext.userConfig->developerMode || debuggerInspector.paused || !dumpingTexturesDirectory.empty()) {
++            return false;
++        }
++
++        const std::vector<DrawCallTile> &callTiles = workload.drawData.callTiles;
++        for (size_t t = rdpTileCursor; t < callTiles.size(); t++) {
++            if (callTiles[t].tileCopyUsed) {
++                return false;
++            }
++        }
++
++        if (syncWorker == nullptr) {
++            syncWorker = std::make_unique<SyncWorker>();
++        }
++
++        const int nextCursor = (ext.workloadQueue->writeCursor + 1) % int(ext.workloadQueue->workloads.size());
++        ext.workloadQueue->waitUntilWritable(nextCursor);
++
++        Workload *ended = &workload;
++        const uint64_t counter = workloadCounter;
++        const uint16_t refreshRate = extended.refreshRate;
++        syncWorker->run([this, ended, loadOpCursor, rdpTileCursor, counter, refreshRate]() {
++            fullSyncTilesWithoutRAM(*ended, loadOpCursor, rdpTileCursor);
++            fullSyncSubmit(*ended, false, false, counter, refreshRate, false);
++        });
++
++        pipelinedCursor = nextCursor;
++        fullSyncBeginNext();
++        return true;
++#   endif
++    }
+ 
+     void State::setup(const External &ext) {
+         this->ext = ext;
+@@ -453,7 +571,7 @@ namespace RT64 {
+                 }
+             }
+ 
+-            const int workloadCursor = ext.workloadQueue->writeCursor;
++            const int workloadCursor = interpretCursor();
+             Workload &workload = ext.workloadQueue->workloads[workloadCursor];
+             if (drawCall.tileCount > 0) {
+                 DrawData &drawData = workload.drawData;
+@@ -706,7 +824,7 @@ namespace RT64 {
+         }
+ 
+         // Assign some parameters to the draw call.
+-        const int workloadCursor = ext.workloadQueue->writeCursor;
++        const int workloadCursor = interpretCursor();
+         Workload &workload = ext.workloadQueue->workloads[workloadCursor];
+         FramebufferPair &fbPair = workload.fbPairs[workload.currentFramebufferPairIndex()];
+         drawCall.cullBothMask = rsp->cullBothMask;
+@@ -772,7 +890,7 @@ namespace RT64 {
+     }
+     
+     void State::submitFramebufferPair(FramebufferPair::FlushReason flushReason) {
+-        const int workloadCursor = ext.workloadQueue->writeCursor;
++        const int workloadCursor = interpretCursor();
+         Workload &workload = ext.workloadQueue->workloads[workloadCursor];
+ 
+         // Ignore if the amount of framebuffer pairs isn't bigger than the amount of framebuffer pairs submitted.
+@@ -911,7 +1029,7 @@ namespace RT64 {
+         assert(drawFbOperations.empty() && "There should be no pending framebuffer operations when this is started.");
+         assert(drawFbDiscards.empty() && "There should be no pending framebuffer discards when this is started.");
+ 
+-        const int workloadCursor = ext.workloadQueue->writeCursor;
++        const int workloadCursor = interpretCursor();
+         Workload &workload = ext.workloadQueue->workloads[workloadCursor];
+         const uint32_t fbPairIndex = workload.currentFramebufferPairIndex();
+         {
+@@ -937,6 +1055,7 @@ namespace RT64 {
+ 
+             // For emulating how Rice hashes textures, we need information about the load operation that was performed in the particular TMEM address.
+             rdp->rice.lastLoadOpByTMEM[loadOp.tile.tmem] = loadOp;
++            rdp->tmemTag = tmemLoadTag(loadOp);
+ 
+             switch (loadOp.type) {
+             case LoadOperation::Type::Block:
+@@ -1227,7 +1346,44 @@ namespace RT64 {
+         dlCpuProfiler.end();
+     }
+ 
++    uint32_t State::tmemLoadTag(const LoadOperation &loadOp) {
++        struct {
++            uint8_t type, tileFmt, tileSiz, tilePalette;
++            uint16_t line, tmem, uls, ult, lrs, lrt;
++            uint32_t address;
++            uint8_t textureFmt, textureSiz;
++            uint16_t width;
++        } key = {};
++        key.type = uint8_t(loadOp.type);
++        key.tileFmt = loadOp.tile.fmt;
++        key.tileSiz = loadOp.tile.siz;
++        key.tilePalette = loadOp.tile.palette;
++        key.line = loadOp.tile.line;
++        key.tmem = loadOp.tile.tmem;
++        key.uls = loadOp.tile.uls;
++        key.ult = loadOp.tile.ult;
++        key.lrs = loadOp.tile.lrs;
++        key.lrt = loadOp.tile.lrt;
++        key.address = loadOp.texture.address;
++        key.textureFmt = loadOp.texture.fmt;
++        key.textureSiz = loadOp.texture.siz;
++        key.width = loadOp.texture.width;
++        const uint64_t keyHash = XXH3_64bits(&key, sizeof(key));
++        auto it = tmemLoadTags.find(keyHash);
++        if (it != tmemLoadTags.end()) {
++            return it->second;
++        }
++
++        const uint32_t tag = uint32_t(tmemLoadTags.size()) + 1;
++        tmemLoadTags.emplace(keyHash, tag);
++        return tag;
++    }
++
+     void State::fullSync() {
++        waitForSync();
++        memset(rdp->tmemTags, 0, sizeof(rdp->tmemTags));
++        tmemLoadTags.clear();
++        textureManager.syncHashes.clear();
+         landRAMCopies(false);
+         flush();
+         submitFramebufferPair(FramebufferPair::FlushReason::ProcessDisplayListsEnd);
+@@ -2120,36 +2276,49 @@ namespace RT64 {
+ #       endif
+         }
+         else {
+-            // Process all tiles.
+-            for (uint32_t f = 0; f < workload.fbPairCount; f++) {
+-                fullSyncFramebufferPairTiles(workload, workload.fbPairs[f], loadOpCursor, rdpTileCursor);
++            if (fullSyncPipelined(workload, loadOpCursor, rdpTileCursor)) {
++                return;
+             }
+ 
+-            // Do not render anything, just wait for the data to be uploaded.
+-            ext.framebufferGraphicsWorker->commandList->begin();
+-            ext.drawDataUploader->commandListBeforeBarriers(ext.framebufferGraphicsWorker);
+-            ext.transformsUploader->commandListBeforeBarriers(ext.framebufferGraphicsWorker);
+-            ext.drawDataUploader->commandListCopyResources(ext.framebufferGraphicsWorker);
+-            ext.transformsUploader->commandListCopyResources(ext.framebufferGraphicsWorker);
+-            ext.drawDataUploader->commandListAfterBarriers(ext.framebufferGraphicsWorker);
+-            ext.transformsUploader->commandListAfterBarriers(ext.framebufferGraphicsWorker);
+-            ext.framebufferGraphicsWorker->commandList->end();
+-            ext.drawDataUploader->wait();
+-            ext.transformsUploader->wait();
+-            ext.framebufferGraphicsWorker->execute();
+-            ext.framebufferGraphicsWorker->wait();
+-            ext.textureCache->waitForGPUUploads();
++            fullSyncTilesWithoutRAM(workload, loadOpCursor, rdpTileCursor);
+         }
+ 
++        fullSyncSubmit(workload, renderToRDRAM, rdpToldDone, workloadCounter, extended.refreshRate, true);
++        fullSyncBeginNext();
++    }
++
++    void State::fullSyncTilesWithoutRAM(Workload &workload, uint32_t loadOpCursor, uint32_t rdpTileCursor) {
++        // Process all tiles.
++        for (uint32_t f = 0; f < workload.fbPairCount; f++) {
++            fullSyncFramebufferPairTiles(workload, workload.fbPairs[f], loadOpCursor, rdpTileCursor);
++        }
++
++        // Do not render anything, just wait for the data to be uploaded.
++        ext.framebufferGraphicsWorker->commandList->begin();
++        ext.drawDataUploader->commandListBeforeBarriers(ext.framebufferGraphicsWorker);
++        ext.transformsUploader->commandListBeforeBarriers(ext.framebufferGraphicsWorker);
++        ext.drawDataUploader->commandListCopyResources(ext.framebufferGraphicsWorker);
++        ext.transformsUploader->commandListCopyResources(ext.framebufferGraphicsWorker);
++        ext.drawDataUploader->commandListAfterBarriers(ext.framebufferGraphicsWorker);
++        ext.transformsUploader->commandListAfterBarriers(ext.framebufferGraphicsWorker);
++        ext.framebufferGraphicsWorker->commandList->end();
++        ext.drawDataUploader->wait();
++        ext.transformsUploader->wait();
++        ext.framebufferGraphicsWorker->execute();
++        ext.framebufferGraphicsWorker->wait();
++        ext.textureCache->waitForGPUUploads();
++    }
++
++    void State::fullSyncSubmit(Workload &workload, bool renderToRDRAM, bool rdpToldDone, uint64_t counter, uint16_t refreshRate, bool onListThread) {
+         // Evict from the texture cache that are too old and should no longer be maintained.
+         // The texture manager should also be notified of any hashes that were removed.
+-        if (ext.textureCache->evict(workloadCounter, evictedTextureHashes)) {
++        if (ext.textureCache->evict(counter, evictedTextureHashes)) {
+             textureManager.removeHashes(evictedTextureHashes);
+         }
+ 
+ #   if RT64_FREE_DISCARDED_TARGETS
+         // The targets render to RAM drew of framebuffers discarded since, as the workload queue frees its own.
+-        renderTargetManager.freeDiscarded(workloadCounter, WORKLOAD_QUEUE_SIZE * 32, renderFramebufferManager.get());
++        renderTargetManager.freeDiscarded(counter, WORKLOAD_QUEUE_SIZE * 32, renderFramebufferManager.get());
+ #   endif
+ 
+         if (renderToRDRAM) {
+@@ -2175,8 +2344,8 @@ namespace RT64 {
+ #   endif
+ 
+         // Store the presentation rate in the workload.
+-        if (extended.refreshRate != UINT16_MAX) {
+-            workload.viOriginalRate = extended.refreshRate;
++        if (refreshRate != UINT16_MAX) {
++            workload.viOriginalRate = refreshRate;
+         }
+         else {
+             workload.viOriginalRate = viHistory.logicalRateFromFactors();
+@@ -2187,14 +2356,16 @@ namespace RT64 {
+         }
+ 
+         // Log and reset profilers.
+-        dlCpuProfiler.end();
+-        dlCpuProfiler.log();
+-        screenCpuProfiler.log();
+-        screenCpuProfiler.reset();
++        if (onListThread) {
++            dlCpuProfiler.end();
++            dlCpuProfiler.log();
++            screenCpuProfiler.log();
++            screenCpuProfiler.reset();
++        }
+ 
+         // Inspect the current workload before submission.
+         lastWorkloadIndex = ext.workloadQueue->writeCursor;
+-        if (ext.userConfig->developerMode) {
++        if (onListThread && ext.userConfig->developerMode) {
+             inspect();
+         }
+ 
+@@ -2342,8 +2513,10 @@ namespace RT64 {
+         ext.workloadQueue->advanceToNextWorkload();
+ 
+         // Make sure the profiler starts after the workload is advanced to ignore any waiting time.
+-        dlCpuProfiler.reset();
+-        dlCpuProfiler.start();
++        if (onListThread) {
++            dlCpuProfiler.reset();
++            dlCpuProfiler.start();
++        }
+         
+         // Submit a presentation event instantly if applicable.
+         const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
+@@ -2381,9 +2554,11 @@ namespace RT64 {
+                 }
+             }
+         }
++    }
+ 
++    void State::fullSyncBeginNext() {
+         // Reset the next workload.
+-        workloadCursor = ext.workloadQueue->writeCursor;
++        const int workloadCursor = interpretCursor();
+         Workload &nextWorkload = ext.workloadQueue->workloads[workloadCursor];
+         nextWorkload.begin(workloadCounter++);
+ 
+@@ -2485,7 +2660,7 @@ namespace RT64 {
+             // See if there's an existing framebuffer that lines up with the VI. If there is, we support reading 
+             // CPU changes directly to it and recreating them in the render thread at low resolution.
+             RenderWorker *worker = ext.framebufferGraphicsWorker;
+-            Framebuffer *screenFb = framebufferManager.find(screenFbAddress);
++            Framebuffer *screenFb = framebufferManager.findLocked(screenFbAddress);
+             if (screenFb != nullptr) {
+                 // Check compatibility of the high resolution framebuffer with the VI first.
+                 // Ensure both the siz and width are the same.
+@@ -3471,7 +3646,7 @@ namespace RT64 {
+             flush();
+ 
+             if (activeSpriteCommand.callCount > 0) {
+-                const int workloadCursor = ext.workloadQueue->writeCursor;
++                const int workloadCursor = interpretCursor();
+                 Workload &workload = ext.workloadQueue->workloads[workloadCursor];
+                 workload.spriteCommands.emplace_back(activeSpriteCommand);
+             }
+diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
+--- a/src/hle/rt64_state.h
++++ b/src/hle/rt64_state.h
+@@ -5,6 +5,12 @@
+ #pragma once
+ 
+ #include <atomic>
++#include <condition_variable>
++#include <deque>
++#include <functional>
++#include <mutex>
++#include <thread>
++#include <unordered_map>
+ 
+ #include "xxHash/xxh3.h"
+ 
+@@ -51,6 +57,22 @@ namespace RT64 {
+     // the player's placement, and for its menus. Read with each workload; Original stays Original.
+     void setExtendedAspectFull(bool full);
+ 
++    // Rush 2049 patch: runs what a full sync hands it, in order, on a thread of its own (State::fullSyncPipelined()).
++    struct SyncWorker {
++        std::thread thread;
++        std::mutex mutex;
++        std::condition_variable condition;
++        std::deque<std::function<void()>> tasks;
++        uint32_t pending = 0;
++        bool running = true;
++
++        SyncWorker();
++        ~SyncWorker();
++        void run(std::function<void()> task);
++        bool busy();
++        void waitIdle();
++    };
++
+     struct State {
+         struct External {
+             Application *app;
+@@ -93,6 +115,15 @@ namespace RT64 {
+         std::unique_ptr<RSP> rsp;
+         std::unique_ptr<RDP> rdp;
+         TextureManager textureManager;
++
++        // Rush 2049 patch: an id for each distinct load replayed in this full sync (RDP::tmemTags).
++        std::unordered_map<uint64_t, uint32_t> tmemLoadTags;
++        uint32_t tmemLoadTag(const LoadOperation &loadOp);
++
++        // Rush 2049 patch: the workload the next list is recorded into while the last one's sync ends on syncWorker, or
++        // -1 when none is pending (fullSyncPipelined()).
++        int pipelinedCursor = -1;
++        std::unique_ptr<SyncWorker> syncWorker;
+         FramebufferManager framebufferManager;
+         FramebufferChangePool scratchFbChangePool;
+         std::unique_ptr<FramebufferRenderer> framebufferRenderer;
+@@ -215,6 +246,13 @@ namespace RT64 {
+         void landRAMCopies(bool onlyIfReady);
+         void fullSync();
+         void fullSyncFramebufferPairTiles(Workload &workload, FramebufferPair &fbPair, uint32_t &loadOpCursor, uint32_t &rdpTileCursor);
++        void fullSyncTilesWithoutRAM(Workload &workload, uint32_t loadOpCursor, uint32_t rdpTileCursor);
++        void fullSyncSubmit(Workload &workload, bool renderToRDRAM, bool rdpToldDone, uint64_t counter, uint16_t refreshRate, bool onListThread);
++        void fullSyncBeginNext();
++        bool fullSyncPipelined(Workload &workload, uint32_t loadOpCursor, uint32_t rdpTileCursor);
++        int interpretCursor() const;
++        void waitForSync();
++        void afterSync(std::function<void()> task);
+         void listProcessBegin();
+         void listProcessEnd();
+         void updateScreen(const VI &newVI, bool fromEarlyPresent);
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -73,6 +73,16 @@ namespace RT64 {
+ #   endif
+     }
+ 
++    // Rush 2049 patch: waits until the GPU is done with the workload at cursor, which a list is recorded into before the
++    // one before it is submitted (State::fullSyncPipelined()).
++    void WorkloadQueue::waitUntilWritable(int cursor) {
++        bool waitForBarrier;
++        do {
++            const std::scoped_lock lock(cursorMutex);
++            waitForBarrier = (cursor == barrierCursor);
++        } while (waitForBarrier);
++    }
++
+     void WorkloadQueue::advanceToNextWorkload() {
+ #   if RT64_GAME_FRAME_WORKLOADS
+         // The thread that queues the workloads, which waitForWorkloadId() tells from the others.
+diff --git a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
+--- a/src/hle/rt64_workload_queue.h
++++ b/src/hle/rt64_workload_queue.h
+@@ -195,6 +195,7 @@ namespace RT64 {
+         WorkloadQueue();
+         ~WorkloadQueue();
+         void reset();
++        void waitUntilWritable(int cursor);
+         void advanceToNextWorkload();
+ #   if RT64_GAME_FRAME_WORKLOADS
+         void presentQueued(uint64_t presentWorkloadId, uint32_t fbAddress);
