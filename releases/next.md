@@ -1,0 +1,1 @@
+**Fixed:** with Frame Interpolation on, the checkered flags waving over the start line no longer break into stretched shards in some frames; moving and animated objects keep their own shape between the game's frames.
