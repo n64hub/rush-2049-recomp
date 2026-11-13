@@ -100,6 +100,18 @@ namespace {
     };
     const std::string race_players_option = "race_players";
 
+    // src/race_position.cpp.
+    enum class RacePosition {
+        Original,
+        Always,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> race_position_options = {
+        {RacePosition::Original, "Original", "Original"},
+        {RacePosition::Always, "Always", "Always"},
+    };
+    const std::string race_position_option = "race_position";
+
     enum class MouseCursor {
         Original,
         Shown,
@@ -348,6 +360,11 @@ bool rush2049::races_up_to_four() {
     return static_cast<RacePlayers>(std::get<uint32_t>(value)) == RacePlayers::UpToFour;
 }
 
+bool rush2049::race_position_always() {
+    auto value = recompui::config::get_general_config().get_option_value(race_position_option);
+    return static_cast<RacePosition>(std::get<uint32_t>(value)) == RacePosition::Always;
+}
+
 bool rush2049::large_controller_pak() {
     auto value = recompui::config::get_general_config().get_option_value(pak_size_option);
     return static_cast<PakSize>(std::get<uint32_t>(value)) == PakSize::Large;
@@ -498,6 +515,17 @@ void rush2049::init_config() {
         "<b>Original:</b> as the game shipped, Select Mode offers a race to 1 or 2 players only.",
         race_players_options,
         RacePlayers::UpToFour
+    );
+    general.add_enum_option(
+        race_position_option,
+        "Race Position",
+        "When each player's race position (3/5) is on the race HUD."
+        "<br/>"
+        "<b>Always:</b> through the whole race, a crash too. "
+        "<b>Original:</b> as the game shipped, it goes off the screen while the car is wrecked and for 5 seconds "
+        "after it is put back on the track.",
+        race_position_options,
+        RacePosition::Always
     );
     general.add_enum_option(
         mouse_cursor_option,

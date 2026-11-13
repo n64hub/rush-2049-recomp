@@ -85,6 +85,8 @@ option has an Original value that runs the game as it shipped.
   screen (with 3, the fourth quarter shows the track map and the clock). As shipped they were for 1 or 2 players,
   and only Stunt and Battle took more. Computer cars race with them as with 1 and 2 players: 3 with 3 players, 1
   with 4.
+- **Race position always shown**: a player's race position stays on the HUD after a crash. As shipped it went off
+  the screen while the car was wrecked and for 5 seconds after it was put back on the track, 7-8 seconds a crash.
 - **Large Controller Paks**: about 1.9 MB of save space per pak instead of 32 KiB, so ghosts and profiles don't
   run out of room.
 - **Rumble and saves together**: every controller has both a Controller Pak and a Rumble Pak in, so races rumble and
@@ -134,6 +136,7 @@ shipped, set every Original value:
 | Rewind | Rewind | `general.json` `rewind` | `"On"` | `"Off"` |
 | Save Ghosts | Save Ghosts | `general.json` `save_ghosts` | `"On"` | `"Original"` (no SAVE GHOST prompt) |
 | Races for 3 and 4 players | Race Players | `general.json` `race_players` | `"UpToFour"` | `"Original"` (races for 1 or 2) |
+| Race position always shown | Race Position | `general.json` `race_position` | `"Always"` | `"Original"` (off the screen for a while after a crash) |
 | Mouse cursor on screen | Mouse Cursor | `general.json` `mouse_cursor` | `"Original"` (`"Shown"` keeps it on screen while a controller or the keyboard is used; `"Moving"` shows it while the mouse moves and hides it after two seconds still) | `"Original"` (hidden once a controller or a key is pressed, until the mouse moves) |
 
 Not options, because they don't change the game: the keyboard and gamepad layouts, playback at half the game's

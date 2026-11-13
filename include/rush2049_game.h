@@ -26,6 +26,8 @@ namespace rush2049 {
     bool save_ghosts();
     // The "Race Players" setting: Single Race and Practice for 3 and 4 players too (src/four_player_races.cpp).
     bool races_up_to_four();
+    // The "Race Position" setting: the race HUD's position stays on the screen after a crash (src/race_position.cpp).
+    bool race_position_always();
     // Frames a second the game draws at the "Game Frame Rate" setting: 30, 60, or more with Match Framerate.
     // The frame rate the Game Frame Rate option asks for; 0 is Match Framerate (src/frame_rate.cpp).
     void set_game_frame_rate(uint32_t fps);

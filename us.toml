@@ -550,6 +550,13 @@ func = "func_8009EBC0"
 before_vram = 0x8009EFEC
 text = "    ctx->r12 = rush2049_scenery_mask(ctx->r12, ctx->r6);"
 
+# Race Position (src/race_position.cpp). func_80107AF4 draws a player's position only when func_800CF604, called just
+# before, returns nonzero ($v0): their car is active.
+[[patches.hook]]
+func = "func_80107AF4"
+before_vram = 0x80107C5C
+text = "    ctx->r2 = rush2049_race_position_shown(ctx->r2);"
+
 # Races for 3 and 4 players (src/four_player_races.cpp). Select Mode offers a mode when ovl1_func_80399394 returns
 # nonzero: a byte from a table of 7 modes per player count at 0x803B4679 ($s0 holds it here, every path through the
 # function returns it), where Single Race and Practice are for 1 or 2 players. $a0 is still the mode except on

@@ -26,6 +26,9 @@ gpr rush2049_mode_offered(uint8_t* rdram, gpr mode, gpr offered);
 /* Race setup (src/four_player_races.cpp), after the game clears the computer cars for 3 or more players: the track's
    number of them, to put back. */
 void rush2049_race_computer_cars(uint8_t* rdram, gpr track_cars);
+/* Race HUD (src/race_position.cpp): whether a player's position is drawn, given whether func_800CF604 says their car is
+   active. */
+gpr rush2049_race_position_shown(gpr car_active);
 
 /* Widescreen race HUD (src/widescreen.cpp): around every texture rectangle, when the race timer is drawn, and
    before a graphics task starts (turns on RT64's extended GBI for that display list). */
