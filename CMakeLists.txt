@@ -350,6 +350,12 @@ if (RUSH2049_PATCHES)
     target_sources(Rush2049Recompiled PRIVATE ${CMAKE_SOURCE_DIR}/src/register_patches.cpp)
     target_link_libraries(Rush2049Recompiled PRIVATE PatchesLib)
     target_compile_definitions(Rush2049Recompiled PRIVATE RUSH2049_PATCHES)
+    # register_patches.cpp includes the patches' section table, which the command above writes in the middle of a
+    # build. The compiler's own record names it by a relative path and that command by an absolute one, so
+    # without this edge ninja judged the object current before it ran, and an incremental build after a patch moved
+    # linked the old table (undefined <patch>_<old address> symbols).
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/src/register_patches.cpp PROPERTIES
+        OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/RecompiledPatches/recomp_overlays.inl)
 endif()
 
 if (EMSCRIPTEN)
