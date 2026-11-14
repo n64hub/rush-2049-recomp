@@ -88,6 +88,30 @@ namespace {
     };
     const std::string save_ghosts_option = "save_ghosts";
 
+    // src/four_player_races.cpp.
+    enum class RacePlayers {
+        Original,
+        UpToFour,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> race_players_options = {
+        {RacePlayers::Original, "Original", "Original"},
+        {RacePlayers::UpToFour, "UpToFour", "Up to 4"},
+    };
+    const std::string race_players_option = "race_players";
+
+    // src/race_position.cpp.
+    enum class RacePosition {
+        Original,
+        Always,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> race_position_options = {
+        {RacePosition::Original, "Original", "Original"},
+        {RacePosition::Always, "Always", "Always"},
+    };
+    const std::string race_position_option = "race_position";
+
     enum class MouseCursor {
         Original,
         Shown,
@@ -231,6 +255,20 @@ namespace {
     // Read on the game thread with every display list.
     std::atomic<SplitScreenRatio> split_screen_ratio_setting{ SplitScreenRatio::Expand };
 
+    // src/widescreen.cpp.
+    enum class SplitScreenMap {
+        Large,
+        Original,
+        OptionCount
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> split_screen_map_options = {
+        {SplitScreenMap::Large, "Large", "Large"},
+        {SplitScreenMap::Original, "Original", "Original"},
+    };
+    const std::string split_screen_map_option = "split_screen_map";
+    // Read on the game thread with every texture rectangle.
+    std::atomic<SplitScreenMap> split_screen_map_setting{ SplitScreenMap::Large };
+
     enum class MenuRatio {
         Expand,
         Original,
@@ -291,6 +329,10 @@ void rush2049::set_full_width(bool split_widened, bool menu_widened) {
         (split_widened && split_screen_ratio_setting.load(std::memory_order_relaxed) == SplitScreenRatio::Full));
 }
 
+bool rush2049::split_screen_map_large() {
+    return split_screen_map_setting.load(std::memory_order_relaxed) == SplitScreenMap::Large;
+}
+
 bool rush2049::menu_expand() {
     return menu_ratio_setting.load(std::memory_order_relaxed) == MenuRatio::Expand;
 }
@@ -311,6 +353,16 @@ bool rush2049::both_paks_selected() {
 bool rush2049::save_ghosts() {
     auto value = recompui::config::get_general_config().get_option_value(save_ghosts_option);
     return static_cast<SaveGhosts>(std::get<uint32_t>(value)) == SaveGhosts::On;
+}
+
+bool rush2049::races_up_to_four() {
+    auto value = recompui::config::get_general_config().get_option_value(race_players_option);
+    return static_cast<RacePlayers>(std::get<uint32_t>(value)) == RacePlayers::UpToFour;
+}
+
+bool rush2049::race_position_always() {
+    auto value = recompui::config::get_general_config().get_option_value(race_position_option);
+    return static_cast<RacePosition>(std::get<uint32_t>(value)) == RacePosition::Always;
 }
 
 bool rush2049::large_controller_pak() {
@@ -450,6 +502,30 @@ void rush2049::init_config() {
         "The game saves one only for a developer's profile.",
         save_ghosts_options,
         SaveGhosts::On
+    );
+    general.add_enum_option(
+        race_players_option,
+        "Race Players",
+        "How many players can race each other in Single Race and Practice. The game's split screen draws four views, "
+        "and Stunt and Battle take four players."
+        "<br/>"
+        "<b>Up to 4:</b> 3 and 4 players can race too, each in a quarter of the screen; with 3, the fourth quarter "
+        "shows the track map and the clock. Computer cars fill the field as they do for 1 and 2 players: 3 of them "
+        "with 3 players, and 1 with 4. "
+        "<b>Original:</b> as the game shipped, Select Mode offers a race to 1 or 2 players only.",
+        race_players_options,
+        RacePlayers::UpToFour
+    );
+    general.add_enum_option(
+        race_position_option,
+        "Race Position",
+        "When each player's race position (3/5) is on the race HUD."
+        "<br/>"
+        "<b>Always:</b> through the whole race, a crash too. "
+        "<b>Original:</b> as the game shipped, it goes off the screen while the car is wrecked and for 5 seconds "
+        "after it is put back on the track.",
+        race_position_options,
+        RacePosition::Always
     );
     general.add_enum_option(
         mouse_cursor_option,
@@ -656,6 +732,21 @@ void rush2049::init_config() {
     );
     on_apply(graphics, split_screen_ratio_option, [](uint32_t value) {
         split_screen_ratio_setting = static_cast<SplitScreenRatio>(value);
+    });
+
+    graphics.add_enum_option(
+        split_screen_map_option,
+        "Split-Screen Map",
+        "The track map in the middle of a 4-player split screen, where the four views meet. The original game draws a "
+        "smaller picture of the track there than 1 to 3 players see, 32 pixels square on a dark square, with the "
+        "cars' markers on top of each other."
+        "<br/>"
+        "<b>Large:</b> the 64-pixel map 1 to 3 players see, see-through as theirs, with no dark square behind it.",
+        split_screen_map_options,
+        SplitScreenMap::Large
+    );
+    on_apply(graphics, split_screen_map_option, [](uint32_t value) {
+        split_screen_map_setting = static_cast<SplitScreenMap>(value);
     });
 
     graphics.add_enum_option(

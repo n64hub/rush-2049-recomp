@@ -1,0 +1,364 @@
+diff --git a/src/common/rt64_common.cpp b/src/common/rt64_common.cpp
+index 6bbc094..729eaf4 100644
+--- a/src/common/rt64_common.cpp
++++ b/src/common/rt64_common.cpp
+@@ -13,41 +13,6 @@ namespace RT64 {
+ 
+     // FixedRect
+ 
+-    FixedRect::FixedRect() {
+-        reset();
+-    }
+-
+-    FixedRect::FixedRect(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
+-        this->ulx = ulx;
+-        this->uly = uly;
+-        this->lrx = lrx;
+-        this->lry = lry;
+-    }
+-
+-    void FixedRect::reset() {
+-        ulx = INT32_MAX;
+-        uly = INT32_MAX;
+-        lrx = INT32_MIN;
+-        lry = INT32_MIN;
+-    }
+-
+-    bool FixedRect::isEmpty() const {
+-        return isNull() || (lrx == ulx) || (lry == uly);
+-    }
+-
+-    bool FixedRect::isNull() const {
+-        return (ulx > lrx) || (uly > lry);
+-    }
+-
+-    void FixedRect::merge(const FixedRect &rect) {
+-        assert(!rect.isNull());
+-
+-        ulx = std::min(ulx, rect.ulx);
+-        uly = std::min(uly, rect.uly);
+-        lrx = std::max(lrx, rect.lrx);
+-        lry = std::max(lry, rect.lry);
+-    }
+-
+     FixedRect FixedRect::scaled(float x, float y) const {
+         assert(!isNull());
+         assert(x >= 0.0f);
+@@ -61,20 +26,6 @@ namespace RT64 {
+         );
+     }
+ 
+-    FixedRect FixedRect::intersection(const FixedRect &rect) const {
+-        if (!isNull() && !rect.isNull()) {
+-            return {
+-                std::max(ulx, rect.ulx),
+-                std::max(uly, rect.uly),
+-                std::min(lrx, rect.lrx),
+-                std::min(lry, rect.lry)
+-            };
+-        }
+-        else {
+-            return FixedRect();
+-        }
+-    }
+-
+     bool FixedRect::contains(int32_t x, int32_t y) const {
+         if (!isNull()) {
+             return (x >= ulx) && (x <= lrx) && (y >= uly) && (y <= lry);
+diff --git a/src/common/rt64_common.h b/src/common/rt64_common.h
+index f79adbf..5f5e384 100644
+--- a/src/common/rt64_common.h
++++ b/src/common/rt64_common.h
+@@ -4,6 +4,9 @@
+ 
+ #pragma once
+ 
++#include <cassert>
++#include <climits>
++#include <cstdint>
+ #include <fstream>
+ #include <sstream>
+ #include <string>
+@@ -76,16 +79,53 @@ namespace RT64 {
+         int32_t lrx;
+         int32_t lry;
+ 
+-        FixedRect();
+-        FixedRect(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry);
+-        void reset();
+-        bool isEmpty() const;
+-        bool isNull() const;
+-        void merge(const FixedRect &rect);
++        // Rush 2049 patch: inline, as each triangle a list draws calls several of them (RSP::drawIndexedTri()).
++        FixedRect() {
++            reset();
++        }
++
++        FixedRect(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) : ulx(ulx), uly(uly), lrx(lrx), lry(lry) { }
++
++        void reset() {
++            ulx = INT32_MAX;
++            uly = INT32_MAX;
++            lrx = INT32_MIN;
++            lry = INT32_MIN;
++        }
++
++        bool isEmpty() const {
++            return isNull() || (lrx == ulx) || (lry == uly);
++        }
++
++        bool isNull() const {
++            return (ulx > lrx) || (uly > lry);
++        }
++
++        void merge(const FixedRect &rect) {
++            assert(!rect.isNull());
++            ulx = (rect.ulx < ulx) ? rect.ulx : ulx;
++            uly = (rect.uly < uly) ? rect.uly : uly;
++            lrx = (rect.lrx > lrx) ? rect.lrx : lrx;
++            lry = (rect.lry > lry) ? rect.lry : lry;
++        }
++
+         FixedRect scaled(float x, float y) const;
+ 
+         // Intersections can result in invalid rects if they don't overlap. Check if they're not null after using this.
+-        FixedRect intersection(const FixedRect &rect) const;
++        FixedRect intersection(const FixedRect &rect) const {
++            if (!isNull() && !rect.isNull()) {
++                return {
++                    (ulx > rect.ulx) ? ulx : rect.ulx,
++                    (uly > rect.uly) ? uly : rect.uly,
++                    (lrx < rect.lrx) ? lrx : rect.lrx,
++                    (lry < rect.lry) ? lry : rect.lry
++                };
++            }
++            else {
++                return FixedRect();
++            }
++        }
++
+         bool contains(int32_t x, int32_t y) const;
+         bool fullyInside(const FixedRect &rect) const;
+         int32_t left(bool ceil) const;
+diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
+index 442ae92..9bd3545 100644
+--- a/src/hle/rt64_rdp.cpp
++++ b/src/hle/rt64_rdp.cpp
+@@ -1462,14 +1462,26 @@ namespace RT64 {
+     }
+ 
+     void RDP::updateCallTexcoords(float u, float v) {
++        updateCallTexcoords(u, v, u, v);
++    }
++
++    void RDP::updateCallTexcoords(float minU, float minV, float maxU, float maxV) {
++        if (state->drawCall.tileCount == 0) {
++            return;
++        }
++
+         const int workloadCursor = state->interpretCursor();
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
++        const int lowU = int(minU);
++        const int lowV = int(minV);
++        const int highU = int(ceilf(maxU));
++        const int highV = int(ceilf(maxV));
+         for (uint32_t t = 0; t < state->drawCall.tileCount; t++) {
+             DrawCallTile &callTile = workload.drawData.callTiles[state->drawCall.tileIndex + t];
+-            callTile.minTexcoord.x = std::min(callTile.minTexcoord.x, int(u));
+-            callTile.minTexcoord.y = std::min(callTile.minTexcoord.y, int(v));
+-            callTile.maxTexcoord.x = std::max(callTile.maxTexcoord.x, int(ceilf(u)));
+-            callTile.maxTexcoord.y = std::max(callTile.maxTexcoord.y, int(ceilf(v)));
++            callTile.minTexcoord.x = std::min(callTile.minTexcoord.x, lowU);
++            callTile.minTexcoord.y = std::min(callTile.minTexcoord.y, lowV);
++            callTile.maxTexcoord.x = std::max(callTile.maxTexcoord.x, highU);
++            callTile.maxTexcoord.y = std::max(callTile.maxTexcoord.y, highV);
+         }
+     }
+ };
+diff --git a/src/hle/rt64_rdp.h b/src/hle/rt64_rdp.h
+index d49e80b..7ece93c 100644
+--- a/src/hle/rt64_rdp.h
++++ b/src/hle/rt64_rdp.h
+@@ -217,5 +217,6 @@ namespace RT64 {
+         void drawTexRect(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry, uint8_t tile, int16_t uls, int16_t ult, int16_t dsdx, int16_t dtdy, bool flip);
+         void drawTexRect(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry, uint8_t tile, int16_t uls, int16_t ult, int16_t dsdx, int16_t dtdy, bool flip, const ExtendedAlignment &extAlignment);
+         void updateCallTexcoords(float u, float v);
++        void updateCallTexcoords(float minU, float minV, float maxU, float maxV);
+     };
+ };
+\ No newline at end of file
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index e60a5f8..134d6d5 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -5,6 +5,7 @@
+ #include "rt64_rsp.h"
+ 
+ #include <cassert>
++#include <cfloat>
+ 
+ #include "../include/rt64_extended_gbi.h"
+ #include "common/rt64_common.h"
+@@ -678,51 +679,70 @@ namespace RT64 {
+         auto &posScreen = workload.drawData.posScreen;
+         const auto &mvp = modelViewProjMatrix;
+         const uint32_t globalIndex = workload.drawData.vertexCount();
++
++        // Rush 2049 patch: every vertex of a load is appended to a dozen arrays, which are grown once for the load and
++        // written in place: one by one, their capacity checks were a good part of the list thread's time in a
++        // 4-player race, which loads the vertices of four views.
++        const uint32_t loadCount = (dstMax > dstIndex) ? (dstMax - dstIndex) : 0;
++        auto grow = [](auto &array, size_t count) {
++            const size_t start = array.size();
++            array.resize(start + count);
++            return array.data() + start;
++        };
++
++        auto *posOut = grow(posFloats, loadCount * 3);
++        auto *normColOut = grow(normColBytes, loadCount * 4);
++        auto *viewProjOut = grow(viewProjIndices, loadCount);
++        auto *worldOut = grow(worldIndices, loadCount);
++        auto *fogOut = grow(fogIndices, loadCount);
++        auto *lightOut = grow(lightIndices, loadCount);
++        auto *lightCountOut = grow(lightCounts, loadCount);
++        auto *lookAtOut = grow(lookAtIndices, loadCount);
++        if constexpr (addEmptyVelocity) {
++            grow(velFloats, loadCount * 3);
++            grow(tcVelFloats, loadCount * 2);
++        }
++
+         for (uint32_t i = dstIndex; i < dstMax; i++) {
+             auto &v = vertices[i];
+-            posFloats.emplace_back(v.x);
+-            posFloats.emplace_back(v.y);
+-            posFloats.emplace_back(v.z);
+-            normColBytes.emplace_back(v.color.r);
+-            normColBytes.emplace_back(v.color.g);
+-            normColBytes.emplace_back(v.color.b);
+-            normColBytes.emplace_back(v.color.a);
+-            viewProjIndices.emplace_back(curViewProjIndex);
+-            worldIndices.emplace_back(curTransformIndex);
+-            fogIndices.emplace_back(curFogIndex);
+-            lightIndices.emplace_back(curLightIndex);
+-            lightCounts.emplace_back(curLightCount);
+-            lookAtIndices.emplace_back(curLookAtIndex);
++            *posOut++ = v.x;
++            *posOut++ = v.y;
++            *posOut++ = v.z;
++            *normColOut++ = v.color.r;
++            *normColOut++ = v.color.g;
++            *normColOut++ = v.color.b;
++            *normColOut++ = v.color.a;
++            *viewProjOut++ = curViewProjIndex;
++            *worldOut++ = curTransformIndex;
++            *fogOut++ = curFogIndex;
++            *lightOut++ = curLightIndex;
++            *lightCountOut++ = curLightCount;
++            *lookAtOut++ = curLookAtIndex;
+             indices[i] = uint32_t(globalIndex) + (i - dstIndex);
+             used[i] = false;
+-
+-            if constexpr (addEmptyVelocity) {
+-                velFloats.emplace_back(0.0f);
+-                velFloats.emplace_back(0.0f);
+-                velFloats.emplace_back(0.0f);
+-                tcVelFloats.emplace_back(0.0f);
+-                tcVelFloats.emplace_back(0.0f);
+-            }
+         }
+ 
+         readExtendedVertexSegment<3, vertexSize>(rdramAddress, dstIndex, dstMax, globalIndex, G_EX_VERTEX_POSITION, posFloats);
+         readExtendedVertexSegment<3, vertexSize>(rdramAddress, dstIndex, dstMax, globalIndex, G_EX_VERTEX_VELOCITY, velFloats);
+ 
+         uint32_t floatIndex = globalIndex * 3;
++        const interop::RSPViewport &viewport = viewportStack[viewportStackSize - 1];
++        auto *transformedOut = grow(posTransformed, loadCount);
++        auto *screenOut = grow(posScreen, loadCount);
+         for (uint32_t i = dstIndex; i < dstMax; i++) {
+             const hlslpp::float4 tfPos = hlslpp::mul(hlslpp::float4(posFloats[floatIndex + 0], posFloats[floatIndex + 1], posFloats[floatIndex + 2], 1.0f), mvp);
+-            const interop::RSPViewport &viewport = viewportStack[viewportStackSize - 1];
+-            posTransformed.emplace_back(tfPos);
+-            posScreen.emplace_back((tfPos.xyz / hlslpp::float3(tfPos.w, -tfPos.w, tfPos.w)) * viewport.scale + viewport.translate);
++            *transformedOut++ = tfPos;
++            *screenOut++ = (tfPos.xyz / hlslpp::float3(tfPos.w, -tfPos.w, tfPos.w)) * viewport.scale + viewport.translate;
+             floatIndex += 3;
+         }
+ 
++        auto *tcOut = grow(tcFloats, loadCount * 2);
+         if (usesTextureGen) {
+             const float TextureSc = static_cast<float>(textureState.sc);
+             const float TextureTc = static_cast<float>(textureState.tc);
+             for (uint32_t i = dstIndex; i < dstMax; i++) {
+-                tcFloats.emplace_back(TextureSc);
+-                tcFloats.emplace_back(TextureTc);
++                *tcOut++ = TextureSc;
++                *tcOut++ = TextureTc;
+             }
+         }
+         else {
+@@ -730,8 +750,8 @@ namespace RT64 {
+             const int32_t TextureTc = (int32_t)(textureState.tc);
+             const double Divisor = 65536.0f * 32.0f;
+             for (uint32_t i = dstIndex; i < dstMax; i++) {
+-                tcFloats.emplace_back((float)((double)((vertices[i].s) * TextureSc) / Divisor));
+-                tcFloats.emplace_back((float)((double)((vertices[i].t) * TextureTc) / Divisor));
++                *tcOut++ = (float)((double)((vertices[i].s) * TextureSc) / Divisor);
++                *tcOut++ = (float)((double)((vertices[i].t) * TextureTc) / Divisor);
+             }
+         }
+     }
+@@ -1168,15 +1188,25 @@ namespace RT64 {
+ 
+         // Indicates the vertex has been used in a tri. Whatever routines modify the vertex afterwards must use a new index instead.
+ 
++        // Rush 2049 patch: the tiles' texcoord bounds take the triangle's, once: int() and ceilf() keep the order of
++        // what they round, so the bounds of the rounded texcoords are the rounded bounds.
++        float minU = FLT_MAX, minV = FLT_MAX, maxU = -FLT_MAX, maxV = -FLT_MAX;
+         for (int i = 0; i < 3; i++) {
+             // TODO: Figure out how to handle texcoord tracking on TEXGEN cases.
+             const uint32_t globalIndex = globalIndices[i];
+-            state->rdp->updateCallTexcoords(tcFloats[globalIndex * 2 + 0], tcFloats[globalIndex * 2 + 1]);
++            const float u = tcFloats[globalIndex * 2 + 0];
++            const float v = tcFloats[globalIndex * 2 + 1];
++            minU = std::min(minU, u);
++            minV = std::min(minV, v);
++            maxU = std::max(maxU, u);
++            maxV = std::max(maxV, v);
+             faceIndices.push_back(globalIndices[i]);
+             minMatrix = std::min(minMatrix, worldIndices[globalIndex]);
+             maxMatrix = std::max(maxMatrix, worldIndices[globalIndex]);
+         }
+ 
++        state->rdp->updateCallTexcoords(minU, minV, maxU, maxV);
++
+         // The box and the facing test below are read off posScreen, xyz / w with no clipping. A vertex at or behind the
+         // camera plane (w <= 0) doesn't land there: the divide flips it through the centre, so a triangle crossing the
+         // plane got a box anywhere and a winding that was a coin toss, and one a hair in front projected past what
+diff --git a/src/shared/rt64_rsp_viewport.h b/src/shared/rt64_rsp_viewport.h
+index 94a743f..8819e3e 100644
+--- a/src/shared/rt64_rsp_viewport.h
++++ b/src/shared/rt64_rsp_viewport.h
+@@ -27,11 +27,19 @@ namespace interop {
+         }
+ 
+ #ifdef HLSL_CPU
++        // Rush 2049 patch: lround() as an inlined floor on doubles, where a float and a half add up exactly. Each
++        // triangle a list draws takes two of these rects (RSP::drawIndexedTri()), and the library call was a few
++        // percent of the list thread's time in a 4-player race.
++        static int32_t roundHalfAway(float value) {
++            const double d = double(value);
++            return int32_t((d < 0.0) ? -std::floor(0.5 - d) : std::floor(d + 0.5));
++        }
++
+         RT64::FixedRect rect(const int16_t *clipRatios) const {
+-            int32_t x1 = int32_t(lround((translate.x - scale.x * float(clipRatios[0])) * 4.0f));
+-            int32_t y1 = int32_t(lround((translate.y - scale.y * float(clipRatios[1])) * 4.0f));
+-            int32_t x2 = int32_t(lround((translate.x - scale.x * float(clipRatios[2])) * 4.0f));
+-            int32_t y2 = int32_t(lround((translate.y - scale.y * float(clipRatios[3])) * 4.0f));
++            int32_t x1 = roundHalfAway((translate.x - scale.x * float(clipRatios[0])) * 4.0f);
++            int32_t y1 = roundHalfAway((translate.y - scale.y * float(clipRatios[1])) * 4.0f);
++            int32_t x2 = roundHalfAway((translate.x - scale.x * float(clipRatios[2])) * 4.0f);
++            int32_t y2 = roundHalfAway((translate.y - scale.y * float(clipRatios[3])) * 4.0f);
+             return RT64::FixedRect(std::min(x1, x2), std::min(y1, y2), std::max(x1, x2), std::max(y1, y2));
+         }
+ 

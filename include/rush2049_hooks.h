@@ -21,10 +21,21 @@ void rush2049_retrace_clients(uint8_t* rdram, recomp_context* ctx);
 void rush2049_task_queued(uint8_t* rdram);
 gpr rush2049_task_framebuffer(gpr next_framebuffer, gpr current_framebuffer);
 
+/* Select Mode (src/four_player_races.cpp): whether a mode is offered, given what the game's table says. */
+gpr rush2049_mode_offered(uint8_t* rdram, gpr mode, gpr offered);
+/* Race setup (src/four_player_races.cpp), after the game clears the computer cars for 3 or more players: the track's
+   number of them, to put back. */
+void rush2049_race_computer_cars(uint8_t* rdram, gpr track_cars);
+/* Race HUD (src/race_position.cpp): whether a player's position is drawn, given whether func_800CF604 says their car is
+   active. */
+gpr rush2049_race_position_shown(gpr car_active);
+
 /* Widescreen race HUD (src/widescreen.cpp): around every texture rectangle, when the race timer is drawn, and
    before a graphics task starts (turns on RT64's extended GBI for that display list). */
 void rush2049_hud_rect_begin(uint8_t* rdram, recomp_context* ctx);
 void rush2049_hud_rect_end(uint8_t* rdram);
+/* The name of the track map picture a 4-player split screen loads (src/widescreen.cpp). */
+gpr rush2049_split_map_name(gpr name);
 void rush2049_hud_race_mark(uint8_t* rdram);
 /* At the start of the music thread's retrace tick (us.toml): nonzero while another retrace is already queued for the
    thread, and the tick should return (src/music_thread.cpp). */
@@ -41,6 +52,9 @@ void rush2049_hires_font_scan(uint8_t* rdram, uint32_t task_addr);
 gpr rush2049_frame_list(uint8_t* rdram, gpr slot);
 gpr rush2049_frame_task_list(uint8_t* rdram, gpr slot);
 gpr rush2049_frame_list_bytes(uint8_t* rdram, gpr bytes);
+/* The frame's 2D list (src/frame_list.cpp): a heap buffer in place of each of the game's two. */
+void rush2049_hud_list_opened(uint8_t* rdram, gpr index);
+gpr rush2049_hud_list_closed(uint8_t* rdram, gpr start);
 
 /* Frame interpolation of the scene's moving objects (src/node_interpolation.cpp, us.toml): in the scene-node walk
    func_8009DD88, a matrix group of their own before a moving object's culling box, and its pop after. */

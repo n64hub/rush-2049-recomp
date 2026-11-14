@@ -38,6 +38,17 @@ What has been tried or measured and dropped, with why.
   nearly as much and still lets buildings up to 12 degrees tall pop in. Reduced lets through what looks taller than 5
   degrees from the camera, and besides that what looks bigger than 20 square degrees (`src/draw_distance.cpp`).
 - Caching texture hashes while TMEM is untouched: only 8% of hashes repeat without a TMEM change.
+- Making 4-player races cheaper with settings: on Track 3 at night with 4 players (about 7,000 draws a frame), the
+  window's size, MSAA, Draw Distance, Level of Detail and Scenery Culling at Original, See-Through Order and a release
+  build each moved the frame rate by less than the run-to-run spread. The time is RT64's CPU work per draw, which
+  scales with the views (runtime-patches/rt64-0013).
+- Tagging TMEM byte by byte with the load that wrote it, to reuse texture hashes across the four views: the tags cost
+  more than the hashes they saved (the worst stretch went from about 28 to 20 fps). Tags per 4 bytes cost about as
+  much as they save on their own; what pays is skipping the texture cache's bookkeeping for a hash already used in the
+  same sync (rt64-0013).
+- Replaying TMEM loads only when a texture hash misses, to make the sync thread of rt64-0013 cheaper: in a 4-player
+  race at night it took about 11 ms a frame and nothing waited on it. The frames were held by the render thread's frame
+  matching (rt64-0014), then by the list thread (rt64-0015).
 - Merging or batching RT64's draws to cut the 240p floor (`start_gpu_profiler`'s table in `src/main.cpp`). Only ~5% of
   draws repeat the one before exactly; merging every run that shares a pipeline (wrong textures, timing only) halves
   the ~500 calls and the draws part moves less than ±4%. With a 1x1 viewport (no pixels) ~90k cycles stay, and the

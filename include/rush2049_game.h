@@ -24,6 +24,10 @@ namespace rush2049 {
     bool large_controller_pak();
     // The "Save Ghosts" setting: the SAVE GHOST prompt after every finished Ghost Race, not only a developer's.
     bool save_ghosts();
+    // The "Race Players" setting: Single Race and Practice for 3 and 4 players too (src/four_player_races.cpp).
+    bool races_up_to_four();
+    // The "Race Position" setting: the race HUD's position stays on the screen after a crash (src/race_position.cpp).
+    bool race_position_always();
     // Frames a second the game draws at the "Game Frame Rate" setting: 30, 60, or more with Match Framerate.
     // The frame rate the Game Frame Rate option asks for; 0 is Match Framerate (src/frame_rate.cpp).
     void set_game_frame_rate(uint32_t fps);
@@ -36,6 +40,8 @@ namespace rush2049 {
     // menu whose background is mirrored out (Menu Aspect Ratio at Expand), which reaches the window's edges whatever
     // HUD Placement says.
     void set_full_width(bool split_widened, bool menu_widened);
+    // Whether the track map between four split-screen views is drawn larger ("Split-Screen Map" at Large).
+    bool split_screen_map_large();
     // Whether the menus' background is mirrored out to a wide window's edges ("Menu Aspect Ratio" at Expand).
     bool menu_expand();
     // Where the game's own commands start in a graphics task's list: after the two commands the frame's list starts with

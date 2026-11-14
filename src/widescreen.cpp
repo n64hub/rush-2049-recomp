@@ -93,6 +93,34 @@ int split_view_count = 0;
 uint32_t hud_list_lo = 0;
 uint32_t hud_list_hi = 0;
 
+// The 4-player track map ("Split-Screen Map"). Where the four views meet, the game draws a 32-pixel picture of the
+// track, MAP_MD, in place of the 64-pixel MAP_LG that 1 to 3 players see, and the cars' markers on it. At Large,
+// func_80109468 is given MAP_LG to load (us.toml), and the game draws it there at the same size as a 3-player race's
+// map, with each marker in its place on it. It draws them in copy mode, which writes the picture's transparent colour
+// too, as a dark square. Each of their rectangles becomes a call to a list that saves RT64's render state, draws it as
+// the game's own 1-cycle HUD pictures are drawn (blending by the picture's alpha, the map see-through as it is for 3
+// players) and restores the state. Battle and Stunt draw the same map.
+constexpr int map_x0 = 128, map_y0 = 78, map_x1 = 192, map_y1 = 142;   // screen pixels
+constexpr int map_size = 64, marker_size = 7;                         // the map's and a marker's, pixels
+constexpr int map_min_size = 20;                                        // smaller than this, a marker
+constexpr uint32_t map_alpha_color = 0xFFFFFF80;
+// MAP_LG is drawn about the screen's middle, so its bottom comes down onto the clock, which the game draws below the
+// small map; drawn this much higher, its bottom edge is where the small map's was.
+constexpr int map_raise = 16;  // pixels
+constexpr int16_t copy_mode_step = 0x1000;  // s5.10: 4 texels a pixel
+// How many views the last display list submitted had, outside the menus.
+int views_last_frame = 0;
+// Set at func_80087110's entry for its exit: the rectangle is the map or a marker on it.
+bool rect_map = false;
+uint32_t map_dl_start = 0;
+// The lists the map's rectangles are drawn by, a frame's worth in each of model_list_frames.
+constexpr int map_list_commands = 16;
+constexpr int map_list_bytes = map_list_commands * 8;
+constexpr int map_lists_per_frame = 16;
+uint32_t map_lists = 0;
+int map_list_frame = 0;
+int map_lists_used = 0;
+
 // Set at func_80087110's entry for its exit.
 int rect_origin = G_EX_ORIGIN_NONE;
 uint32_t rect_dl_start = 0;
@@ -299,6 +327,78 @@ void write_commands(uint8_t* rdram, uint32_t addr, const GfxCommand* cmds, int c
     for (int i = 0; i < count; i++) {
         write_word(rdram, addr + i * 8, cmds[i].values.word0);
         write_word(rdram, addr + i * 8 + 4, cmds[i].values.word1);
+    }
+}
+
+// The map and its markers, by their size: the clock's digits are drawn across the bottom of the same square.
+bool on_race_map(int x0, int y0, int x1, int y1) {
+    int w = x1 - x0, h = y1 - y0;
+    bool map = std::abs(w - map_size) <= 1 && std::abs(h - map_size) <= 1;
+    bool marker = std::abs(w - marker_size) <= 1 && std::abs(h - marker_size) <= 1;
+    return views_last_frame == 4 && rush2049::split_screen_map_large() && (map || marker) &&
+        x0 >= map_x0 - 2 && y0 >= map_y0 - 2 && x1 <= map_x1 + 2 && y1 <= map_y1 + 2;
+}
+
+void write_call(uint8_t* rdram, uint32_t p, uint32_t list);
+void write_commands(uint8_t* rdram, uint32_t addr, const GfxCommand* cmds, int count);
+
+// Draws each copy-mode texture rectangle triple between start and end as the HUD's 1-cycle pictures are drawn: the
+// map see-through, the markers on it solid.
+void blend_map_rects(uint8_t* rdram, uint32_t start, uint32_t end) {
+    if (map_lists == 0) {
+        map_lists = alloc_lists(rdram, map_list_bytes * map_lists_per_frame * model_list_frames);
+    }
+    for (uint32_t p = start; map_lists != 0 && p + 24 <= end; p += 8) {
+        uint32_t w0 = read_word(rdram, p);
+        if ((w0 >> 24) != 0xE4 || (read_word(rdram, p + 8) >> 24) != 0xE1 || (read_word(rdram, p + 16) >> 24) != 0xF1 ||
+            map_lists_used == map_lists_per_frame) {
+            continue;
+        }
+        uint32_t w1 = read_word(rdram, p + 4);
+        uint32_t steps = read_word(rdram, p + 20);
+        // A marker whose car is fading in or out is drawn in 1-cycle mode already, see-through at the game's own alpha
+        // (its step is 1 texel a pixel, not copy mode's 4): it is only raised with the map, where it is.
+        if ((int16_t)(steps >> 16) != copy_mode_step) {
+            int raised0 = std::max((int)(w1 & 0xFFF) - map_raise * 4, 0), raised1 = std::max((int)(w0 & 0xFFF) - map_raise * 4, 0);
+            write_word(rdram, p, (w0 & 0xFFFFF000) | raised1);
+            write_word(rdram, p + 4, (w1 & 0xFFFFF000) | raised0);
+            p += 16;
+            continue;
+        }
+        // Copy mode's lower right corner is the last pixel drawn; 1-cycle mode's is the edge after it.
+        int x1 = std::min(((w0 >> 12) & 0xFFF) + 4, 0xFFFu), y1 = std::min((w0 & 0xFFF) + 4, 0xFFFu);
+        int x0 = (w1 >> 12) & 0xFFF, y0 = w1 & 0xFFF;
+        bool marker = x1 - x0 < map_min_size * 4;
+        y0 = std::max(y0 - map_raise * 4, 0), y1 = std::max(y1 - map_raise * 4, 0);
+        // Copy mode steps 4 texels a pixel (it writes four at once); 1-cycle mode, 1.
+        int dsdx = (int16_t)(steps >> 16) / 4;
+        int dtdy = (int16_t)(steps & 0xFFFF);
+
+        GfxCommand cmds[map_list_commands]{};
+        GfxCommand* c = cmds;
+        gEXPushOtherMode(c++);
+        gEXPushCombineMode(c++);
+        gEXPushPrimColor(c++);
+        auto raw = [&](uint32_t a, uint32_t b) { c->values.word0 = a; c->values.word1 = b; c++; };
+        raw(0xE3000A01, 0x00000000);  // cycle type: 1-cycle
+        raw(0xE3001201, 0x00000000);  // texture filter: point
+        raw(0xE3000C00, 0x00000000);  // texture perspective off: a rectangle has no W to divide by
+        // The render mode and combiner of the game's own 1-cycle HUD pictures, under the primitive color the game draws
+        // the map with in a 3-player race (white, half alpha), or solid white for a marker.
+        raw(0xE200001C, 0x00504240);
+        raw(0xFC119623, 0xFF2FFFFF);
+        raw(0xFA000000, marker ? 0xFFFFFFFF : map_alpha_color);
+        raw(0xE4000000 | (x1 << 12) | y1, (w1 & 0xFF000000) | (x0 << 12) | y0);
+        raw(0xE1000000, read_word(rdram, p + 12));
+        raw(0xF1000000, ((uint32_t)(uint16_t)dsdx << 16) | (uint16_t)dtdy);
+        gEXPopPrimColor(c++);
+        gEXPopCombineMode(c++);
+        gEXPopOtherMode(c++);
+        raw(0xDF000000, 0);  // gSPEndDisplayList
+        uint32_t list = map_lists + (map_list_frame * map_lists_per_frame + map_lists_used++) * map_list_bytes;
+        write_commands(rdram, list, cmds, (int)(c - cmds));
+        write_call(rdram, p, list);
+        p += 16;
     }
 }
 
@@ -720,6 +820,10 @@ extern "C" void rush2049_hud_rect_begin(uint8_t* rdram, recomp_context* ctx) {
     int x1 = (int)ctx->r6;
     int y0 = (int)ctx->r5;
     int y1 = (int)ctx->r7;
+    rect_map = on_race_map(x0, y0, x1, y1);
+    if (rect_map) {
+        map_dl_start = read_word(rdram, dl_ptr_addr);
+    }
     if (line_open && !(split_view_count > 0 && carries_line_on(x0, y0, x1, y1, read_word(rdram, dl_ptr_addr)))) {
         close_line();
     }
@@ -751,7 +855,16 @@ extern "C" void rush2049_hud_rect_begin(uint8_t* rdram, recomp_context* ctx) {
     rect_dl_start = read_word(rdram, dl_ptr_addr);
 }
 
+extern "C" gpr rush2049_split_map_name(gpr name) {
+    constexpr uint32_t map_lg_name = 0x80120D04;  // "MAP_LG"
+    return rush2049::split_screen_map_large() ? (gpr)(int32_t)map_lg_name : name;
+}
+
 extern "C" void rush2049_hud_rect_end(uint8_t* rdram) {
+    if (rect_map) {
+        rect_map = false;
+        blend_map_rects(rdram, map_dl_start, read_word(rdram, dl_ptr_addr));
+    }
     if (rect_menu) {
         rect_menu = false;
         if (menu_lists == 0) {
@@ -804,6 +917,8 @@ extern "C" void rush2049_enable_extended_gbi(uint8_t* rdram, uint32_t task_addr)
         return;
     }
     close_line();
+    map_list_frame = (map_list_frame + 1) % model_list_frames;
+    map_lists_used = 0;
     // The list is walked at any HUD Placement and Menu Aspect Ratio, to tell split screen (rewind needs to know), but
     // only changed when the HUD moves or the menus widen.
     bool menus = rush2049::menu_expand();
@@ -906,6 +1021,7 @@ extern "C" void rush2049_enable_extended_gbi(uint8_t* rdram, uint32_t task_addr)
         write_word(rdram, scan.first_pipe_sync + 4, rate.values.word1);
     }
     split_screen_last_frame = scan.split_screen;
+    views_last_frame = scan.split_screen && !menu ? scan.view_count : 0;
     bool widened = hud && scan.split_screen && !menu && rush2049::split_screen_expand() && widen_split_screen(rdram, scan);
     rush2049::set_full_width(widened, extended && menu && menus);
     if (widened) {

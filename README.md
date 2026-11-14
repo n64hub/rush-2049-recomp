@@ -78,6 +78,15 @@ option has an Original value that runs the game as it shipped.
   It shows the ghost each pak already holds for that track and asks before replacing it.
   As shipped, the game kept a ghost only until you quit (as GHOST 1) and showed the prompt only for a developer's
   profile name. Saving needs a player profile on the pak: Just Play has none, so it keeps the ghost for the session.
+- **Large 4-player map**: where the four views of a 4-player split screen meet, the track map is the 64-pixel one 1
+  to 3 players see, see-through as theirs, instead of a 32-pixel picture on a dark square with the cars' markers on
+  top of each other.
+- **Races for 3 and 4 players**: Single Race and Practice are offered to 3 and 4 players, each in a quarter of the
+  screen (with 3, the fourth quarter shows the track map and the clock). As shipped they were for 1 or 2 players,
+  and only Stunt and Battle took more. Computer cars race with them as with 1 and 2 players: 3 with 3 players, 1
+  with 4.
+- **Race position always shown**: a player's race position stays on the HUD after a crash. As shipped it went off
+  the screen while the car was wrecked and for 5 seconds after it was put back on the track, 7-8 seconds a crash.
 - **Large Controller Paks**: about 1.9 MB of save space per pak instead of 32 KiB, so ghosts and profiles don't
   run out of room.
 - **Rumble and saves together**: every controller has both a Controller Pak and a Rumble Pak in, so races rumble and
@@ -92,7 +101,8 @@ option has an Original value that runs the game as it shipped.
 - **No frame copies to RAM**: each frame stays on the GPU instead of also being drawn again at 320×240 and copied
   back into the console's memory, which the game isn't known to read. Saves GPU time, and about 6 ms a frame in a
   browser.
-- **Light on the CPU**: the game holds 60 fps on a single CPU core. On a weak GPU, see [Performance](#performance).
+- **Light on the CPU**: the game holds 60 fps on a single CPU core, and a 4-player race spreads over a few more. On a weak
+  GPU, see [Performance](#performance).
 
 Settings are saved as JSON in `%LOCALAPPDATA%\Rush2049Recompiled\` (`~/.config/Rush2049Recompiled/` on Linux), or
 in the working directory when it holds a `portable.txt`, so they can also be edited by hand while the game is
@@ -107,6 +117,7 @@ shipped, set every Original value:
 | Lower input lag | Input Lag | `graphics.json` `input_lag` | `"Reduced"` (60 fps and above) | `"Original"` |
 | Widescreen 3D | Aspect Ratio | `graphics.json` `ar_option` | `"Expand"` | `"Original"` (4:3) |
 | Widescreen race HUD | HUD Placement | `graphics.json` `hr_option` | `"Clamp16x9"` | `"Original"` |
+| Large 4-player map | Split-Screen Map | `graphics.json` `split_screen_map` | `"Large"` | `"Original"` (32 pixels, on a dark square) |
 | Widescreen split screen | Split-Screen Aspect Ratio | `graphics.json` `split_screen_ratio` | `"Expand"` (as wide as HUD Placement allows; `"Full"`: the whole window, whatever HUD Placement says; both need Aspect Ratio at Expand and HUD Placement other than Original) | `"Original"` (4:3, pillarboxed) |
 | Widescreen menus | Menu Aspect Ratio | `graphics.json` `menu_ratio` | `"Expand"` (up to about 21:9; needs Aspect Ratio at Expand) | `"Original"` (4:3, pillarboxed) |
 | Draw distance | Draw Distance | `graphics.json` `draw_distance` | `"Far"` (4×; `"Farthest"` is 16×) | `"Original"` |
@@ -124,6 +135,8 @@ shipped, set every Original value:
 | Large Controller Paks | Controller Pak Size | `general.json` `pak_size` | `"Large"` (62 banks, about 1.9 MB) | `"Original"` (32 KiB) |
 | Rewind | Rewind | `general.json` `rewind` | `"On"` | `"Off"` |
 | Save Ghosts | Save Ghosts | `general.json` `save_ghosts` | `"On"` | `"Original"` (no SAVE GHOST prompt) |
+| Races for 3 and 4 players | Race Players | `general.json` `race_players` | `"UpToFour"` | `"Original"` (races for 1 or 2) |
+| Race position always shown | Race Position | `general.json` `race_position` | `"Always"` | `"Original"` (off the screen for a while after a crash) |
 | Mouse cursor on screen | Mouse Cursor | `general.json` `mouse_cursor` | `"Original"` (`"Shown"` keeps it on screen while a controller or the keyboard is used; `"Moving"` shows it while the mouse moves and hides it after two seconds still) | `"Original"` (hidden once a controller or a key is pressed, until the mouse moves) |
 
 Not options, because they don't change the game: the keyboard and gamepad layouts, playback at half the game's
@@ -302,6 +315,13 @@ at its default (Off) draws every building and wall of the track that is in view 
 camera or off the sides is skipped, as on an N64): in the attract race about 840 calls a frame against Original's
 490, and 58 fps against 60 on a busy 6-core PC. That is work for the CPU as much as the GPU, so on a weaker PC that
 loses frames with Off, try Reduced (about 680 calls) before Original.
+
+A 4-player race is the CPU's heaviest load: four views of about 1,800 draws each, some 7,000 a frame on the busiest
+stretches. RT64 finishes each frame on a second thread while it reads the next, and, when the monitor runs faster
+than the game and frames are drawn in between, matches each view against the last frame's on a thread of its own. On
+a desktop PC the races hold 60 fps, with the odd second at 55-59 on the busiest stretches of Track 3 at night and
+Track 5. Resolution, MSAA, the window's size and the draw settings change it little: the cost is RT64's CPU work per
+draw.
 
 Nearly a third of the default frame's cost stays even at Resolution Original: mostly drawing the game's geometry
 (about 500 to 800 draws a frame), which costs about the same at any resolution, and drawing the finished frame into the

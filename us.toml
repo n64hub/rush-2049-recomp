@@ -85,6 +85,18 @@ func = "func_800EDACC"
 before_vram = 0x800EDBD8
 text = "    ctx->r24 = rush2049_frame_list_bytes(rdram, ctx->r24);"
 
+# The frame's 2D list (src/frame_list.cpp): where func_800A4934 points 0x80149438 at one of its two buffers ($t1 the
+# index), and where func_800A48C8 returns the closed one's start ($v1), a heap buffer takes its place.
+[[patches.hook]]
+func = "func_800A4934"
+before_vram = 0x800A4A14
+text = "    rush2049_hud_list_opened(rdram, ctx->r9);"
+
+[[patches.hook]]
+func = "func_800A48C8"
+before_vram = 0x800A4928
+text = "    ctx->r3 = rush2049_hud_list_closed(rdram, ctx->r3);"
+
 # Input lag. The main thread queues a frame's graphics task (func_800EDACC, osSendMesg to the scheduler's command
 # queue at 0x8002E960) about half a millisecond after the frame starts, but the scheduler reads that queue only on a
 # retrace or on its 0x29E message, which the audio thread sends and the main thread doesn't. Then, as below, it
@@ -537,3 +549,34 @@ text = "    rush2049_scenery_stretch(rdram, ctx);"
 func = "func_8009EBC0"
 before_vram = 0x8009EFEC
 text = "    ctx->r12 = rush2049_scenery_mask(ctx->r12, ctx->r6);"
+
+# Race Position (src/race_position.cpp). func_80107AF4 draws a player's position only when func_800CF604, called just
+# before, returns nonzero ($v0): their car is active.
+[[patches.hook]]
+func = "func_80107AF4"
+before_vram = 0x80107C5C
+text = "    ctx->r2 = rush2049_race_position_shown(ctx->r2);"
+
+# Races for 3 and 4 players (src/four_player_races.cpp). Select Mode offers a mode when ovl1_func_80399394 returns
+# nonzero: a byte from a table of 7 modes per player count at 0x803B4679 ($s0 holds it here, every path through the
+# function returns it), where Single Race and Practice are for 1 or 2 players. $a0 is still the mode except on
+# Obstacle's path, which has called the unlock check with 0x12.
+[[patches.hook]]
+func = "ovl1_func_80399394"
+before_vram = 0x803993E0
+text = "    ctx->r16 = rush2049_mode_offered(rdram, ctx->r4, ctx->r16);"
+
+# Computer-driven cars in races for 3 and 4 players (src/four_player_races.cpp). Setting up a race, the game copies the
+# track's number of computer cars (byte 0x16 of its entry, $t5) to the halfword at 0x80142724, then clears it when
+# there are 3 or more players; the race fills the field up to 6 cars from it. Put back, capped at 1 for 4 players.
+[[patches.hook]]
+func = "func_800C9BE0"
+before_vram = 0x800C9DE0
+text = "    rush2049_race_computer_cars(rdram, ctx->r13);"
+
+# The 4-player track map (src/widescreen.cpp, Split-Screen Map): func_80109468 loads MAP_MD, a 32-pixel picture of the
+# track, in place of MAP_LG, the 64-pixel one 1 to 3 players see, when 0x80151AD0 is 4. Its name is in $a1 here.
+[[patches.hook]]
+func = "func_80109468"
+before_vram = 0x80109510
+text = "    ctx->r5 = rush2049_split_map_name(ctx->r5);"
