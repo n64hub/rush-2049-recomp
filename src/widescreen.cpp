@@ -33,7 +33,10 @@
 // Text is a rectangle a letter, so rectangles drawn one after another along one line (a word, a line of the pause
 // menu, a picture in strips) are anchored together, by where the whole line sits; letter by letter, a word reaching
 // across a third of the view would come apart.
-// The borders between views are fill rectangles followed by pipe syncs at the start of the frame, and the 4-player
+// The borders between views are fill rectangles followed by pipe syncs at the start of the frame, after the frame's
+// clear, a fill across the whole screen in the game's background colour. The clear stays the game's own, which RT64
+// widens to the window, so the window past where HUD Placement stops the views (16:9's edges by default) is cleared
+// every frame, as at Original, and doesn't keep the last menu's picture there. The 4-player
 // score boxes and the pause menu's panels and their border lines are fill rectangles in the HUD's list; each fill +
 // sync pair is rewritten in place as RT64's extended fill rectangle, anchored the same way, and fills that touch are a
 // box, anchored by where the whole box sits. A line drawn after a box, with its middle in it, is anchored as the box,
@@ -615,10 +618,7 @@ bool widen_split_screen(uint8_t* rdram, const FrameScan& scan) {
             }
         }
         if (simple) {
-            // The first fill, across the whole screen in the game's background colour, is the frame's clear. It stays
-            // the game's own fill, under the game's own scissor, which RT64 widens to the window as it does at Original;
-            // anchored, it would stop where HUD Placement does (16:9's edges by default), and a wider window would keep
-            // whatever was drawn there last beside the views, the car select's picture for a whole race.
+            // The frame's clear, when it's the first fill, stays the game's, ahead of the scissor (the header says why).
             int lead = full_screen_fill(rdram, scan.first_fill) ? 2 : 0;
             GfxCommand head[3]{};
             gEXPushScissor(&head[0]);
