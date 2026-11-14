@@ -1,7 +1,7 @@
 diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
 --- a/src/hle/rt64_application.cpp
 +++ b/src/hle/rt64_application.cpp
-@@ -596,10 +596,15 @@ namespace RT64 {
+@@ -621,10 +621,15 @@ namespace RT64 {
  
          appWindow->sdlCheckFilterInstallation();
          screenApiProfiler.logAndRestart();
@@ -18,7 +18,7 @@ diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
          workloadQueue->waitForWorkloadId(state->workloadId);
          presentQueue->waitForPresentId(state->presentId);
          workloadQueue->waitForIdle();
-@@ -609,6 +614,10 @@ namespace RT64 {
+@@ -634,6 +639,10 @@ namespace RT64 {
      }
  
      void Application::updateMultisampling() {
@@ -29,7 +29,7 @@ diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
  #   if SAMPLE_LOCATIONS_REQUIRED
          // This operation does nothing if sample locations isn't supported.
          if (!device->getCapabilities().sampleLocations) {
-@@ -707,6 +716,10 @@ namespace RT64 {
+@@ -732,6 +741,10 @@ namespace RT64 {
      }
  
      void Application::processDeveloperShortcut(DeveloperShortcut developerShortcut) {
@@ -40,7 +40,7 @@ diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
          switch (developerShortcut) {
          case DeveloperShortcut::Inspector: {
              if (userConfig.developerMode) {
-@@ -747,6 +760,10 @@ namespace RT64 {
+@@ -772,6 +785,10 @@ namespace RT64 {
      }
  
      void Application::end() {
@@ -51,7 +51,7 @@ diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
  #   if SCRIPT_ENABLED
          if (currentScript != nullptr) {
              currentScript->finalize();
-@@ -855,18 +872,34 @@ namespace RT64 {
+@@ -880,18 +897,34 @@ namespace RT64 {
      }
  
      void Application::updateUserConfig(bool discardFBs) {
@@ -110,7 +110,7 @@ diff --git a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_man
          fb.widthChanged = (fb.width != width);
          fb.sizChanged = (fb.siz != siz);
  
-@@ -1194,7 +1205,10 @@ namespace RT64 {
+@@ -1242,7 +1253,10 @@ namespace RT64 {
          for (uint32_t address : discards) {
              auto it = framebuffers.find(address);
              if (it != framebuffers.end()) {
@@ -133,7 +133,7 @@ diff --git a/src/hle/rt64_framebuffer_manager.h b/src/hle/rt64_framebuffer_manag
  #include <set>
  #include <vector>
  
-@@ -165,6 +166,9 @@ namespace RT64 {
+@@ -166,6 +167,9 @@ namespace RT64 {
          };
  
          std::unordered_map<uint32_t, Framebuffer> framebuffers;
@@ -143,14 +143,14 @@ diff --git a/src/hle/rt64_framebuffer_manager.h b/src/hle/rt64_framebuffer_manag
          std::unordered_map<uint64_t, TileCopy> tileCopies;
          uint64_t tileCopyIdCounter = 0;
          std::unordered_map<uint64_t, uint64_t> reinterpretTileCache;
-@@ -182,6 +186,7 @@ namespace RT64 {
+@@ -183,6 +187,7 @@ namespace RT64 {
          ~FramebufferManager();
          Framebuffer &get(uint32_t address, uint8_t siz, uint32_t width, uint32_t height);
          Framebuffer *find(uint32_t address) const;
 +        Framebuffer *findLocked(uint32_t address);
+         uint32_t shownAddress(const VI &vi) const;
+         hlslpp::uint2 shownSize(const VI &vi) const;
          Framebuffer *findMostRecentContaining(uint32_t addressStart, uint32_t addressEnd);
-         void writeChanges(RenderWorker *renderWorker, const FramebufferChangePool &fbChangePool, const FramebufferOperation &op, RenderTargetManager &targetManager, const ShaderLibrary *shaderLibrary);
-         void clearUsedTileCopies();
 diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
 --- a/src/hle/rt64_rdp.cpp
 +++ b/src/hle/rt64_rdp.cpp
@@ -739,7 +739,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
  
              switch (loadOp.type) {
              case LoadOperation::Type::Block:
-@@ -1227,7 +1346,44 @@ namespace RT64 {
+@@ -1228,7 +1347,44 @@ namespace RT64 {
          dlCpuProfiler.end();
      }
  
@@ -784,7 +784,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          landRAMCopies(false);
          flush();
          submitFramebufferPair(FramebufferPair::FlushReason::ProcessDisplayListsEnd);
-@@ -2120,36 +2276,49 @@ namespace RT64 {
+@@ -2121,36 +2277,49 @@ namespace RT64 {
  #       endif
          }
          else {
@@ -853,7 +853,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
  #   endif
  
          if (renderToRDRAM) {
-@@ -2175,8 +2344,8 @@ namespace RT64 {
+@@ -2176,8 +2345,8 @@ namespace RT64 {
  #   endif
  
          // Store the presentation rate in the workload.
@@ -864,7 +864,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          }
          else {
              workload.viOriginalRate = viHistory.logicalRateFromFactors();
-@@ -2187,14 +2356,16 @@ namespace RT64 {
+@@ -2188,14 +2357,16 @@ namespace RT64 {
          }
  
          // Log and reset profilers.
@@ -886,7 +886,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
              inspect();
          }
  
-@@ -2342,8 +2513,10 @@ namespace RT64 {
+@@ -2343,8 +2514,10 @@ namespace RT64 {
          ext.workloadQueue->advanceToNextWorkload();
  
          // Make sure the profiler starts after the workload is advanced to ignore any waiting time.
@@ -899,7 +899,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          
          // Submit a presentation event instantly if applicable.
          const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
-@@ -2381,9 +2554,11 @@ namespace RT64 {
+@@ -2382,9 +2555,11 @@ namespace RT64 {
                  }
              }
          }
@@ -912,16 +912,16 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          Workload &nextWorkload = ext.workloadQueue->workloads[workloadCursor];
          nextWorkload.begin(workloadCounter++);
  
-@@ -2485,7 +2660,7 @@ namespace RT64 {
+@@ -2494,7 +2669,7 @@ namespace RT64 {
              // See if there's an existing framebuffer that lines up with the VI. If there is, we support reading 
              // CPU changes directly to it and recreating them in the render thread at low resolution.
              RenderWorker *worker = ext.framebufferGraphicsWorker;
--            Framebuffer *screenFb = framebufferManager.find(screenFbAddress);
-+            Framebuffer *screenFb = framebufferManager.findLocked(screenFbAddress);
+-            Framebuffer *screenFb = framebufferManager.find(framebufferManager.shownAddress(newVI));
++            Framebuffer *screenFb = framebufferManager.findLocked(framebufferManager.shownAddress(newVI));
              if (screenFb != nullptr) {
                  // Check compatibility of the high resolution framebuffer with the VI first.
                  // Ensure both the siz and width are the same.
-@@ -3471,7 +3646,7 @@ namespace RT64 {
+@@ -3476,7 +3651,7 @@ namespace RT64 {
              flush();
  
              if (activeSpriteCommand.callCount > 0) {
