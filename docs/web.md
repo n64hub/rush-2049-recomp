@@ -32,6 +32,10 @@ In a browser, Game Frame Rate's 60 holds the game to 30 while the device can't k
 then: on a phone that gave every frame two drawn, where 60 drew few between them. `src/frame_rate.cpp`'s header says
 how and what it measured.
 
+The page keeps 100 ms of the game's sound queued, against the desktop's 40, so the sound plays on through the 30-110
+ms the runtime holds the game at a list RT64 takes long over (the end of an attract race, a busy GPU): the comment on
+the audio output in `src/main.cpp` says why.
+
 ## headless/
 
 `headless/` builds the recompiled code, N64ModernRuntime and the MusyX audio with no window, menus or input, natively
