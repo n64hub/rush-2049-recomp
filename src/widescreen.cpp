@@ -33,7 +33,10 @@
 // Text is a rectangle a letter, so rectangles drawn one after another along one line (a word, a line of the pause
 // menu, a picture in strips) are anchored together, by where the whole line sits; letter by letter, a word reaching
 // across a third of the view would come apart.
-// The borders between views are fill rectangles followed by pipe syncs at the start of the frame, and the 4-player
+// The borders between views are fill rectangles followed by pipe syncs at the start of the frame, after the frame's
+// clear, a fill across the whole screen in the game's background colour. The clear stays the game's own, which RT64
+// widens to the window, so the window past where HUD Placement stops the views (16:9's edges by default) is cleared
+// every frame, as at Original, and doesn't keep the last menu's picture there. The 4-player
 // score boxes and the pause menu's panels and their border lines are fill rectangles in the HUD's list; each fill +
 // sync pair is rewritten in place as RT64's extended fill rectangle, anchored the same way, and fills that touch are a
 // box, anchored by where the whole box sits. A line drawn after a box, with its middle in it, is anchored as the box,
@@ -275,6 +278,13 @@ int anchor_fill_rect(uint8_t* rdram, uint32_t p, double box_cx = -1) {
 bool fill_rect_pair(uint8_t* rdram, uint32_t p) {
     return (read_word(rdram, p) >> 24) == 0xF6 && read_word(rdram, p + 8) == 0xE7000000 &&
            read_word(rdram, p + 12) == 0;
+}
+
+// Whether the fill + pipe sync pair at p covers the whole 4:3 screen.
+bool full_screen_fill(uint8_t* rdram, uint32_t p) {
+    uint32_t w0 = read_word(rdram, p), w1 = read_word(rdram, p + 4);
+    return fill_rect_pair(rdram, p) && ((w1 >> 12) & 0xFFF) == 0 && (w1 & 0xFFF) == 0 &&
+           (int)((w0 >> 12) & 0xFFF) / 4 >= screen_width - 1 && (int)(w0 & 0xFFF) / 4 >= screen_height - 1;
 }
 
 // A display list matrix (s15.16: the 16 integer halves, then the 16 fraction halves).
@@ -608,26 +618,32 @@ bool widen_split_screen(uint8_t* rdram, const FrameScan& scan) {
             }
         }
         if (simple) {
+            // The frame's clear, when it's the first fill, stays the game's, ahead of the scissor (the header says why).
+            int lead = full_screen_fill(rdram, scan.first_fill) ? 2 : 0;
             GfxCommand head[3]{};
             gEXPushScissor(&head[0]);
             gEXSetScissor(&head[1], 0 /* G_SC_NON_INTERLACE */, G_EX_ORIGIN_LEFT, G_EX_ORIGIN_RIGHT, 0, 0, 0,
                           screen_height);
-            write_commands(rdram, list, head, 3);
-            uint32_t body = list + 3 * 8;
-            for (int i = 0; i < n; i++) {
-                write_word(rdram, body + i * 8, read_word(rdram, scan.first_fill + i * 8));
-                write_word(rdram, body + i * 8 + 4, read_word(rdram, scan.first_fill + i * 8 + 4));
-            }
-            for (int i = 0; i + 1 < n; i++) {
-                if (fill_rect_pair(rdram, body + i * 8)) {
-                    anchor_fill_rect(rdram, body + i * 8);
+            uint32_t out = list;
+            for (int i = 0; i < n; i++, out += 8) {
+                if (i == lead) {
+                    write_commands(rdram, out, head, 3);
+                    out += 3 * 8;
+                }
+                write_word(rdram, out, read_word(rdram, scan.first_fill + i * 8));
+                write_word(rdram, out + 4, read_word(rdram, scan.first_fill + i * 8 + 4));
+                if (i >= lead && i + 1 < n && fill_rect_pair(rdram, scan.first_fill + i * 8)) {
+                    write_word(rdram, out + 8, 0xE7000000);
+                    write_word(rdram, out + 12, 0);
+                    anchor_fill_rect(rdram, out);
                     i++;
+                    out += 8;
                 }
             }
             GfxCommand tail[2]{};
             gEXPopScissor(&tail[0]);
             tail[1].values.word0 = 0xDF000000;  // gSPEndDisplayList
-            write_commands(rdram, body + n * 8, tail, 2);
+            write_commands(rdram, out, tail, 2);
             write_call(rdram, scan.first_fill, list);
             for (int i = 3; i < n; i++) {
                 write_word(rdram, scan.first_fill + i * 8, 0xE7000000);
