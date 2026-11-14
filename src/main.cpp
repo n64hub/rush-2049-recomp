@@ -381,15 +381,17 @@ void update_gfx(void*) {
 // Emscripten's SDL2 plays from the page's thread: the music broke up whenever WebGPU kept that thread busy.
 //
 // There the queue is kept at 100 ms instead of 40. The runtime sends no VI while RT64 spends more than 30 ms in one
-// list (N64ModernRuntime-web's renderer_stalled), so the game's clock, and with it the sound it makes, stops for the
-// rest of that list, and nothing makes that sound up afterwards. Where an attract race ends and the next mode loads,
-// the page's thread stalls 100-200 ms and the list in hand waits on it; on a busy GPU a race list can take 60-140 ms.
-// 40 ms ran dry there, audibly (the loudest sample before each run 0.15-0.56): Firefox, capped at 3840x2000, its tab
-// hidden 30 s, lost 3,935 frames in 1 play of 4 at the race's end and 110 in another, and none in 4 with 100 ms. The
-// queue drains through a hold and the resampler refills it after, 10 ms a second at its 1%, so it covers holds, not a
-// GPU too slow for every list: uncapped, where RT64's interpolated frames keep an RTX 2070 98% busy and most race
-// frames lose time to a hold, the queue still ran out in 1 Firefox play of 2. It stays under the 8 VIs (133 ms) above
-// which the runtime holds AI events back (N64ModernRuntime-0001).
+// list before it has told the game the RDP is done (N64ModernRuntime-web's renderer_stalled; without render to RAM, as
+// here, RT64 tells it once the list's tiles are loaded), so the game's clock, and with it the sound it makes, stops for
+// the rest of that wait, and nothing makes that sound up afterwards. Where an attract race ends and the next mode
+// loads, the page's thread stalls 100-200 ms and the list in hand waits on it; on a busy GPU a race list can take
+// 60-140 ms. 40 ms ran dry there, audibly (the loudest sample before each run 0.15-0.56): Firefox, capped at 3840x2000,
+// its tab hidden 30 s, lost 3,935 frames in 1 play of 4 at the race's end and 110 in another, and none in 4 with 100
+// ms. The queue drains through a hold and the resampler refills it after, 10 ms a second at its 1%, so it covers holds,
+// not a GPU too slow for every list: uncapped, where RT64's interpolated frames keep an RTX 2070 98% busy, a hold to
+// the end of each list's GPU wait ran the queue out in 3 Firefox plays of 4, and one that lifts once the tiles are
+// loaded in none of 2. It stays under the 8 VIs (133 ms) above which the runtime holds AI events back
+// (N64ModernRuntime-0001).
 
 static rush2049::Resampler resampler;
 static uint32_t resampler_input_rate = 0;
