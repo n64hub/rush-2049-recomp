@@ -1,0 +1,402 @@
+diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
+index 43da90f..4f3ad3b 100644
+--- a/src/hle/rt64_application.cpp
++++ b/src/hle/rt64_application.cpp
+@@ -562,12 +562,15 @@ namespace RT64 {
+             }
+ #       endif
+ 
++            // Rush 2049 patch: a sync worker presents only while no list is being recorded (State::recordMutex).
++            state->beginRecording();
+             if (isHLE) {
+                 interpreter->processDisplayLists(dlStartAddress, dlStart);
+             }
+             else {
+                 interpreter->processRDPLists(dlStartAddress, dlStart, dlEnd);
+             }
++            state->endRecording();
+         }
+ 
+         if (isHLE) {
+diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
+index 9bd3545..45c794e 100644
+--- a/src/hle/rt64_rdp.cpp
++++ b/src/hle/rt64_rdp.cpp
+@@ -562,6 +562,37 @@ namespace RT64 {
+         }
+     }
+ 
++    // Rush 2049 patch: the rows of RDRAM a load reads, worked out as the three operations below work out where they read:
++    // rowCount rows of rowBytes bytes from start, stride bytes apart. A word reads within the 8 bytes from its address (a
++    // TLUT word within the first two), each byte within the 4-byte word of its address, so the rows are read within their
++    // ends rounded out to 4 bytes.
++    void RDP::loadSourceRows(const LoadOperation &loadOp, uint32_t &start, uint32_t &rowBytes, uint32_t &stride, uint32_t &rowCount) {
++        const LoadTile &loadTile = loadOp.tile;
++        const LoadTexture &loadTexture = loadOp.texture;
++        stride = loadTexture.width << loadTexture.siz >> 1;
++        switch (loadOp.type) {
++        case LoadOperation::Type::Block: {
++            const uint32_t bytesOffset = loadTile.uls << loadTexture.siz >> 1;
++            const uint32_t wordCount = ((loadTile.lrs - loadTile.uls) >> (4 - loadTile.siz)) + 1;
++            start = loadTexture.address + bytesOffset + stride * loadTile.ult;
++            rowBytes = wordCount << 3;
++            rowCount = 1;
++            break;
++        }
++        case LoadOperation::Type::Tile:
++        case LoadOperation::Type::TLUT:
++        default: {
++            const uint32_t bytesOffset = (loadTile.uls >> 2) << loadTexture.siz >> 1;
++            const uint32_t tileWidth = ((loadTile.lrs >> 2) - (loadTile.uls >> 2));
++            const uint32_t wordsPerRow = (loadOp.type == LoadOperation::Type::Tile) ? ((tileWidth >> (4 - loadTile.siz)) + 1) : (tileWidth + 1);
++            start = loadTexture.address + bytesOffset + stride * (loadTile.ult >> 2);
++            rowBytes = wordsPerRow << 3;
++            rowCount = 1 + ((loadTile.lrt >> 2) - (loadTile.ult >> 2));
++            break;
++        }
++        }
++    }
++
+     void RDP::loadTileOperation(const LoadTile &loadTile, const LoadTexture &loadTexture, bool deferred) {
+         const uint32_t bytesOffset = (loadTile.uls >> 2) << loadTexture.siz >> 1;
+         const uint32_t bytesPerRow = loadTexture.width << loadTexture.siz >> 1;
+@@ -591,7 +622,7 @@ namespace RT64 {
+         else {
+             // Load into TMEM.
+             uint8_t *TMEM8 = reinterpret_cast<uint8_t *>(TMEM);
+-            const uint8_t *RDRAM = state->RDRAM;
++            const uint8_t *RDRAM = (loadRDRAM != nullptr) ? loadRDRAM : state->RDRAM;
+             if (RGBA32) {
+                 loadToTMEMCommon<true>(TMEM8, tmemTags, tmemTag, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordsPerRow, rowCount);
+             }
+@@ -627,7 +658,7 @@ namespace RT64 {
+         else {
+             // Load into TMEM.
+             uint8_t *TMEM8 = reinterpret_cast<uint8_t *>(TMEM);
+-            const uint8_t *RDRAM = state->RDRAM;
++            const uint8_t *RDRAM = (loadRDRAM != nullptr) ? loadRDRAM : state->RDRAM;
+             if (RGBA32) {
+                 loadToTMEMCommon<true, true>(TMEM8, tmemTags, tmemTag, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordCount, 1, loadTile.lrt);
+             }
+@@ -667,7 +698,7 @@ namespace RT64 {
+         else {
+             // Load into TMEM.
+             uint8_t *TMEM8 = reinterpret_cast<uint8_t *>(TMEM);
+-            const uint8_t *RDRAM = state->RDRAM;
++            const uint8_t *RDRAM = (loadRDRAM != nullptr) ? loadRDRAM : state->RDRAM;
+             if (RGBA32) {
+                 loadToTMEMCommon<true, false, true>(TMEM8, tmemTags, tmemTag, RDRAM, textureStart, bytesPerRow, tmemStart, tmemStride, wordsPerRow, rowCount);
+             }
+diff --git a/src/hle/rt64_rdp.h b/src/hle/rt64_rdp.h
+index 7ece93c..e3b00ba 100644
+--- a/src/hle/rt64_rdp.h
++++ b/src/hle/rt64_rdp.h
+@@ -76,6 +76,10 @@ namespace RT64 {
+         // same value as when that load was last hashed in the same sync (TextureManager::uploadTexture).
+         uint32_t tmemTags[RDP_TMEM_BYTES / 4] = {};
+         uint32_t tmemTag = 0;
++
++        // Rush 2049 patch: where the loads read RDRAM from, null for RDRAM itself. A full sync that ends on the sync worker
++        // replays its loads from a copy the list thread made of the bytes they read (State::copyLoadRAM()).
++        const uint8_t *loadRDRAM = nullptr;
+         LoadTexture texture = {};
+         LoadTile tiles[RDP_TILES] = {};
+         uint64_t tileReplacementHashes[RDP_TILES] = {};
+@@ -168,6 +172,7 @@ namespace RT64 {
+         void loadTileOperation(const LoadTile &loadTile, const LoadTexture &loadTexture, bool deferred);
+         void loadBlockOperation(const LoadTile &loadTile, const LoadTexture &loadTexture, bool deferred);
+         void loadTLUTOperation(const LoadTile &loadTile, const LoadTexture &loadTexture, bool deferred);
++        static void loadSourceRows(const LoadOperation &loadOp, uint32_t &start, uint32_t &rowBytes, uint32_t &stride, uint32_t &rowCount);
+         void loadTile(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt);
+         bool loadTileCopyCheck(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt);
+         bool loadTileReplacementCheck(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt, uint8_t imageSiz, uint8_t imageFmt, uint16_t imageLoad, uint16_t imagePal, uint64_t &replacementHash);
+diff --git a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
+index e79d916..5ef3cbb 100644
+--- a/src/hle/rt64_rdp_tmem.cpp
++++ b/src/hle/rt64_rdp_tmem.cpp
+@@ -86,7 +86,9 @@ namespace RT64 {
+ 
+     // A key for a tile's hash made of the loads its bytes came from and what the hash reads of the tile, or 0 if some of
+     // its bytes didn't all come from one load. Within a full sync a load reads the same RDRAM each time, so the same
+-    // loads leave the same bytes where the tile reads them.
++    // loads leave the same bytes where the tile reads them (the RDRAM render to RAM writes in the middle of one is the next
++    // part's: State::resetSyncHashes()). A row hashed on its own whose length isn't a multiple of 8 is hashed up to its
++    // last word's end when it's an odd row (TMEMHasher's hashTMEM), so the last row is checked to its word's end.
+     uint64_t TextureManager::syncHashKey(const uint32_t *tags, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut) {
+         const uint32_t TMEMBytes = 4096;
+         const bool RGBA32 = (loadTile.siz == G_IM_SIZ_32b) && (loadTile.fmt == G_IM_FMT_RGBA);
+@@ -94,7 +96,7 @@ namespace RT64 {
+         const bool halfTMEM = RGBA32 || usesTLUT;
+         const uint32_t tmemSize = halfTMEM ? (TMEMBytes >> 1) : TMEMBytes;
+         const uint32_t drawBytesPerRow = std::max(uint32_t(width) << (RGBA32 ? G_IM_SIZ_16b : loadTile.siz) >> 1U, 1U);
+-        const uint32_t drawBytesTotal = (loadTile.line << 3) * (height - 1) + drawBytesPerRow;
++        const uint32_t drawBytesTotal = (loadTile.line << 3) * (height - 1) + ((drawBytesPerRow + 7) & ~7U);
+         const uint32_t tmemAddress = (loadTile.tmem << 3) & (tmemSize - 1);
+         struct {
+             uint32_t texels = 0, upper = 0, palette = 0, tlut = 0;
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+index 811c832..2329988 100644
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -336,16 +336,30 @@ namespace RT64 {
+ 
+     void State::waitForSync() {
+         if (syncWorker != nullptr) {
++            // The worker may be waiting for recordMutex to present the list it ends, so the list thread lets go of it.
++            const bool recording = recordingHere();
++            if (recording) {
++                recordLock.unlock();
++            }
++
+             syncWorker->waitIdle();
++
++            if (recording) {
++                recordLock.lock();
++            }
+         }
+ 
+         pipelinedCursor = -1;
+     }
+ 
+-    // What the list thread does with what a pending sync uses (the VI, the presents), the worker does after the sync.
++    // What the list thread does with what a pending sync uses (the VI, the presents), the worker does after the sync, while
++    // no list is being recorded.
+     void State::afterSync(std::function<void()> task) {
+         if ((syncWorker != nullptr) && syncWorker->busy()) {
+-            syncWorker->run(std::move(task));
++            syncWorker->run([this, task = std::move(task)]() {
++                const std::scoped_lock lock(recordMutex);
++                task();
++            });
+         }
+         else {
+             task();
+@@ -356,10 +370,12 @@ namespace RT64 {
+     // hashing and uploading its textures, and submitting its workload, while this thread records the next list into the
+     // next workload. Four split-screen views make lists of some 7000 draw calls, which took RT64 up to twice a frame's
+     // time on one thread. Everything the worker touches is either the ended workload's, or only touched again by this
+-    // thread after it waits for the worker (waitForSync()): the next full sync, configuration changes, the end. A VI
+-    // update while the worker is busy runs after it there (afterSync()). The game is told the RDP is done before the
+-    // worker replays the list's loads from RDRAM, so a texture the CPU rewrites at once can show its next bytes a frame
+-    // early. Lists that use tile copies, and render to RAM, developer mode and texture dumping, stay on this thread.
++    // thread after it waits for the worker (waitForSync()): the next full sync, configuration changes, the end. Its early
++    // present, and a VI update that comes while it is busy (afterSync()), read the framebuffers and presents this thread
++    // changes as it records, so the worker does those holding recordMutex, which this thread holds while it records. The
++    // game is told the RDP is done when this returns, and may then write over what the loads read, so they are replayed
++    // from a copy of those bytes made here (copyLoadRAM()). Lists that use tile copies or load from past RDRAM's end, and
++    // render to RAM, developer mode and texture dumping, stay on this thread.
+     bool State::fullSyncPipelined(Workload &workload, uint32_t loadOpCursor, uint32_t rdpTileCursor) {
+ #   if defined(__EMSCRIPTEN__)
+         return false;
+@@ -375,10 +391,20 @@ namespace RT64 {
+             }
+         }
+ 
++        // A list recorded without recordMutex (outside beginRecording()) stays on this thread.
++        if (!recordingHere() || !copyLoadRAM(workload, loadOpCursor)) {
++            return false;
++        }
++
+         if (syncWorker == nullptr) {
+             syncWorker = std::make_unique<SyncWorker>();
+         }
+ 
++        dlCpuProfiler.end();
++        dlCpuProfiler.log();
++        screenCpuProfiler.log();
++        screenCpuProfiler.reset();
++
+         const int nextCursor = (ext.workloadQueue->writeCursor + 1) % int(ext.workloadQueue->workloads.size());
+         ext.workloadQueue->waitUntilWritable(nextCursor);
+ 
+@@ -386,16 +412,92 @@ namespace RT64 {
+         const uint64_t counter = workloadCounter;
+         const uint16_t refreshRate = extended.refreshRate;
+         syncWorker->run([this, ended, loadOpCursor, rdpTileCursor, counter, refreshRate]() {
++            rdp->loadRDRAM = loadRAM.data();
+             fullSyncTilesWithoutRAM(*ended, loadOpCursor, rdpTileCursor);
++            rdp->loadRDRAM = nullptr;
+             fullSyncSubmit(*ended, false, false, counter, refreshRate, false);
+         });
+ 
+         pipelinedCursor = nextCursor;
+         fullSyncBeginNext();
++        dlCpuProfiler.reset();
++        dlCpuProfiler.start();
+         return true;
+ #   endif
+     }
+ 
++    // Sets the bits of the 64-byte blocks [start, end) touches.
++    static void markLoadBlocks(std::vector<uint64_t> &blocks, uint64_t start, uint64_t end) {
++        uint64_t b = start >> 6;
++        const uint64_t e = (end + 63) >> 6;
++        while (b < e) {
++            const uint64_t bit = b & 63;
++            const uint64_t n = std::min<uint64_t>(64 - bit, e - b);
++            blocks[b >> 6] |= (n == 64) ? ~0ULL : (((1ULL << n) - 1) << bit);
++            b += n;
++        }
++    }
++
++    // Copies the bytes of RDRAM the loads from loadOpCursor on read into loadRAM, at their own addresses, in the 64-byte
++    // blocks they touch: a split-screen list loads each texture once a view, and a tile a few rows of a wider texture, so
++    // the blocks are marked row by row first and each is copied once. False if a load reads past the end of RDRAM, which
++    // is then left to RDRAM itself on the list thread.
++    bool State::copyLoadRAM(const Workload &workload, uint32_t loadOpCursor) {
++        const uint64_t ramBytes = uint64_t(RDRAMSize) + 1;
++        const uint64_t blockCount = ramBytes >> 6;
++        const std::vector<LoadOperation> &loadOps = workload.drawData.loadOperations;
++        loadRAMBlocks.assign(blockCount >> 6, 0);
++        for (size_t i = loadOpCursor; i < loadOps.size(); i++) {
++            uint32_t start, rowBytes, stride, rowCount;
++            RDP::loadSourceRows(loadOps[i], start, rowBytes, stride, rowCount);
++            const uint64_t end = uint64_t(start) + uint64_t(rowCount - 1) * stride + rowBytes;
++            if (end > ramBytes) {
++                return false;
++            }
++
++            if ((rowCount == 1) || (stride <= (uint64_t(rowBytes) + 64))) {
++                markLoadBlocks(loadRAMBlocks, start, end);
++            }
++            else {
++                for (uint32_t r = 0; r < rowCount; r++) {
++                    const uint64_t rowStart = uint64_t(start) + uint64_t(r) * stride;
++                    markLoadBlocks(loadRAMBlocks, rowStart, rowStart + rowBytes);
++                }
++            }
++        }
++
++        if (loadRAM.size() < ramBytes) {
++            loadRAM.resize(ramBytes);
++        }
++
++        uint64_t b = 0;
++        while (b < blockCount) {
++            const uint64_t rest = loadRAMBlocks[b >> 6] >> (b & 63);
++            if ((rest & 1) == 0) {
++                b = (rest == 0) ? ((b | 63) + 1) : (b + 1);
++                continue;
++            }
++
++            uint64_t e = b + 1;
++            while ((e < blockCount) && ((loadRAMBlocks[e >> 6] >> (e & 63)) & 1)) {
++                e++;
++            }
++
++            memcpy(&loadRAM[b << 6], &RDRAM[b << 6], (e - b) << 6);
++            b = e;
++        }
++
++        return true;
++    }
++
++    // Forgets which load wrote each part of TMEM and the hashes found from it (RDP::tmemTags): at the start of a full sync,
++    // and wherever it writes RDRAM a later load may read (renderAndSynchronize() with render to RAM).
++    void State::resetSyncHashes() {
++        memset(rdp->tmemTags, 0, sizeof(rdp->tmemTags));
++        tmemLoadTags.clear();
++        textureManager.syncHashes.clear();
++    }
++
+     void State::setup(const External &ext) {
+         this->ext = ext;
+ 
+@@ -1339,11 +1441,29 @@ namespace RT64 {
+     }
+ 
+     void State::listProcessBegin() {
++        beginRecording();
+         dlCpuProfiler.start();
+     }
+ 
+     void State::listProcessEnd() {
+         dlCpuProfiler.end();
++        endRecording();
++    }
++
++    // Rush 2049 patch: around the recording of a list (Application::processDisplayLists(), listProcessBegin()), so a sync
++    // worker presents only between lists (recordMutex). Only the thread that began it lets go of it (waitForSync()).
++    void State::beginRecording() {
++        recordLock.lock();
++        recordThread.store(std::this_thread::get_id());
++    }
++
++    void State::endRecording() {
++        recordThread.store(std::thread::id());
++        recordLock.unlock();
++    }
++
++    bool State::recordingHere() const {
++        return recordThread.load() == std::this_thread::get_id();
+     }
+ 
+     uint32_t State::tmemLoadTag(const LoadOperation &loadOp) {
+@@ -1381,9 +1501,7 @@ namespace RT64 {
+ 
+     void State::fullSync() {
+         waitForSync();
+-        memset(rdp->tmemTags, 0, sizeof(rdp->tmemTags));
+-        tmemLoadTags.clear();
+-        textureManager.syncHashes.clear();
++        resetSyncHashes();
+         landRAMCopies(false);
+         flush();
+         submitFramebufferPair(FramebufferPair::FlushReason::ProcessDisplayListsEnd);
+@@ -2243,6 +2361,7 @@ namespace RT64 {
+                 if (fbPair.syncRequired) {
+                     renderAndSynchronize(f);
+                     renderSetup();
++                    resetSyncHashes();
+                 }
+ 
+                 fullSyncFramebufferPairTiles(workload, fbPair, loadOpCursor, rdpTileCursor);
+@@ -2518,7 +2637,12 @@ namespace RT64 {
+             dlCpuProfiler.start();
+         }
+         
+-        // Submit a presentation event instantly if applicable.
++        // Submit a presentation event instantly if applicable. The sync worker presents while no list is being recorded.
++        std::unique_lock<std::mutex> presentLock(recordMutex, std::defer_lock);
++        if (!onListThread) {
++            presentLock.lock();
++        }
++
+         const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
+         if (presentEarly && (workload.fbPairCount > 0)) {
+             thread_local std::unordered_set<uint32_t> colorImageAddressSet;
+diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
+index 30c9aee..73e3d69 100644
+--- a/src/hle/rt64_state.h
++++ b/src/hle/rt64_state.h
+@@ -123,6 +123,21 @@ namespace RT64 {
+         // Rush 2049 patch: the workload the next list is recorded into while the last one's sync ends on syncWorker, or
+         // -1 when none is pending (fullSyncPipelined()).
+         int pipelinedCursor = -1;
++
++        // Rush 2049 patch: held by the list thread while it records a list (Application::processDisplayLists()), and by the
++        // sync worker while it presents or runs a VI update (afterSync()), which read the framebuffers, presents and RAM
++        // copies the list thread changes as it records. waitForSync() lets go of it while it waits.
++        std::mutex recordMutex;
++        std::unique_lock<std::mutex> recordLock{ recordMutex, std::defer_lock };
++        std::atomic<std::thread::id> recordThread{};
++        void beginRecording();
++        void endRecording();
++        bool recordingHere() const;
++
++        // Rush 2049 patch: the bytes of RDRAM the loads of a list ending on syncWorker read, at their own addresses, copied
++        // before the game is told the RDP is done (copyLoadRAM()), and a bit for each 64 bytes of it, set where they read.
++        std::vector<uint8_t> loadRAM;
++        std::vector<uint64_t> loadRAMBlocks;
+         std::unique_ptr<SyncWorker> syncWorker;
+         FramebufferManager framebufferManager;
+         FramebufferChangePool scratchFbChangePool;
+@@ -253,6 +268,8 @@ namespace RT64 {
+         int interpretCursor() const;
+         void waitForSync();
+         void afterSync(std::function<void()> task);
++        bool copyLoadRAM(const Workload &workload, uint32_t loadOpCursor);
++        void resetSyncHashes();
+         void listProcessBegin();
+         void listProcessEnd();
+         void updateScreen(const VI &newVI, bool fromEarlyPresent);
