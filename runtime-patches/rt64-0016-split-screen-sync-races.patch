@@ -1,8 +1,8 @@
 diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
-index 43da90f..4f3ad3b 100644
+index dc49a9f..ec22497 100644
 --- a/src/hle/rt64_application.cpp
 +++ b/src/hle/rt64_application.cpp
-@@ -562,12 +562,15 @@ namespace RT64 {
+@@ -563,12 +563,15 @@ namespace RT64 {
              }
  #       endif
  
@@ -135,7 +135,7 @@ index e79d916..5ef3cbb 100644
          struct {
              uint32_t texels = 0, upper = 0, palette = 0, tlut = 0;
 diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
-index 811c832..2329988 100644
+index 48d8c81..8a51d42 100644
 --- a/src/hle/rt64_state.cpp
 +++ b/src/hle/rt64_state.cpp
 @@ -336,16 +336,30 @@ namespace RT64 {
@@ -214,7 +214,7 @@ index 811c832..2329988 100644
          const uint16_t refreshRate = extended.refreshRate;
          syncWorker->run([this, ended, loadOpCursor, rdpTileCursor, counter, refreshRate]() {
 +            rdp->loadRDRAM = loadRAM.data();
-             fullSyncTilesWithoutRAM(*ended, loadOpCursor, rdpTileCursor);
+             fullSyncTilesWithoutRAM(*ended, loadOpCursor, rdpTileCursor, false);
 +            rdp->loadRDRAM = nullptr;
              fullSyncSubmit(*ended, false, false, counter, refreshRate, false);
          });
@@ -302,7 +302,7 @@ index 811c832..2329988 100644
      void State::setup(const External &ext) {
          this->ext = ext;
  
-@@ -1339,11 +1441,29 @@ namespace RT64 {
+@@ -1340,11 +1442,29 @@ namespace RT64 {
      }
  
      void State::listProcessBegin() {
@@ -332,7 +332,7 @@ index 811c832..2329988 100644
      }
  
      uint32_t State::tmemLoadTag(const LoadOperation &loadOp) {
-@@ -1381,9 +1501,7 @@ namespace RT64 {
+@@ -1382,9 +1502,7 @@ namespace RT64 {
  
      void State::fullSync() {
          waitForSync();
@@ -343,7 +343,7 @@ index 811c832..2329988 100644
          landRAMCopies(false);
          flush();
          submitFramebufferPair(FramebufferPair::FlushReason::ProcessDisplayListsEnd);
-@@ -2243,6 +2361,7 @@ namespace RT64 {
+@@ -2244,6 +2362,7 @@ namespace RT64 {
                  if (fbPair.syncRequired) {
                      renderAndSynchronize(f);
                      renderSetup();
@@ -351,7 +351,7 @@ index 811c832..2329988 100644
                  }
  
                  fullSyncFramebufferPairTiles(workload, fbPair, loadOpCursor, rdpTileCursor);
-@@ -2518,7 +2637,12 @@ namespace RT64 {
+@@ -2527,7 +2646,12 @@ namespace RT64 {
              dlCpuProfiler.start();
          }
          
@@ -366,7 +366,7 @@ index 811c832..2329988 100644
          if (presentEarly && (workload.fbPairCount > 0)) {
              thread_local std::unordered_set<uint32_t> colorImageAddressSet;
 diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
-index 30c9aee..73e3d69 100644
+index dab454e..94856be 100644
 --- a/src/hle/rt64_state.h
 +++ b/src/hle/rt64_state.h
 @@ -123,6 +123,21 @@ namespace RT64 {

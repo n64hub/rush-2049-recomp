@@ -33,8 +33,8 @@ then: on a phone that gave every frame two drawn, where 60 drew few between them
 how and what it measured.
 
 The page keeps 100 ms of the game's sound queued, against the desktop's 40, so the sound plays on through the 30-110
-ms the runtime holds the game at a list RT64 takes long over (the end of an attract race, a busy GPU): the comment on
-the audio output in `src/main.cpp` says why.
+ms the runtime holds the game at a list RT64 takes long over before it tells the game the list is done (the end of an
+attract race, a busy GPU): the comment on the audio output in `src/main.cpp` says why.
 
 ## headless/
 

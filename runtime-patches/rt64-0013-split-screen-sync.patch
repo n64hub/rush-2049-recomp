@@ -683,7 +683,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 +        const uint64_t counter = workloadCounter;
 +        const uint16_t refreshRate = extended.refreshRate;
 +        syncWorker->run([this, ended, loadOpCursor, rdpTileCursor, counter, refreshRate]() {
-+            fullSyncTilesWithoutRAM(*ended, loadOpCursor, rdpTileCursor);
++            fullSyncTilesWithoutRAM(*ended, loadOpCursor, rdpTileCursor, false);
 +            fullSyncSubmit(*ended, false, false, counter, refreshRate, false);
 +        });
 +
@@ -784,13 +784,20 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          landRAMCopies(false);
          flush();
          submitFramebufferPair(FramebufferPair::FlushReason::ProcessDisplayListsEnd);
-@@ -2121,36 +2277,49 @@ namespace RT64 {
+@@ -2121,43 +2277,57 @@ namespace RT64 {
  #       endif
          }
          else {
 -            // Process all tiles.
 -            for (uint32_t f = 0; f < workload.fbPairCount; f++) {
 -                fullSyncFramebufferPairTiles(workload, workload.fbPairs[f], loadOpCursor, rdpTileCursor);
+-            }
+-
+-            // Without render to RAM nothing of RDRAM is read for the list once its tiles are loaded: what is left is
+-            // RT64's own uploads, the wait for the GPU to take them, and the workload's submission. So, as with the late
+-            // copy above, if the list ends here the game is told the RDP is done now and goes on meanwhile.
+-            if (listEndsAfterFullSync && (ext.app->core.rdpDone != nullptr)) {
+-                ext.app->core.rdpDone();
 +            if (fullSyncPipelined(workload, loadOpCursor, rdpTileCursor)) {
 +                return;
              }
@@ -809,17 +816,25 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 -            ext.framebufferGraphicsWorker->execute();
 -            ext.framebufferGraphicsWorker->wait();
 -            ext.textureCache->waitForGPUUploads();
-+            fullSyncTilesWithoutRAM(workload, loadOpCursor, rdpTileCursor);
++            fullSyncTilesWithoutRAM(workload, loadOpCursor, rdpTileCursor, listEndsAfterFullSync);
          }
  
 +        fullSyncSubmit(workload, renderToRDRAM, rdpToldDone, workloadCounter, extended.refreshRate, true);
 +        fullSyncBeginNext();
 +    }
 +
-+    void State::fullSyncTilesWithoutRAM(Workload &workload, uint32_t loadOpCursor, uint32_t rdpTileCursor) {
++    void State::fullSyncTilesWithoutRAM(Workload &workload, uint32_t loadOpCursor, uint32_t rdpTileCursor, bool listEnds) {
 +        // Process all tiles.
 +        for (uint32_t f = 0; f < workload.fbPairCount; f++) {
 +            fullSyncFramebufferPairTiles(workload, workload.fbPairs[f], loadOpCursor, rdpTileCursor);
++        }
++
++        // Without render to RAM nothing of RDRAM is read for the list once its tiles are loaded: what is left is
++        // RT64's own uploads, the wait for the GPU to take them, and the workload's submission. So, as with the late
++        // copy, if the list ends here the game is told the RDP is done now and goes on meanwhile. A list ended on
++        // syncWorker (fullSyncPipelined()) isn't: the game is told as the list thread returns from its full sync.
++        if (listEnds && (ext.app->core.rdpDone != nullptr)) {
++            ext.app->core.rdpDone();
 +        }
 +
 +        // Do not render anything, just wait for the data to be uploaded.
@@ -853,7 +868,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
  #   endif
  
          if (renderToRDRAM) {
-@@ -2176,8 +2345,8 @@ namespace RT64 {
+@@ -2183,8 +2353,8 @@ namespace RT64 {
  #   endif
  
          // Store the presentation rate in the workload.
@@ -864,7 +879,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          }
          else {
              workload.viOriginalRate = viHistory.logicalRateFromFactors();
-@@ -2188,14 +2357,16 @@ namespace RT64 {
+@@ -2195,14 +2365,16 @@ namespace RT64 {
          }
  
          // Log and reset profilers.
@@ -886,7 +901,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
              inspect();
          }
  
-@@ -2343,8 +2514,10 @@ namespace RT64 {
+@@ -2350,8 +2522,10 @@ namespace RT64 {
          ext.workloadQueue->advanceToNextWorkload();
  
          // Make sure the profiler starts after the workload is advanced to ignore any waiting time.
@@ -899,7 +914,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          
          // Submit a presentation event instantly if applicable.
          const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
-@@ -2382,9 +2555,11 @@ namespace RT64 {
+@@ -2389,9 +2563,11 @@ namespace RT64 {
                  }
              }
          }
@@ -912,7 +927,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          Workload &nextWorkload = ext.workloadQueue->workloads[workloadCursor];
          nextWorkload.begin(workloadCounter++);
  
-@@ -2494,7 +2669,7 @@ namespace RT64 {
+@@ -2501,7 +2677,7 @@ namespace RT64 {
              // See if there's an existing framebuffer that lines up with the VI. If there is, we support reading 
              // CPU changes directly to it and recreating them in the render thread at low resolution.
              RenderWorker *worker = ext.framebufferGraphicsWorker;
@@ -921,7 +936,7 @@ diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
              if (screenFb != nullptr) {
                  // Check compatibility of the high resolution framebuffer with the VI first.
                  // Ensure both the siz and width are the same.
-@@ -3476,7 +3651,7 @@ namespace RT64 {
+@@ -3483,7 +3659,7 @@ namespace RT64 {
              flush();
  
              if (activeSpriteCommand.callCount > 0) {
@@ -989,7 +1004,7 @@ diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
          void landRAMCopies(bool onlyIfReady);
          void fullSync();
          void fullSyncFramebufferPairTiles(Workload &workload, FramebufferPair &fbPair, uint32_t &loadOpCursor, uint32_t &rdpTileCursor);
-+        void fullSyncTilesWithoutRAM(Workload &workload, uint32_t loadOpCursor, uint32_t rdpTileCursor);
++        void fullSyncTilesWithoutRAM(Workload &workload, uint32_t loadOpCursor, uint32_t rdpTileCursor, bool listEnds);
 +        void fullSyncSubmit(Workload &workload, bool renderToRDRAM, bool rdpToldDone, uint64_t counter, uint16_t refreshRate, bool onListThread);
 +        void fullSyncBeginNext();
 +        bool fullSyncPipelined(Workload &workload, uint32_t loadOpCursor, uint32_t rdpTileCursor);
