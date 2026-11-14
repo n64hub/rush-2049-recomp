@@ -50,4 +50,8 @@ rt64-0014              split screen's frame matching: scenes (one a view) whose 
                        apart are matched against the last frame's at once, each on a thread
 rt64-0015              split screen's list thread: FixedRect inline, a triangle's texcoord bounds taken once, a vertex
                        load's arrays grown once, and the viewport rect rounded without a library call
+rt64-0016              rt64-0013's sync thread replays a list's loads from a copy of the bytes they read, made before the
+                       game is told the RDP is done, and presents and runs VI updates only while no list is being
+                       recorded; a texture hash found in a full sync is forgotten where render to RAM writes RDRAM in it,
+                       and its key covers the bytes an odd row's hash reads past the row
 ```
