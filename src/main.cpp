@@ -379,6 +379,14 @@ void update_gfx(void*) {
 //
 // On a page the device is N64Recomp-browser's AudioWorklet output (audio_output.h) instead of SDL's queue, which
 // Emscripten's SDL2 plays from the page's thread: the music broke up whenever WebGPU kept that thread busy.
+//
+// There the queue is kept at 100 ms instead of 40. The runtime sends no VI while RT64 spends more than 30 ms in one
+// list (N64ModernRuntime-web's renderer_stalled), so the game's clock, and with it the sound it makes, stops for the
+// rest of that list, and nothing makes that sound up afterwards. In a race at 3840x2000 uncapped in Firefox, the GPU
+// full of the frames RT64 interpolates, lists take 60-140 ms often enough that 40 ms ran dry a few times a minute,
+// audibly (the loudest sample before each 0.15-0.56). The queue drains through a hold and the resampler refills it
+// after, 10 ms a second at its 1%. It stays under the 8 VIs (133 ms) above which the runtime holds AI events back
+// (N64ModernRuntime-0001).
 
 static rush2049::Resampler resampler;
 static uint32_t resampler_input_rate = 0;
@@ -387,7 +395,11 @@ static uint32_t sample_rate = 48000;
 static uint32_t output_sample_rate = 48000;
 static uint32_t output_channels = 2;
 constexpr uint32_t bytes_per_frame = 2 * sizeof(float);
+#ifdef __EMSCRIPTEN__
+constexpr double audio_queue_target_ms = 100.0;
+#else
 constexpr double audio_queue_target_ms = 40.0;
+#endif
 constexpr double audio_speed_ppm_per_ms = 200.0;  // 1% at 50 ms off target
 constexpr double audio_max_speed_ppm = 10000.0;
 
