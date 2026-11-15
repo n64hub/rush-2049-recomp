@@ -61,7 +61,7 @@ reloads once (`coi_serviceworker.js`); right after a publish that can take a sec
 ## Moving `lib/N64Recomp-browser`
 
 A web change lands and is tagged in N64Recomp-browser and reaches this game when a pull request here moves the pin,
-which comes from one of three places (N64Recomp-browser's CLAUDE.md, The pins, and its `docs/publishing.md`):
+which comes from one of four places (N64Recomp-browser's CLAUDE.md, The pins, and its `docs/publishing.md`):
 
 - Its scheduled retest moves it to its newest tag, every change since the pin at once, having built this game's main
   with the pin at the tag (`tools/publish_pages.sh <checkout> --browser <tag>`) and played that build in Chrome and
@@ -73,6 +73,9 @@ which comes from one of three places (N64Recomp-browser's CLAUDE.md, The pins, a
   red on every code PR there) moves it at once, in the work that finds it: the patch is made again over that tag in
   the same PR, which ships like the retest's. A change here to a runtime patch that only fits the pin, as one that
   edits a line the newer patches changed does, is the usual cause.
+- A tag whose change a player would notice in this game (a crash, hang or stuck game fixed, sound, a feature, a
+  desktop-build fix, a speed-up they would see; N64Recomp-browser's CLAUDE.md, The pins) moves it once the tag is out,
+  in the work that made the change or the work it was made for, as a player's desktop crash fixed in the renderer was.
 
 Nothing else moves it. The pull request moves `lib/N64Recomp-browser` to the tag (and the submodules, if
 `patches/patches.txt` names new upstream commits), resets each project whose patch changed and reruns
