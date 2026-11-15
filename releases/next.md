@@ -1,0 +1,1 @@
+**Fixed:** on Direct3D 12, the game no longer crashes after a graphics device the driver resets or loses, in the step that resizes the window's picture before it starts again on a new device: the renderer no longer frees the picture's buffers twice when resizing them on the lost device has failed. This comes with the renderer every recomp of this project shares.
