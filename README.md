@@ -193,7 +193,9 @@ with `rush2049.log` attached (or `rush2049.old.log`, if you have started the gam
 **If it hangs** on Linux, end it (Exit Game in Steam, or `kill` with its process id, not `kill -9`): the log then
 ends with what every thread was doing. Send it before starting the game again, or send `rush2049.old.log`. On Linux
 the log is written from Steam, from a desktop launcher and from the file manager alike; only started from a terminal
-does the game write no `rush2049.log` and print the log there instead (on Windows: with its output redirected).
+does the game write no `rush2049.log` and print the log there instead. On Windows the same goes for a launcher that
+keeps the game's output (a frontend with a log of its own): there is no `rush2049.log`, and the log is the one that
+launcher shows or saves.
 
 ## In a browser
 
