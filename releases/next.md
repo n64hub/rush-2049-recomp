@@ -1,0 +1,1 @@
+**Fixed:** on Direct3D 12, a graphics device the driver resets or loses no longer crashes the game while it starts again on a new one: the renderer stops reading GPU timings and naming new textures from the lost device until the new one is up. This comes with the renderer every recomp of this project shares.
