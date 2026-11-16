@@ -1,1 +1,0 @@
-**Changed:** the Windows download no longer includes `Rush2049Recompiled.pdb`, the debugging symbols, and the game no longer holds the folder it was built in. A crash's report in `rush2049.log` gives each place as the file and an offset into it, which the project can still name.
