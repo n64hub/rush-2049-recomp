@@ -80,6 +80,21 @@ else()
             string(REPLACE "/Zi" "/Z7" CMAKE_${flags} "${CMAKE_${flags}}")
         endforeach()
     endif()
+    # The source paths a build writes into the program (__FILE__, in asserts and the log) are relative to the
+    # checkout, so a build that is handed out doesn't name the folder it was built in, and with it the account that
+    # built it. Through the ccache launcher above they already are (CCACHE_BASEDIR has ccache hand the compiler
+    # relative paths), and a map naming this checkout would cost every hit from another. clang-cl takes the map only
+    # through -Xclang (ccache won't cache a compile with /clang: in it), and as flags, not add_compile_options, so the
+    # -Xclang isn't merged away with another target's.
+    if (NOT CMAKE_C_COMPILER_LAUNCHER MATCHES "CCACHE_BASEDIR")
+        foreach (lang C CXX)
+            if (CMAKE_${lang}_COMPILER_ID STREQUAL "Clang" AND CMAKE_${lang}_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+                set(CMAKE_${lang}_FLAGS "${CMAKE_${lang}_FLAGS} -Xclang \"-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/=\"")
+            elseif (NOT MSVC)
+                set(CMAKE_${lang}_FLAGS "${CMAKE_${lang}_FLAGS} \"-ffile-prefix-map=${CMAKE_SOURCE_DIR}/=\"")
+            endif()
+        endforeach()
+    endif()
 endif()
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
@@ -257,8 +272,10 @@ target_include_directories(Rush2049Recompiled PRIVATE
 target_compile_options(Rush2049Recompiled PRIVATE -fno-strict-aliasing -fms-extensions)
 
 if (MSVC)
-    # Identical code folding would merge recompiled functions, which breaks function lookup by address.
-    target_link_options(Rush2049Recompiled PRIVATE /OPT:NOICF)
+    # Identical code folding would merge recompiled functions, which breaks function lookup by address. The exe names
+    # its .pdb by file name only, not by the path it was built at (which names the account that built it): the crash
+    # handler looks for it beside the exe (src/crash_handler.cpp).
+    target_link_options(Rush2049Recompiled PRIVATE /OPT:NOICF /PDBALTPATH:%_PDB%)
 endif()
 
 if (WIN32)

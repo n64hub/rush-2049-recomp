@@ -66,9 +66,12 @@ bash tools/recompile.sh -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-c
 
 # Its own build directory, so the dev build in build keeps its RelWithDebInfo configuration.
 build=build-release
-# Release's own flags plus debug info, which doesn't change the code: the .pdb ships beside the exe, so a crash's
-# trace in the player's rush2049.log names the game function it crashed in (src/crash_handler.cpp). The flags are
-# written -X, not /X, which Git Bash would turn into a path.
+# Release's own flags plus debug info, which doesn't change the code. The .pdb stays in out/ beside the zip and is
+# never published: built on Windows it holds the folders of every object and library it was linked from, and with
+# them the builder's account, which no compiler flag reaches. Without it a crash's trace in the player's rush2049.log
+# gives each frame as the module and an offset into it (src/crash_handler.cpp), which this release's .pdb names:
+# put it beside that release's exe as Rush2049Recompiled.pdb and look the offsets up. The flags are written -X, not
+# /X, which Git Bash would turn into a path.
 cmake -S . -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl \
     -DCMAKE_C_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" -DCMAKE_CXX_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" \
@@ -82,7 +85,8 @@ ninja -C "$build" Rush2049Recompiled > "$build/build.log" 2>&1 ||
 stage="out/$name"
 rm -rf "$stage" "out/$name.zip"
 mkdir -p "$stage"
-cp "$build"/{Rush2049Recompiled.exe,Rush2049Recompiled.pdb,SDL2.dll,dxil.dll,dxcompiler.dll} recompcontrollerdb.txt COPYING "$stage"/
+cp "$build"/{Rush2049Recompiled.exe,SDL2.dll,dxil.dll,dxcompiler.dll} recompcontrollerdb.txt COPYING "$stage"/
+cp "$build/Rush2049Recompiled.pdb" "out/$name.pdb"
 cp -r assets "$stage"/
 # CMake's own zip, so packing needs nothing the build doesn't.
 (cd out && cmake -E tar cf "$name.zip" --format=zip "$name")

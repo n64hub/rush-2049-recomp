@@ -5,8 +5,9 @@
 //
 // Recompiled functions are named after their N64 address (func_800A11E4, ovl1_func_8038A634, ...), or by
 // syms/names.toml for the few we have worked out (draw_tex_rect, ...), so a trace
-// of host frames points straight at the game code that crashed. The symbols are in the .pdb beside the exe, which
-// the release zip carries; without it a frame is printed as the module and the offset into it.
+// of host frames points straight at the game code that crashed. The symbols are in the .pdb beside the exe, which a
+// build from source has; the release zip leaves it out (tools/release.sh says why and where it is kept), so a
+// player's trace prints each frame as the module and the offset into it, which that release's .pdb names later.
 
 #include "crash_handler.h"
 #include "debug_probe.h"
@@ -61,7 +62,7 @@ bool sym_initialized = false;
 void init_symbols() {
     if (!sym_initialized) {
         SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
-        // The exe's own folder first, where the release zip puts the .pdb, whatever the working directory.
+        // The exe's own folder first, where a build puts the .pdb, whatever the working directory.
         wchar_t exe[MAX_PATH];
         DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
         std::wstring path{ exe, n };
@@ -102,6 +103,15 @@ void print_trace(CONTEXT* context, HANDLE thread = GetCurrentThread(), bool only
         symbol->MaxNameLen = MAX_SYM_NAME;
         DWORD64 displacement = 0;
         const char* name = SymFromAddr(process, pc, &displacement, symbol) ? symbol->Name : "?";
+        // Only a .pdb's names count: without one dbghelp names an address after the nearest export below it, which
+        // in a DLL is as often another function, so the frame is given as the module and offset instead. Asked
+        // after SymFromAddr, which loads the module's symbols (they are deferred until then).
+        IMAGEHLP_MODULE64 module_info{};
+        module_info.SizeOfStruct = sizeof(module_info);
+        if (!SymGetModuleInfo64(process, pc, &module_info) ||
+            (module_info.SymType != SymPdb && module_info.SymType != SymDia)) {
+            name = "?";
+        }
 
         if (only_game) {
             if (strncmp(name, "func_", 5) == 0 || strstr(name, "_func_") != nullptr || strstr(name, "_recomp") != nullptr || strstr(name, "musyx") != nullptr ||
