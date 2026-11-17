@@ -2,7 +2,8 @@
 
 This game's changes to the submodules, applied by `tools/apply_runtime_patches.sh` on top of N64Recomp-browser's
 patches, in order of name. A new change is a new file per submodule, numbered after that submodule's highest, with a
-line here.
+line here. A change one of N64Recomp-browser's forks takes in no longer applies after its patch: the script skips it,
+saying it is there already, and it goes, with its line, when the pin moves onto the release that has it.
 
 ```
 N64ModernRuntime-0001  one AI event per buffer played
@@ -53,4 +54,6 @@ rt64-0016              rt64-0013's sync thread replays a list's loads from a cop
                        game is told the RDP is done, and presents and runs VI updates only while no list is being
                        recorded; a texture hash found in a full sync is forgotten where render to RAM writes RDRAM in it,
                        and its key covers the bytes an odd row's hash reads past the row
+rt64-0017              a camera cut is a turn of more than 45 degrees about any axis, not only of the way the camera looks:
+                       the attract race's overhead cameras cut by rolling the picture (src/camera_view.cpp)
 ```
