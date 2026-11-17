@@ -22,7 +22,7 @@ desktop too: the Copy Frames to RAM option in `src/config.cpp` says why, `headle
 RT64 keeps a queue of workloads (one per RSP task the game ends a frame with), each holding the buffers its biggest
 frame took, and on WebGPU every upload buffer has a copy of its own in the heap. The web forks keep 64 for games that
 draw a frame in many; this game draws a race frame in one and the title screen's in up to 4, so its page keeps 16
-(`CMakeLists.txt`, `runtime-patches/rt64-0007`). With 64 the attract race took the heap from about 700 MB to about
+(`CMakeLists.txt`). With 64 the attract race took the heap from about 700 MB to about
 1180 MB, and with Scenery Culling Off to about 2270 MB, past the page's 1536 MB (N64Recomp-browser's
 `frontend/CMakeLists.txt`, `INITIAL_MEMORY`, never grown); with 16, about 790 and 1070 MB (`tools/heap_probe.js`,
 Chrome uncapped at 3840x2000). Off also draws about a third fewer frames a second on the page (155-167 presents
