@@ -2,7 +2,8 @@
 
 This game's changes to the submodules, applied by `tools/apply_runtime_patches.sh` on top of N64Recomp-browser's
 patches, in order of name. A new change is a new file per submodule, numbered after that submodule's highest, with a
-line here.
+line here. A change one of N64Recomp-browser's forks takes in no longer applies after its patch: the script skips it,
+saying it is there already, and it goes, with its line, when the pin moves onto the release that has it.
 
 ```
 N64ModernRuntime-0001  one AI event per buffer played
