@@ -448,10 +448,23 @@ func = "func_8009F058"
 before_vram = 0x800A030C
 text = "    rush2049_ghost_poly_end(rdram, ctx);"
 
+# The camera's place handed to RT64 (src/camera_view.cpp): the place func_8009EBC0 is given (a1), the camera's turn
+# just written to the display list (s7 the list pointer's address), and the end of the camera's scene, after the ghost
+# arrows, where the view goes back to the identity.
 [[patches.hook]]
 func = "func_8009F058"
 before_vram = 0x800A04B4
-text = "    rush2049_ghost_arrows_draw(rdram, ctx);"
+text = "    rush2049_ghost_arrows_draw(rdram, ctx); rush2049_camera_view_end(rdram, ctx);"
+
+[[patches.hook]]
+func = "func_8009F058"
+before_vram = 0x8009F078
+text = "    rush2049_camera_view_place(ctx->r5);"
+
+[[patches.hook]]
+func = "func_8009F058"
+before_vram = 0x8009F8FC
+text = "    rush2049_camera_view_begin(rdram, ctx);"
 
 # The far plane: f8 is the camera's far distance (camera +0x3C) as it goes into the projection, here and for the
 # second projection below, and f4 its near distance (camera +0x38) already times f24. Runs once per camera a frame.

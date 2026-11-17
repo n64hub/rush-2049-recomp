@@ -61,6 +61,12 @@ gpr rush2049_hud_list_closed(uint8_t* rdram, gpr start);
 void rush2049_node_group_push(uint8_t* rdram, recomp_context* ctx);
 void rush2049_node_group_pop(uint8_t* rdram, recomp_context* ctx);
 
+/* The camera's place handed to RT64 (src/camera_view.cpp, us.toml): in the scene draw func_8009F058, the place it
+   gives func_8009EBC0, the camera's turn written to the display list, and the end of the camera's scene. */
+void rush2049_camera_view_place(gpr place);
+void rush2049_camera_view_begin(uint8_t* rdram, recomp_context* ctx);
+void rush2049_camera_view_end(uint8_t* rdram, recomp_context* ctx);
+
 /* Before the scheduler starts a task (us.toml); writes it out when --dump-dl is due. */
 void rush2049_dump_task(uint8_t* rdram, uint32_t task_addr);
 
