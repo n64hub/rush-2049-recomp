@@ -102,11 +102,13 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 set(RT64_STATIC TRUE)
 set(RT64_SDL_WINDOW_VULKAN TRUE)
-# Three fixes in the web forks that are off on the desktop unless a game asks (all on with Emscripten): the hi-res
-# title's strips, drawn bottom-up, sampled on the texel the RDP picks (src/hires_font.cpp), the game stopping its
-# threads from other threads, as libultra lets it, and Per Player playing as One Player until a controller joins, so
-# the keyboard alone shows its keys on the Controls tab, and a keyboard player starts from One Player's keys.
+# Four fixes in the web forks that are off on the desktop unless a game asks (all on with Emscripten): the hi-res
+# title's strips, drawn bottom-up, sampled on the texel the RDP picks (src/hires_font.cpp), the frames between the
+# game's pairing nothing across a camera cut (src/camera_view.cpp), the game stopping its threads from other threads,
+# as libultra lets it, and Per Player playing as One Player until a controller joins, so the keyboard alone shows its
+# keys on the Controls tab, and a keyboard player starts from One Player's keys.
 set(RT64_FLIPPED_RECT_HIGH_RES ON)
+set(RT64_SKIP_CAMERA_CUTS ON)
 set(ULTRAMODERN_LIBULTRA_THREAD_STOP ON)
 set(RECOMPINPUT_SINGLE_PLAYER_UNTIL_ASSIGNED ON)
 add_compile_definitions(
@@ -233,6 +235,7 @@ target_sources(Rush2049Recompiled PRIVATE
     ${CMAKE_SOURCE_DIR}/src/dl_dump.cpp
     ${CMAKE_SOURCE_DIR}/src/frame_list.cpp
     ${CMAKE_SOURCE_DIR}/src/node_interpolation.cpp
+    ${CMAKE_SOURCE_DIR}/src/camera_view.cpp
     ${CMAKE_SOURCE_DIR}/src/widescreen.cpp
     ${CMAKE_SOURCE_DIR}/src/draw_distance.cpp
     ${CMAKE_SOURCE_DIR}/src/ghost_arrows.cpp

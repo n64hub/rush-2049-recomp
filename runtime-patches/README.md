@@ -54,4 +54,6 @@ rt64-0016              rt64-0013's sync thread replays a list's loads from a cop
                        game is told the RDP is done, and presents and runs VI updates only while no list is being
                        recorded; a texture hash found in a full sync is forgotten where render to RAM writes RDRAM in it,
                        and its key covers the bytes an odd row's hash reads past the row
+rt64-0017              a camera cut is a turn of more than 45 degrees about any axis, not only of the way the camera looks:
+                       the attract race's overhead cameras cut by rolling the picture (src/camera_view.cpp)
 ```
