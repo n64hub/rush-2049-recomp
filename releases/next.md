@@ -1,1 +1,0 @@
-**Fixed:** at a frame rate above the game's own (Framerate Display or Manual), a camera cut is now drawn as a cut. The attract race's chase and overhead cameras used to swing or smear from one shot to the next in the frames drawn between the game's.
