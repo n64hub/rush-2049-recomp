@@ -1,4 +1,4 @@
-# The load run of N64Recomp-browser's save check (tools/frame_dump.mjs --saves), after tools/save_plan.txt, the
+# The load run of the save check (docs/building.md), after tools/save_plan.txt, the
 # program started again in the same folder: at PLAYER 1 the game has read the pak's players, and AAJJSS is in RDRAM
 # (at 0x8013E5EC, word-aligned, followed by zeros) only if it came off the pak. Nothing is written by then. Then a
 # second player, AAA, made the same way, is written through the check's links.
