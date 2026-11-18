@@ -10,15 +10,15 @@
 7 find player 0x41414A4A,0x53530000 20
 7.5 shot player1
 8 saves same
-9 key Down 200
-11 key Down 200
-13 key Down 200
-15 key Space 200
-17.5 key Space 200
-18.5 key Space 200
-19.5 key Space 200
+9 key Down 100
+11 key Down 100
+13 key Down 100
+15 key Space 100
+17.5 key Space 100
+18.5 key Space 100
+19.5 key Space 100
 20 shot name
-20.5 key Enter 200
+20.5 key Enter 100
 21 saves changed 15
 23 shot created
 24 end

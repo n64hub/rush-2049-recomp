@@ -1,25 +1,27 @@
 # The save run of N64Recomp-browser's save check (tools/frame_dump.mjs --saves, with tools/load_plan.txt): from the
 # title (state word 0x801174B4 = 0x4), Start to START GAME (0x10), A to PLAYER 1 (0x20), down to CREATE PLAYER, and a
-# player named AAJJSS typed on the name grid (A, A, down to J, J, J, down to S, S, S) and ended with Start, which
-# writes saves/controllerpak_1.mpk.
+# player named AAJJSS typed on the name grid (A, A, down to J, J, J, down to S, S, S, each key held 100 ms) and ended
+# with Start, which writes saves/controllerpak_1.mpk. The name is then found in RDRAM, so a key the game took twice (a
+# hold it repeats) fails this run, which checks nothing, and not the load run's find.
 0 until 0x801174B4 0xFFFFFFFF 0x4 90
 2 key Enter 150
 2.5 until 0x801174B4 0xFFFFFFFF 0x10 10
 4.5 key Space 150
 5 until 0x801174B4 0xFFFFFFFF 0x20 10
-8.5 key Down 200
-10.5 key Down 200
-12.5 key Space 200
-15 key Space 200
-16 key Space 200
-17 key Down 200
-18 key Space 200
-19 key Space 200
-20 key Down 200
-21 key Space 200
-22 key Space 200
+8.5 key Down 100
+10.5 key Down 100
+12.5 key Space 100
+15 key Space 100
+16 key Space 100
+17 key Down 100
+18 key Space 100
+19 key Space 100
+20 key Down 100
+21 key Space 100
+22 key Space 100
 23 shot name
-23.5 key Enter 200
-24 saves changed 15
+23.5 key Enter 100
+24 find typed 0x41414A4A,0x53530000 3
+24.5 saves changed 15
 26 shot created
 27 end
