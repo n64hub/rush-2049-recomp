@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build a release from a local ROM, for Windows here and for Linux on $BUILD_HOST, and publish both as a GitHub
-# release. CI has no ROM (none is ever uploaded), so it can't link the game; releases are cut on a machine with the
+# Build a release from a local ROM, for Windows and for Linux on $BUILD_HOST, and publish both as a GitHub release.
+# CI has no ROM (none is ever uploaded), so it can't link the game; releases are cut on a machine with the
 # ROM instead.
 # Usage: BUILD_HOST=<host> BOOT_RELEASE=<script> tools/release.sh [--dry-run]
 #   One release carries every change merged since the last (docs/releasing.md): each change's PR adds what the
@@ -10,19 +10,17 @@
 #   Without that file it refuses, and with releases/next.md still there. Run it from that PR's merge commit,
 #   checked out: it needs a clean tree at a commit on origin/main (a change merged meanwhile goes in the next
 #   release and doesn't stop this one), the
-#   setup from the README's build steps and docs/building.md (submodules, runtime patches, extract.py's roms/, the
-#   toolchain: tools/env.sh's, or one already on PATH with MIPS_CC and MIPS_LD set) and gh signed in. --dry-run builds and packs but publishes nothing and skips the checks on
-#   the tree and the tag.
-# The Linux build runs through tools/remote_build.sh (a copy named release-linux on $BUILD_HOST, which gets roms/ too)
+#   extract.py's roms/ (README, docs/building.md) and gh signed in. --dry-run builds and packs but publishes nothing and
+#   skips the checks on the tree and the tag.
+# Both build through tools/remote_build.sh, in a copy named release-linux on $BUILD_HOST (which gets roms/ too), kept
+# from one release to the next with its build dirs, so only what changed rebuilds. The Windows build is cross-built
+# there (remote_build.sh's windows, in tools/docker/Dockerfile.windows, which says how). The Linux one is built
 # in tools/docker/Dockerfile.linux, Ubuntu 22.04, so it needs glibc 2.35 or newer. It carries the libSDL2 it was built
 # with and libatomic (not on every system) beside the binary (RUNPATH $ORIGIN), as the Windows zip carries SDL2.dll, and
 # is a .tar.gz so the binary stays executable.
-# The Windows build goes through ccache when it is on PATH (tools/env.sh's is; CMakeLists.txt says how): its cache
-# is the user's, outside the tree, so a release built in a fresh clone compiles only what changed since the last one
-# built here (the shaders dxc builds always build).
 # Both archives are booted before anything is published, by the script $BOOT_RELEASE names (with its .Dockerfile beside
 # it, for the Linux one): unpacked into a new folder with the ROM stored, run with --boot for 30 s, its window captured.
-# The Windows one boots here (out/boot-windows), the Linux one on $BUILD_HOST beside its copy, in Ubuntu 24.04 under
+# The Windows one boots here (out/boot-windows), the Linux one on $BUILD_HOST in its copy, in Ubuntu 24.04 under
 # Xvfb with Mesa's software Vulkan, lavapipe (out/boot-linux, fetched back).
 # On lavapipe Ubuntu 24.04 and Arch boot it, find the ROM and draw the title and the first attract race, and then
 # lavapipe (Mesa 25, 26.2) crashes on one of its own llvmpipe threads as the second race begins, about 50 s in. That is
@@ -66,25 +64,23 @@ if ! $dry_run; then
     ! gh release view "$tag" > /dev/null 2>&1 || { echo "release $tag exists: bump version_string first"; exit 1; }
 fi
 
-source tools/env.sh
-# The recompiled code is regenerated from the committed symbols, so it matches this commit and not a dev build's.
-bash tools/recompile.sh -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
-
-# Its own build directory, so the dev build in build keeps its RelWithDebInfo configuration.
-build=build-release
-# Release's own flags plus debug info, which doesn't change the code. The .pdb stays in out/ beside the zip and is
-# never published: built on Windows it holds the folders of every object and library it was linked from, and with
-# them the builder's account, which no compiler flag reaches. Without it a crash's trace in the player's rush2049.log
-# gives each frame as the module and an offset into it (src/crash_handler.cpp), which this release's .pdb names:
-# put it beside that release's exe as Rush2049Recompiled.pdb and look the offsets up. The flags are written -X, not
-# /X, which Git Bash would turn into a path.
-cmake -S . -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl \
+# HEAD (with any uncommitted changes, for a dry run) goes to the copy; each build there regenerates the recompiled code
+# from the committed symbols (tools/recompile.sh), so it matches this commit and not a dev build's.
+rb() { bash tools/remote_build.sh -n release-linux "$@"; }
+# Windows, in the copy's build/xwin-windows: Release's own flags plus debug info, which doesn't change the code. The
+# .pdb stays in out/ beside the zip and is never published: it holds the folders of every object and library it was
+# linked from, and with them the build host's account, which no compiler flag reaches. Without it a crash's trace in the
+# player's rush2049.log gives each frame as the module and an offset into it (src/crash_handler.cpp), which this
+# release's .pdb names: put it beside that release's exe as Rush2049Recompiled.pdb and look the offsets up. The flags
+# are written -X, not /X, which Git Bash would turn into a path.
+rb windows Rush2049Recompiled -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" -DCMAKE_CXX_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" \
-    -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-INCREMENTAL:NO -DEBUG -OPT:REF -OPT:ICF" \
-    -DPATCHES_C_COMPILER="${MIPS_CC:-clang}" -DPATCHES_LD="${MIPS_LD:-ld.lld}" > "$build.log" 2>&1 || { tail -20 "$build.log"; exit 1; }
-ninja -C "$build" Rush2049Recompiled > "$build/build.log" 2>&1 ||
-    { grep -E " error|FAILED|undefined" "$build/build.log" | head -20; exit 1; }
+    -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-INCREMENTAL:NO -DEBUG -OPT:REF -OPT:ICF"
+build=build/release-windows-cross
+rm -rf "$build"
+rb get build/xwin-windows "$build"
+ssh "$BUILD_HOST" cat rush2049/release-linux/repo/build/xwin-windows/Rush2049Recompiled.pdb \
+    > "$build/Rush2049Recompiled.pdb"
 
 # The game finds assets/ and recompcontrollerdb.txt in its working directory, or in its own folder when started from
 # another (src/main.cpp), so everything sits beside the exe.
@@ -98,13 +94,10 @@ cp -r assets "$stage"/
 (cd out && cmake -E tar cf "$name.zip" --format=zip "$name")
 echo "out/$name.zip ($(du -h "out/$name.zip" | cut -f1))"
 
-# Linux: HEAD (with any uncommitted changes, for a dry run) built in the copy's build-release, which the copy keeps
-# from one release to the next as it keeps every build dir, so only what changed rebuilds: its sync resets a
-# submodule that moved and patches them again, tools/recompile.sh keeps the times of the files that come out the same,
-# and paths in and out of the container read the same.
-rb() { bash tools/remote_build.sh -n release-linux -d tools/docker/Dockerfile.linux "$@"; }
-rb sync > /dev/null
-rb run "set -e
+# Linux, in the copy's build-release. Its sync (in windows, above) resets a submodule that moved and patches them
+# again, tools/recompile.sh keeps the times of the files that come out the same, and paths in and out of the container
+# read the same, so only what changed rebuilds.
+rb -d tools/docker/Dockerfile.linux run "set -e
     bash tools/recompile.sh -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
     rm -rf out
     cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \\
@@ -122,9 +115,13 @@ rb get out out
 echo "out/$linux.tar.gz ($(du -h "out/$linux.tar.gz" | cut -f1))"
 
 bash "$boot" "out/$name.zip" roms/rush2049.us.z64 rush2049.n64.us out/boot-windows
-scp -q "$boot" "${boot%.sh}.Dockerfile" "$BUILD_HOST:rush2049/release-linux/"
-ssh "$BUILD_HOST" "cd rush2049/release-linux/repo &&
-    bash ../$(basename "$boot") out/$linux.tar.gz roms/rush2049.us.z64 rush2049.n64.us out/boot-linux"
+# The Linux one in the copy, inside the image $BOOT_RELEASE boots it in (its .Dockerfile), which has no Docker, so the
+# script boots it right there.
+rb -d "${boot%.sh}.Dockerfile" run "mkdir -p ~/boot && cat > ~/boot/boot_release.sh << 'BOOT'
+$(cat "$boot")
+BOOT
+    bash ~/boot/boot_release.sh out/$linux.tar.gz roms/rush2049.us.z64 rush2049.n64.us out/boot-linux"
+rm -rf out/boot-linux
 rb get out/boot-linux out/boot-linux
 
 $dry_run && { echo "dry run: $tag not published"; exit 0; }
