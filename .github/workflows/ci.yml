@@ -114,7 +114,7 @@ jobs:
         id: key
         shell: bash
         run: |
-          prefix="build-v5-$ImageOS-"
+          prefix="build-v6-$ImageOS-"
           echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
           echo "key=$prefix$ImageVersion-$(git ls-tree HEAD lib | git hash-object --stdin)-${{ hashFiles('runtime-patches/*.patch') }}" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
