@@ -76,7 +76,7 @@ rb() { bash tools/remote_build.sh -n release-linux "$@"; }
 rb windows Rush2049Recompiled -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" -DCMAKE_CXX_FLAGS_RELEASE="-O2 -Ob2 -DNDEBUG -Z7" \
     -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-INCREMENTAL:NO -DEBUG -OPT:REF -OPT:ICF"
-build=build-release-windows
+build=build/release-windows-cross
 rm -rf "$build"
 rb get build/xwin-windows "$build"
 ssh "$BUILD_HOST" cat rush2049/release-linux/repo/build/xwin-windows/Rush2049Recompiled.pdb \
