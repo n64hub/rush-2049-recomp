@@ -1,0 +1,24 @@
+# The load run of N64Recomp-browser's save check (tools/frame_dump.mjs --saves), after tools/save_plan.txt, the
+# program started again in the same folder: at PLAYER 1 the game has read the pak's players, and AAJJSS is in RDRAM
+# (at 0x8013E5EC, word-aligned, followed by zeros) only if it came off the pak. Nothing is written by then. Then a
+# second player, AAA, made the same way, is written through the check's links.
+0 until 0x801174B4 0xFFFFFFFF 0x4 90
+2 key Enter 150
+2.5 until 0x801174B4 0xFFFFFFFF 0x10 10
+4.5 key Space 150
+5 until 0x801174B4 0xFFFFFFFF 0x20 10
+7 find player 0x41414A4A,0x53530000 20
+7.5 shot player1
+8 saves same
+9 key Down 200
+11 key Down 200
+13 key Down 200
+15 key Space 200
+17.5 key Space 200
+18.5 key Space 200
+19.5 key Space 200
+20 shot name
+20.5 key Enter 200
+21 saves changed 15
+23 shot created
+24 end
