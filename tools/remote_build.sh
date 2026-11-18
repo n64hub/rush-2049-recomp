@@ -7,7 +7,9 @@
 # Each checkout gets a copy of its own there, ~/rush2049/<name>/repo (name: the checkout's folder), made by cloning
 # origin and kept between runs with its build dirs, so a second build compiles only what changed. One ccache,
 # ~/rush2049/ccache, serves every copy, and hits across them because paths in a checkout are relative to it
-# (N64Recomp-browser's frontend/build_speed.cmake): a fresh copy of the game's page builds in ~80 s on 12 cores. A
+# (N64Recomp-browser's frontend/build_speed.cmake): a fresh copy of the game's page builds in ~80 s on 12 cores. It
+# holds 30 GB: at ccache's default 5 GB it was full and evicting, with every game's page built through it (a Windows
+# build keeps its own, ccache-windows, the same size). A
 # container is capped at $BUILD_CPUS cores (12) and 24 GB, so it leaves room for whatever else the host runs. Runs on
 # one copy wait for each other (flock), and its container is named rush2049-<name>, so `docker stop` names it.
 #
@@ -30,12 +32,17 @@
 #                     game's page) in build-web, at -O3 unless the configure says otherwise:
 #                     tools/remote_build.sh run "cmake build-web -DN64RECOMP_BROWSER_FAST_LINK=ON" for a quick try
 #   web [<target>]    sync, then build
-#   get <dir> <local dir>   copy the files at the top of <dir> (relative to the copy) here, build files left out
+#   windows <target> [<cmake arguments>]   sync, then build <target> (GoinQuackersRecompiled, say) for Windows in
+#                     build/xwin-windows: a test build of a game, cross-built in tools/docker/Dockerfile.windows (which
+#                     says how, and why a release is still built on Windows), RelWithDebInfo unless an argument says
+#                     otherwise. `get build/xwin-windows <local dir>` brings the program and its DLLs here to run
+#   get <dir> <local dir>   copy the files at the top of <dir> (relative to the copy) here, build files and a Windows
+#                     build's .pdb (hundreds of MB; it stays on the host) and generated sources left out
 #   clean             delete the copy (ccache stays)
 #   prune [<days>]    delete every copy but the usual ones unused for <days> (default $BUILD_KEEP_DAYS, 3); sync runs it
-# -C works on another checkout, a game fork for one (only sync, run, get and clean mean anything there); -n names the
-# copy, for one shared by several runs, as tools/publish_page.sh does; -d runs in another image, the Dockerfile given
-# (tools/release.sh's Linux build, tools/docker/Dockerfile.linux).
+# -C works on another checkout, a game's or a game fork's (only sync, run, windows, get and clean mean anything
+# there); -n names the copy, for one shared by several runs, as tools/publish_page.sh does; -d runs in another image,
+# the Dockerfile given (tools/release.sh's Linux build, tools/docker/Dockerfile.linux).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 checkout="$(cd "$here/.." && pwd)"
@@ -51,6 +58,7 @@ while [[ $# -gt 0 ]]; do
 done
 cmd="${1:-}"
 [[ -n "$cmd" ]] && shift
+[[ "$cmd" == windows && "$dockerfile" == "$here/docker/Dockerfile" ]] && dockerfile="$here/docker/Dockerfile.windows"
 name="${name:-$(basename "$checkout")}"
 base=rush2049                     # under the host's home
 dir="$base/$name"
@@ -72,7 +80,7 @@ in_image() {
     ensure_image
     remote "set -e; cd ~/$dir; touch .lock; exec flock .lock docker run --rm --name $base-$name --cpus $cpus --memory 24g \
         -u \$(id -u):\$(id -g) -v \$HOME/$base:\$HOME/$base -w \$HOME/$dir/repo -e HOME=\$HOME/$dir/home \
-        -e CCACHE_DIR=\$HOME/$base/ccache $image bash -c $(printf %q "$1")"
+        -e CCACHE_DIR=\$HOME/$base/ccache -e CCACHE_MAXSIZE=30G $image bash -c $(printf %q "$1")"
 }
 
 # Deletes the copies unused for $1 days (see the header): not this one, not a usual one, not one a run holds.
@@ -186,12 +194,17 @@ build | web)
             { grep -E ' error|FAILED|undefined' build-web/build.log | head -20; exit 1; }
         echo built"
     ;;
+windows)
+    [[ -n "${1:-}" ]] || { echo "usage: tools/remote_build.sh [-C <checkout>] windows <target> [cmake arguments]"; exit 1; }
+    sync
+    in_image "xwin-build $cpus $(printf '%q ' "$@")"
+    ;;
 get)
     mkdir -p "$2"
     remote "cd ~/$dir/repo/$1 && find . -maxdepth 1 -type f ! -name '*.ninja*' ! -name '*.log' ! -name '*.a' ! -name '*.json' ! -name CMakeCache.txt \
-        ! -name '*.cmake' ! -name '.*' | tar cf - -T -" | tar xf - -C "$2"
+        ! -name '*.cmake' ! -name '.*' ! -name '*.pdb' ! -name '*.ilk' ! -name '*.exp' ! -name '*.lib' ! -name '*.[ch]' | tar cf - -T -" | tar xf - -C "$2"
     ;;
 clean) remote "cd ~/$base && flock $name/.lock rm -rf $name" ;;
 prune) prune "${1:-${BUILD_KEEP_DAYS:-3}}" ;;
-*) sed -n 2,26p "$0"; exit 1 ;;
+*) sed -n 2,44p "$0"; exit 1 ;;
 esac

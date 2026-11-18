@@ -27,6 +27,12 @@ with `bad object HEAD` in a nested submodule, a fetch hit Windows' path limit; r
 builds the game's page in that copy's `build-web/`, `get build-web <dir>` brings it back, and `-C <checkout>` does
 `sync`, `run` and `get` for another repo, a game fork. A tool a build lacks goes into the Dockerfile.
 
+`windows <target>` cross-builds the Windows program there, any recomp's with `-C <its checkout>`, with the same
+clang-cl, MSVC and Windows SDK as a Windows build (`tools/docker/Dockerfile.windows` says how), into the
+copy's `build/xwin-windows/`; `get build/xwin-windows <dir>` brings back the program and its DLLs to run here. It is
+for test builds: its D3D12 shaders come from a different dxc than the Windows build's, so a release is still built on
+Windows (docs/releasing.md).
+
 ## Running the game
 
 `iterate.sh <secs>` boots with `--boot --stacks` into `run.log`, and `ninja -C build Rush2049Recompiled` is enough after
