@@ -10,8 +10,7 @@ how to record it again and what its sections save) and its play plans (`tools/pl
 2-3 minutes, `tools/play_plan_extended.json`, for when a longer play is needed, and `tools/play_plan_pads.json`,
 two stand-in pads in a two-player race with their rumble, for a change to controllers). The rest is N64Recomp-browser's: `docs/porting.md` (WebGPU and the shaders, prebuilt shader lists, Emscripten, what the recompiled
 code needed for wasm), `docs/playing.md` (playing and measuring a page), `docs/forks.md` (the fork changes that make
-RT64 and recompui draw through WebGPU) and `docs/findings.md` (what is known about WebGPU in each browser). Every play of
-this game's page is a line in its `plays.jsonl` (game `rush`), never a record here.
+RT64 and recompui draw through WebGPU) and `docs/findings.md` (what is known about WebGPU in each browser).
 
 This repo's CI builds no Emscripten target: the page and `file.cpp`'s picker are checked only by a build and a run of
 the game.

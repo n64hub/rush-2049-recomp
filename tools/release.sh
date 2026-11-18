@@ -2,7 +2,7 @@
 # Build a release from a local ROM, for Windows here and for Linux on $BUILD_HOST, and publish both as a GitHub
 # release. CI has no ROM (none is ever uploaded), so it can't link the game; releases are cut on a machine with the
 # ROM instead.
-# Usage: BUILD_HOST=<host> tools/release.sh [--dry-run]
+# Usage: BUILD_HOST=<host> BOOT_RELEASE=<script> tools/release.sh [--dry-run]
 #   One release carries every change merged since the last (docs/releasing.md): each change's PR adds what the
 #   player gets to releases/next.md, and a release is a PR titled "Release v<version>" that bumps version_string
 #   in src/main.cpp and moves releases/next.md to releases/v<version>.md: what a player gets, not a list of merged
@@ -20,10 +20,10 @@
 # The Windows build goes through ccache when it is on PATH (tools/env.sh's is; CMakeLists.txt says how): its cache
 # is the user's, outside the tree, so a release built in a fresh clone compiles only what changed since the last one
 # built here (the shaders dxc builds always build).
-# Both archives are booted before anything is published, by lib/N64Recomp-browser's tools/boot_release.sh (BOOT_RELEASE
-# names another copy of it), which says how: unpacked into a new folder with the ROM stored, run with --boot for 30 s,
-# its window captured. The Windows one boots here (out/boot-windows), the Linux one on $BUILD_HOST beside its copy, in
-# Ubuntu 24.04 under Xvfb with Mesa's software Vulkan, lavapipe (out/boot-linux, fetched back).
+# Both archives are booted before anything is published, by the script $BOOT_RELEASE names (with its .Dockerfile beside
+# it, for the Linux one): unpacked into a new folder with the ROM stored, run with --boot for 30 s, its window captured.
+# The Windows one boots here (out/boot-windows), the Linux one on $BUILD_HOST beside its copy, in Ubuntu 24.04 under
+# Xvfb with Mesa's software Vulkan, lavapipe (out/boot-linux, fetched back).
 # On lavapipe Ubuntu 24.04 and Arch boot it, find the ROM and draw the title and the first attract race, and then
 # lavapipe (Mesa 25, 26.2) crashes on one of its own llvmpipe threads as the second race begins, about 50 s in. That is
 # lavapipe's: it is the first draw with one of RT64's specialized pixel shaders (two LOD tiles, S mirrored), whose
@@ -50,6 +50,12 @@ notes="releases/$tag.md"
 name="Rush2049Recompiled-$tag-windows-x64"
 linux="Rush2049Recompiled-$tag-linux-x64"
 [ -n "${BUILD_HOST:-}" ] || { echo "set BUILD_HOST to the Linux host to build the Linux release on"; exit 1; }
+boot=${BOOT_RELEASE:-}
+[ -n "$boot" ] && [ -f "$boot" ] && [ -f "${boot%.sh}.Dockerfile" ] || {
+    echo "set BOOT_RELEASE to the script that boots a release archive, <archive> <rom> <game id> <dir> [args...],"
+    echo "with the image it boots the Linux one in beside it (<script name>.Dockerfile)"
+    exit 1
+}
 
 if ! $dry_run; then
     # Submodule worktrees are dirty with the runtime patches applied; their pinned commits still count.
@@ -115,13 +121,10 @@ rb run "set -e
 rb get out out
 echo "out/$linux.tar.gz ($(du -h "out/$linux.tar.gz" | cut -f1))"
 
-boot=${BOOT_RELEASE:-lib/N64Recomp-browser/tools/boot_release.sh}
-[ -f "$boot" ] ||
-    { echo "no $boot: set BOOT_RELEASE to tools/boot_release.sh in a checkout of N64Recomp-browser's main"; exit 1; }
 bash "$boot" "out/$name.zip" roms/rush2049.us.z64 rush2049.n64.us out/boot-windows
 scp -q "$boot" "${boot%.sh}.Dockerfile" "$BUILD_HOST:rush2049/release-linux/"
 ssh "$BUILD_HOST" "cd rush2049/release-linux/repo &&
-    bash ../boot_release.sh out/$linux.tar.gz roms/rush2049.us.z64 rush2049.n64.us out/boot-linux"
+    bash ../$(basename "$boot") out/$linux.tar.gz roms/rush2049.us.z64 rush2049.n64.us out/boot-linux"
 rb get out/boot-linux out/boot-linux
 
 $dry_run && { echo "dry run: $tag not published"; exit 0; }

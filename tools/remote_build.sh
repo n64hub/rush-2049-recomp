@@ -16,9 +16,9 @@
 # A copy is the work's own, and the work forgets it when it ends: copies left behind filled the host's disk (140 of
 # them, ~300 GB). So every command touches its copy's .lock, and every sync first deletes the copies nobody has used
 # for $BUILD_KEEP_DAYS days (3), by that and the copy's own mtime, unless a run holds the lock. The usual copies stay
-# however long they idle, since what they keep is the incremental build: publish (tools/publish_page.sh),
-# release-linux (tools/release.sh) and pages-<game> (N64Recomp-browser's tools/publish_pages.sh). Only copies are
-# looked at (a folder with a .lock), so the ccache and anything else under ~/rush2049 stays.
+# however long they idle, since what they keep is the incremental build: release-linux (tools/release.sh), and publish
+# and pages-<game>, the copies page publishes reuse. Only copies are looked at (a folder with a .lock), so the ccache
+# and anything else under ~/rush2049 stays.
 #
 # Usage: BUILD_HOST=<host> tools/remote_build.sh [-C <checkout>] [-n <name>] <command>
 #   sync [<commit>]   send <commit> (default HEAD, with the uncommitted changes to tracked files; untracked files are
@@ -41,8 +41,8 @@
 #   clean             delete the copy (ccache stays)
 #   prune [<days>]    delete every copy but the usual ones unused for <days> (default $BUILD_KEEP_DAYS, 3); sync runs it
 # -C works on another checkout, a game's or a game fork's (only sync, run, windows, get and clean mean anything
-# there); -n names the copy, for one shared by several runs, as tools/publish_page.sh does; -d runs in another image,
-# the Dockerfile given (tools/release.sh's Linux build, tools/docker/Dockerfile.linux).
+# there); -n names the copy, for one shared by several runs; -d runs in another image, the Dockerfile given
+# (tools/release.sh's Linux build, tools/docker/Dockerfile.linux).
 # -s sends the submodules as the checkout has them too, for a change to a fork tried in a game before it is pushed
 # (N64Recomp-browser's CLAUDE.md, Changing it): each submodule's files, untracked ones included and its own commits,
 # go over as a diff from the commit its parent pins, and the copy's submodules are set to exactly that, patches
