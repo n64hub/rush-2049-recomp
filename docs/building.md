@@ -33,6 +33,10 @@ copy's `build/xwin-windows/`; `get build/xwin-windows <dir>` brings back the pro
 for test builds: its D3D12 shaders come from a different dxc than the Windows build's, so a release is still built on
 Windows (docs/releasing.md).
 
+A sync sends the submodules as their pins and patches them there, so a change to a fork tried in the checkout's
+submodules before it is pushed needs `-s`, which sends each submodule's files as the checkout has them (the patches
+in them included): `tools/remote_build.sh -s -C <checkout> windows <target>`, or `-s web`.
+
 ## Running the game
 
 `iterate.sh <secs>` boots with `--boot --stacks` into `run.log`, and `ninja -C build Rush2049Recompiled` is enough after
