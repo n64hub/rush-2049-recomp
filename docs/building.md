@@ -67,8 +67,7 @@ an RTX 2070 are beside `start_gpu_profiler` in `src/main.cpp`.
   finish, and the byte +0x7DC to 1 (`func_800D24C8` steps them; the track's table is at `0x80151CE8`, the finish at
   +4 and the count at +8). The car makes the lap a few seconds on, the lap box shows its time and the HUD lap 2.
 - Every port reports a controller with a pak; a port nobody plays reads as a pad left alone.
-- The pak's save, the program restarted and the save found again, with `saves/` and the pak behind symlinks:
-  N64Recomp-browser's `tools/frame_dump.mjs --saves` (or `remote_frame_dump.sh`) on the Linux build, with
-  `tools/save_plan.txt` as the plan and `tools/load_plan.txt` as `--saves`' (a player made on the pak, then read back
-  and a second one written through the links). v0.1.15, which renamed a new pak over a symlink, fails it; v0.1.16 on
-  passes.
+- The pak's save, the program restarted and the save found again, with `saves/` and the pak behind symlinks: a save
+  check by machine on the Linux build, `tools/save_plan.txt` the save run's plan and `tools/load_plan.txt` the load
+  run's after the restart (a player made on the pak, then read back and a second one written through the links).
+  v0.1.15, which renamed a new pak over a symlink, fails it; v0.1.16 on passes.

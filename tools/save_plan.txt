@@ -1,4 +1,4 @@
-# The save run of N64Recomp-browser's save check (tools/frame_dump.mjs --saves, with tools/load_plan.txt): from the
+# The save run of the save check (docs/building.md, with tools/load_plan.txt): from the
 # title (state word 0x801174B4 = 0x4), Start to START GAME (0x10), A to PLAYER 1 (0x20), down to CREATE PLAYER, and a
 # player named AAJJSS typed on the name grid (A, A, down to J, J, J, down to S, S, S, each key held 100 ms) and ended
 # with Start, which writes saves/controllerpak_1.mpk. The name is then found in RDRAM, so a key the game took twice (a
