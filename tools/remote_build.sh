@@ -49,6 +49,12 @@
 # included, so the patch scripts don't run there. Without -s the copy's submodules are their pins, patched there. A
 # nested submodule is diffed from the commit its parent's pin names, so a pin moved in the checkout comes over as
 # files; the checkout needs that commit (a submodule that has been updated to its pin has it).
+# A host whose machine is shared through a GPU queue: with BUILD_QUEUE_CLIENT naming a JavaScript module here that
+# exports gpuRun(spec, run), every run in the image (build, web, windows, run) first waits for a turn in that queue, a
+# low-priority job of type build asking no GPU memory and 12 GB of the host's, and holds it until the run ends. A
+# container of node:24-slim on the docker network $BUILD_QUEUE_NETWORK holds the turn (<container>-turn, running
+# tools/queue_turn.mjs from ~/rush2049/.turn). $GPU_QUEUE_KEY goes over on ssh's stdin, never on a command line, and
+# $BUILD_JOB_URL is the job's link. A turn the queue ends early leaves the run to finish outside it, said on stderr.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 checkout="$(cd "$here/.." && pwd)"
@@ -86,9 +92,38 @@ ensure_image() {
 # paths in logs and caches read the same in and out of the container.
 in_image() {
     ensure_image
-    remote "set -e; cd ~/$dir; touch .lock; exec flock .lock docker run --rm --name $base-$name --cpus $cpus --memory 24g \
+    local run="docker run --rm --name $base-$name --cpus $cpus --memory 24g \
         -u \$(id -u):\$(id -g) -v \$HOME/$base:\$HOME/$base -w \$HOME/$dir/repo -e HOME=\$HOME/$dir/home \
         -e CCACHE_DIR=\$HOME/$base/ccache -e CCACHE_MAXSIZE=30G $image bash -c $(printf %q "$1")"
+    if [[ -z "${BUILD_QUEUE_CLIENT:-}" ]]; then
+        remote "set -e; cd ~/$dir; touch .lock; exec flock .lock $run"
+        return
+    fi
+    # The turn (the header): the client and queue_turn.mjs go to ~/$base/.turn (each replaced whole, as another run may
+    # be reading it), a container holds the job, and the run starts once it is admitted and releases it however it ends.
+    local f
+    for f in "$BUILD_QUEUE_CLIENT:gpuq.mjs" "$here/queue_turn.mjs:queue_turn.mjs"; do
+        remote "mkdir -p ~/$base/.turn && cat > ~/$base/.turn/.\$\$ && mv ~/$base/.turn/.\$\$ ~/$base/.turn/${f##*:}" < "${f%:*}"
+    done
+    local turn
+    turn="$(cat <<EOF
+t=\$HOME/$base/.turn/$name; rm -rf \$t; mkdir -p \$t; trap 'touch \$t/release' EXIT
+GPU_QUEUE_KEY=\$(cat) docker run -d --rm --name $base-$name-turn --network ${BUILD_QUEUE_NETWORK:-bridge} \\
+    -u \$(id -u):\$(id -g) -e GPU_QUEUE_KEY -v \$HOME/$base/.turn:/q node:24-slim \\
+    node /q/queue_turn.mjs /q/$name $(printf %q "build: $name") $(printf %q "${BUILD_JOB_URL:-}") > /dev/null || exit 1
+n=0
+until [ -e \$t/running ] || [ -e \$t/ended ]; do
+    [ \$((n++ % 30)) = 0 ] && [ -e \$t/waiting ] && echo "queue: \$(cat \$t/waiting)" >&2
+    sleep 1
+done
+[ -e \$t/running ] || { echo "queue: \$(cat \$t/ended)" >&2; exit 1; }
+$run
+code=\$?
+[ -e \$t/stopped ] && echo "queue: the queue ended the turn early (\$(cat \$t/stopped)), the run going on outside it" >&2
+exit \$code
+EOF
+)"
+    printf %s "${GPU_QUEUE_KEY:-}" | remote "set -e; cd ~/$dir; touch .lock; exec flock .lock bash -c $(printf %q "$turn")"
 }
 
 # Deletes the copies unused for $1 days (see the header): not this one, not a usual one, not one a run holds.
