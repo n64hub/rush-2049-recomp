@@ -34,9 +34,9 @@
 #                     tools/remote_build.sh run "cmake build-web -DN64RECOMP_BROWSER_FAST_LINK=ON" for a quick try
 #   web [<target>]    sync, then build
 #   windows <target> [<cmake arguments>]   sync, then build <target> (GoinQuackersRecompiled, say) for Windows in
-#                     build/xwin-windows: a test build of a game, cross-built in tools/docker/Dockerfile.windows (which
-#                     says how, and why a release is still built on Windows), RelWithDebInfo unless an argument says
-#                     otherwise. `get build/xwin-windows <local dir>` brings the program and its DLLs here to run
+#                     build/xwin-windows: a game's test build or release, cross-built in tools/docker/Dockerfile.windows
+#                     (which says how), RelWithDebInfo unless an argument says otherwise.
+#                     `get build/xwin-windows <local dir>` brings the program and its DLLs here to run
 #   get <dir> <local dir>   copy the files at the top of <dir> (relative to the copy) here, build files and a Windows
 #                     build's .pdb (hundreds of MB; it stays on the host) and generated sources left out
 #   clean             delete the copy (ccache stays)

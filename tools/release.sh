@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build a release from a local ROM, for Windows and for Linux on $BUILD_HOST, and publish both as a GitHub release. CI has no ROM (none is ever uploaded), so it can't link the game; releases are cut on a machine with the
+# Build a release from a local ROM, for Windows and for Linux on $BUILD_HOST, and publish both as a GitHub release.
+# CI has no ROM (none is ever uploaded), so it can't link the game; releases are cut on a machine with the
 # ROM instead.
 # Usage: BUILD_HOST=<host> BOOT_RELEASE=<script> tools/release.sh [--dry-run]
 #   One release carries every change merged since the last (docs/releasing.md): each change's PR adds what the
@@ -66,9 +67,9 @@ fi
 # HEAD (with any uncommitted changes, for a dry run) goes to the copy; each build there regenerates the recompiled code
 # from the committed symbols (tools/recompile.sh), so it matches this commit and not a dev build's.
 rb() { bash tools/remote_build.sh -n release-linux "$@"; }
-# Windows, in the copy's build/xwin-windows: Release's own flags plus debug info, which doesn't change the code. The .pdb
-# stays in out/ beside the zip and is never published: it holds the folders of every object and library it was linked
-# from, and with them the build host's account, which no compiler flag reaches. Without it a crash's trace in the
+# Windows, in the copy's build/xwin-windows: Release's own flags plus debug info, which doesn't change the code. The
+# .pdb stays in out/ beside the zip and is never published: it holds the folders of every object and library it was
+# linked from, and with them the build host's account, which no compiler flag reaches. Without it a crash's trace in the
 # player's rush2049.log gives each frame as the module and an offset into it (src/crash_handler.cpp), which this
 # release's .pdb names: put it beside that release's exe as Rush2049Recompiled.pdb and look the offsets up. The flags
 # are written -X, not /X, which Git Bash would turn into a path.
@@ -78,7 +79,8 @@ rb windows Rush2049Recompiled -DCMAKE_BUILD_TYPE=Release \
 build=build-release-windows
 rm -rf "$build"
 rb get build/xwin-windows "$build"
-ssh "$BUILD_HOST" cat rush2049/release-linux/repo/build/xwin-windows/Rush2049Recompiled.pdb > "$build/Rush2049Recompiled.pdb"
+ssh "$BUILD_HOST" cat rush2049/release-linux/repo/build/xwin-windows/Rush2049Recompiled.pdb \
+    > "$build/Rush2049Recompiled.pdb"
 
 # The game finds assets/ and recompcontrollerdb.txt in its working directory, or in its own folder when started from
 # another (src/main.cpp), so everything sits beside the exe.

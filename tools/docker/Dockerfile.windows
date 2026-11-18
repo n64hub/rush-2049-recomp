@@ -7,7 +7,7 @@
 # The shaders are built by rt64's own Windows dxc.exe, the one a Windows build runs, under Wine (dxc-wine, below), so
 # they come out byte for byte as a Windows build's. rt64's Linux dxc is another version (1.8, where dxc.exe is a 1.7
 # build of October 2023): the same instructions, but other bytes, which only a Windows that runs D3D12 could check.
-# What it is for: a test build of a card, off the machine that runs it, and a game's release (each recomp's
+# What it is for: a test build, off the machine that runs it, and a game's release (each recomp's
 # tools/release.sh), whose Windows program is the same as one built on Windows.
 # remote_build.sh tags it with a hash of this file, so a change here makes the next run build a new one.
 FROM ubuntu:24.04
@@ -99,10 +99,12 @@ EOF
 
 # Runs dxc.exe (its first argument) under Wine with the rest, each path in them given as Wine's Z: drive (an argument
 # starting with / that names a file or folder below the root, or -I and one), and turns the paths in the depfile it
-# writes with -MF back into Linux ones, so ninja finds the headers each shader includes.
+# writes with -MF back into Linux ones, so ninja finds the headers each shader includes. Wine's output goes through a
+# file, not a pipe: a process Wine starts in the background (services.exe) inherits what it writes to and outlives it,
+# and ninja waits for a pipe to close.
 COPY --chmod=755 <<"EOF" /usr/local/bin/dxc-wine
 #!/usr/bin/env python3
-import os, re, subprocess, sys
+import re, subprocess, sys, tempfile
 def win(a):
     if a.startswith("-I/"):
         return "-I" + win(a[2:])
@@ -110,7 +112,11 @@ def win(a):
         return "Z:" + a.replace("/", "\\")
     return a
 args = sys.argv[2:]
-code = subprocess.run(["wine", sys.argv[1]] + [win(a) for a in args]).returncode
+with tempfile.TemporaryFile() as out:
+    code = subprocess.run(["wine", sys.argv[1]] + [win(a) for a in args], stdin=subprocess.DEVNULL, stdout=out,
+                          stderr=subprocess.STDOUT).returncode
+    out.seek(0)
+    sys.stdout.buffer.write(out.read())
 if code == 0 and "-MF" in args:
     d = args[args.index("-MF") + 1]
     text = open(d, encoding="utf-8", errors="surrogateescape").read()
@@ -123,7 +129,8 @@ EOF
 #   xwin-build <jobs> <target> [cmake arguments, e.g. -DCMAKE_BUILD_TYPE=Release]
 # RelWithDebInfo unless told otherwise, as a Windows test build. A cross-build runs a tool target that a custom command
 # names (file_to_c, N64RecompCLI) by its bare name from PATH, so those are built natively first, into
-# build/xwin-host. rt64 picks its dxc by the target (dxc.exe for Windows), which it runs through dxc-wine. Windows
+# build/xwin-host. rt64 picks its dxc by the target (dxc.exe for Windows) and a recomp's own CMakeLists.txt by the host
+# (dxc-linux, for recompui's shaders): both run dxc.exe through dxc-wine, so every shader is a Windows build's. Windows
 # objects keep a ccache of their own beside the page builds', so neither evicts the other.
 COPY --chmod=755 <<"EOF" /usr/local/bin/xwin-build
 #!/usr/bin/env bash
@@ -164,11 +171,29 @@ new = ('    if (NOT CMAKE_HOST_WIN32) # XWIN_WINE_DXC: a cross-build runs dxc.ex
 open(p, "w").write(s.replace(exe, new, 1))
 PY
 fi
-# Wine's own files for dxc-wine, made once in the copy's home; one wineserver serves every dxc the build runs.
+# A recomp's own CMakeLists.txt sets a DXC of its own for recompui's shaders, by the host: dxc-linux here. For a Windows
+# target it runs dxc.exe too, and a Linux build in the same copy keeps dxc-linux.
+if [ -f CMakeLists.txt ] && grep -q 'bin/x64/dxc-linux"' CMakeLists.txt && ! grep -q 'XWIN_WINE_DXC' CMakeLists.txt; then
+    python3 - CMakeLists.txt << 'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+pat = r'^([ \t]*)(set *\(DXC "LD_LIBRARY_PATH=[^"]*/lib/x64" "([^"]*)/bin/x64/dxc-linux"\))[ \t]*$'
+def wrap(m):
+    i = m.group(1)
+    return (f'{i}if (WIN32) # XWIN_WINE_DXC: a cross-build runs dxc.exe under Wine (Dockerfile.windows)\n'
+            f'{i}    set(DXC dxc-wine "{m.group(3)}/bin/x64/dxc.exe")\n{i}else()\n{i}    {m.group(2)}\n{i}endif()')
+s, n = re.subn(pat, wrap, s, flags=re.M)
+assert n, "no dxc-linux DXC in " + p
+open(p, "w").write(s)
+PY
+fi
+# Wine's own files for dxc-wine, made once in the copy's home. One wineserver serves every dxc the build runs, and its
+# session (services.exe and the rest) starts here, its output going nowhere, so no dxc starts it holding ninja's pipe.
 export WINEPREFIX=$HOME/.wine-dxc WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml="
-[ -d $WINEPREFIX ] || wineboot -i > /dev/null 2>&1
-wineserver -p
-trap 'wineserver -k 2> /dev/null || true' EXIT
+wineserver -p > /dev/null 2>&1 < /dev/null || true
+trap 'wineserver -k > /dev/null 2>&1 || true' EXIT
+wineboot > /dev/null 2>&1 < /dev/null || { echo "wineboot failed (exit $?)"; exit 1; }
 python3 /opt/xwin/case_links.py . $XWIN_CASE
 if [ ! -f $out/build.ninja ] || [ $# -gt 0 ]; then
     cmake -S . -B $out -G Ninja --toolchain /opt/xwin/toolchain.cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
