@@ -29,9 +29,9 @@ builds the game's page in that copy's `build-web/`, `get build-web <dir>` brings
 
 `windows <target>` cross-builds the Windows program there, any recomp's with `-C <its checkout>`, with the same
 clang-cl, MSVC and Windows SDK as a Windows build (`tools/docker/Dockerfile.windows` says how), into the
-copy's `build/xwin-windows/`; `get build/xwin-windows <dir>` brings back the program and its DLLs to run here. It is
-for test builds: its D3D12 shaders come from a different dxc than the Windows build's, so a release is still built on
-Windows (docs/releasing.md).
+copy's `build/xwin-windows/`; `get build/xwin-windows <dir>` brings back the program and its DLLs to run here. Its
+shaders are built by rt64's own dxc.exe under Wine, so they are a Windows build's byte for byte, and a release's
+Windows zip is built this way too (docs/releasing.md).
 
 A sync sends the submodules as their pins and patches them there, so a change to a fork tried in the checkout's
 submodules before it is pushed needs `-s`, which sends each submodule's files as the checkout has them (the patches
