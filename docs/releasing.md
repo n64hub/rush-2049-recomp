@@ -24,13 +24,13 @@ it. A change merged during one rides the next, and nobody holds a merge for one.
 A release is cut on a machine with the ROM, never in CI (no ROM, so no link). Its PR, titled `Release v<version>`, bumps
 `version_string` in `src/main.cpp` and moves `releases/next.md` to `releases/v<version>.md` (`git mv`, then the lines
 written into the last release's shape). Once it merges, from a clean checkout of that merge commit with extract.py's
-`roms/` (`docs/building.md`): `BUILD_HOST=<host> BOOT_RELEASE=<script> bash tools/release.sh` (`--dry-run` builds and
-packs only). It builds both on the build host, the Windows zip cross-built (`tools/remote_build.sh`'s `windows`) and
-the Linux `.tar.gz`, boots each from a new folder (the script `BOOT_RELEASE` names: the zip on this Windows machine,
-the Linux one on the build host; look at the captures in `out/boot-windows` and `out/boot-linux`), and publishes
-GitHub release `v<version>` with both and that file as its notes, refusing without one, with `releases/next.md` still
-there or at a commit not on `origin/main`. Its header says what each holds and how the Linux build boots: under Mesa's
-software Vulkan, which crashes on its own as the second attract race begins; no Linux GPU has run it.
+`roms/` (`docs/building.md`), `tools/release.sh`: `windows` builds the zip (or packs a Windows build made elsewhere,
+`WINDOWS_BUILD`), `linux` the `.tar.gz` in its Docker image, `boot windows` and `boot linux` boot each from a new folder
+with the script `BOOT_RELEASE` names (look at the captures in `out/boot-windows` and `out/boot-linux`), and `publish`
+makes GitHub release `v<version>` with both and that file as its notes, refusing archives from another commit or that
+haven't booted, without the notes, with `releases/next.md` still there or at a commit not on `origin/main`. Its header
+says what each holds and how the Linux build boots: under Mesa's software Vulkan, which crashes on its own as the
+second attract race begins; no Linux GPU has run it.
 
 The notes are for someone downloading it: what changed in the desktop game since the last release, in the README's
 words, never the list of merged PRs (most are web support and other games' pages); `releases/v0.1.0.md` is the shape.
