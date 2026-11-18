@@ -10,7 +10,7 @@
 # (N64Recomp-browser's frontend/build_speed.cmake): a fresh copy of the game's page builds in ~80 s on 12 cores. It
 # holds 30 GB: at ccache's default 5 GB it was full and evicting, with every game's page built through it (a Windows
 # build keeps its own, ccache-windows, the same size). A
-# container is capped at $BUILD_CPUS cores (12) and 24 GB, so it leaves room for whatever else the host runs. Runs on
+# container is capped at $BUILD_CPUS cores (8) and 24 GB, so it leaves room for whatever else the host runs. Runs on
 # one copy wait for each other (flock), and its container is named rush2049-<name>, so `docker stop` names it.
 #
 # A copy is the work's own, and the work forgets it when it ends: copies left behind filled the host's disk (140 of
@@ -52,10 +52,9 @@
 # files; the checkout needs that commit (a submodule that has been updated to its pin has it).
 # A host whose machine is shared through a GPU queue: with BUILD_QUEUE_CLIENT naming a JavaScript module here that
 # exports gpuRun(spec, run), every run in the image (build, web, windows, run) first waits for a turn in that queue, a
-# low-priority job of type build asking no GPU memory and the host memory its last runs held, and holds it until the
-# run ends. A
-# container of node:24-slim on the docker network $BUILD_QUEUE_NETWORK holds the turn (<container>-turn, running
-# tools/queue_turn.mjs from ~/rush2049/.turn). $GPU_QUEUE_KEY goes over on ssh's stdin, never on a command line, and
+# low-priority job of type build asking no GPU memory and the host memory its last runs used (in_image), and holds it
+# until the run ends. A container of node:24-slim on the docker network $BUILD_QUEUE_NETWORK holds the turn
+# (<container>-turn, running tools/queue_turn.mjs from ~/rush2049/.turn). $GPU_QUEUE_KEY goes over on ssh's stdin, never on a command line, and
 # $BUILD_JOB_URL is the job's link. A turn the queue ends early leaves the run to finish outside it, said on stderr.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -79,7 +78,7 @@ name="${name:-$(basename "$checkout")}"
 base=rush2049                     # under the host's home
 dir="$base/$name"
 image="n64recomp-build:$(git hash-object "$dockerfile" | cut -c1-12)"
-cpus="${BUILD_CPUS:-12}"
+cpus="${BUILD_CPUS:-8}"
 host="${BUILD_HOST:-}"
 
 remote() { ssh -o BatchMode=yes "$host" "$@"; }
@@ -94,16 +93,20 @@ ensure_image() {
 # paths in logs and caches read the same in and out of the container.
 in_image() {
     ensure_image
-    # Each run appends the most memory its container held (cgroup v2's memory.peak) to ~/$base/.turn/peaks/<kind>, its
-    # command and image, which a turn asks the queue for: the last 5 runs' most, plus 1 GB.
+    # Each run appends the most memory its container used to ~/$base/.turn/anon/<kind>, its command and image, which a
+    # turn asks the queue for: the last 5 runs' most plus 1 GB, 4 GB plus 1 before a kind has run. Used is the cgroup's
+    # anonymous memory, sampled each second from memory.stat, as the queue measures its own jobs: memory.peak counts the
+    # page cache a build reads and writes too, which the kernel takes back, so it asked several GB more than a run used.
     local kind="$cmd-$(basename "$dockerfile")"
     local run="docker run --rm --name $base-$name --cpus $cpus --memory 24g \
         -u \$(id -u):\$(id -g) -v \$HOME/$base:\$HOME/$base -w \$HOME/$dir/repo -e HOME=\$HOME/$dir/home \
-        -e CCACHE_DIR=\$HOME/$base/ccache -e CCACHE_MAXSIZE=30G -e PEAKS=\$HOME/$base/.turn/peaks/$kind \
-        $image bash -c $(printf %q "trap 'cat /sys/fs/cgroup/memory.peak >> \"\$PEAKS\" 2>/dev/null' EXIT
+        -e CCACHE_DIR=\$HOME/$base/ccache -e CCACHE_MAXSIZE=30G -e PEAKS=\$HOME/$base/.turn/anon/$kind \
+        $image bash -c $(printf %q "trap 'kill \$sampler 2>/dev/null; cat /tmp/anon-peak >> \"\$PEAKS\" 2>/dev/null' EXIT
+(m=0; while :; do a=\$(awk '/^anon /{print \$2}' /sys/fs/cgroup/memory.stat)
+    [ \"\${a:-0}\" -gt \$m ] && { m=\$a; echo \$m > /tmp/anon-peak; }; sleep 1; done) & sampler=\$!
 $1")"
     if [[ -z "${BUILD_QUEUE_CLIENT:-}" ]]; then
-        remote "set -e; mkdir -p ~/$base/.turn/peaks; cd ~/$dir; touch .lock; exec flock .lock $run"
+        remote "set -e; mkdir -p ~/$base/.turn/anon; cd ~/$dir; touch .lock; exec flock .lock $run"
         return
     fi
     # The turn (the header): the client and queue_turn.mjs go to ~/$base/.turn (each replaced whole, as another run may
@@ -114,9 +117,9 @@ $1")"
     done
     local turn
     turn="$(cat <<EOF
-t=\$HOME/$base/.turn/$name; rm -rf \$t; mkdir -p \$t \$HOME/$base/.turn/peaks; trap 'touch \$t/release' EXIT
-ask=\$(tail -n 5 \$HOME/$base/.turn/peaks/$kind 2>/dev/null | sort -n | tail -n 1)
-ask=\$(( \${ask:-11811160064} / 1048576 + 1024 ))
+t=\$HOME/$base/.turn/$name; rm -rf \$t; mkdir -p \$t \$HOME/$base/.turn/anon; trap 'touch \$t/release' EXIT
+ask=\$(tail -n 5 \$HOME/$base/.turn/anon/$kind 2>/dev/null | sort -n | tail -n 1)
+ask=\$(( \${ask:-4294967296} / 1048576 + 1024 ))
 GPU_QUEUE_KEY=\$(cat) docker run -d --rm --name $base-$name-turn --network ${BUILD_QUEUE_NETWORK:-bridge} \\
     -u \$(id -u):\$(id -g) -e GPU_QUEUE_KEY -v \$HOME/$base/.turn:/q node:24-slim \\
     node /q/queue_turn.mjs /q/$name $(printf %q "build: $name") \$ask $(printf %q "${BUILD_JOB_URL:-}") > /dev/null || exit 1
