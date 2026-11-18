@@ -43,14 +43,22 @@
 # -C works on another checkout, a game's or a game fork's (only sync, run, windows, get and clean mean anything
 # there); -n names the copy, for one shared by several runs, as tools/publish_page.sh does; -d runs in another image,
 # the Dockerfile given (tools/release.sh's Linux build, tools/docker/Dockerfile.linux).
+# -s sends the submodules as the checkout has them too, for a change to a fork tried in a game before it is pushed
+# (N64Recomp-browser's CLAUDE.md, Changing it): each submodule's files, untracked ones included and its own commits,
+# go over as a diff from the commit its parent pins, and the copy's submodules are set to exactly that, patches
+# included, so the patch scripts don't run there. Without -s the copy's submodules are their pins, patched there. A
+# nested submodule is diffed from the commit its parent's pin names, so a pin moved in the checkout comes over as
+# files; the checkout needs that commit (a submodule that has been updated to its pin has it).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 checkout="$(cd "$here/.." && pwd)"
 name=""
 dockerfile="$here/docker/Dockerfile"
+subs=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
     -C) checkout="$(cd "$2" && pwd)"; shift 2 ;;
+    -s) subs=1; shift ;;
     -n) name="$2"; shift 2 ;;
     -d) dockerfile="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2 ;;
     *) break ;;
@@ -93,6 +101,32 @@ prune() {
         done"
 }
 
+# -s: each submodule of the repo at $1, whose commit $2 pins them, that differs from its pin, as a diff from the pin to
+# its files ($tmp/subs/<n>.diff, and "<n> <path from the checkout>" in $tmp/subs/list), then its own submodules, from
+# the commits that pin names. A copy of the submodule's index takes in its untracked files (ignored ones stay out), so
+# the checkout's own index is left alone and the files it has seen unchanged aren't read again.
+sub_diffs() {
+    local repo="$1" at="$2" prefix="$3" meta path pin sub idx n
+    while IFS=$'\t' read -r meta path <&3; do
+        pin="${meta##* }" sub="$repo/$path"
+        [[ -e "$sub/.git" ]] || continue
+        git -C "$sub" cat-file -e "$pin^{commit}" 2> /dev/null ||
+            { echo "$prefix$path: its pin ${pin:0:12} isn't in the checkout (git -C $prefix$path fetch origin $pin)"; exit 1; }
+        n="$(wc -l < "$tmp/subs/list")"
+        idx="$tmp/index$n"
+        cp "$(git -C "$sub" rev-parse --path-format=absolute --git-path index)" "$idx" 2> /dev/null || rm -f "$idx"
+        command -v cygpath > /dev/null && idx="$(cygpath -m "$idx")"
+        GIT_INDEX_FILE="$idx" git -C "$sub" add -A
+        GIT_INDEX_FILE="$idx" git -C "$sub" diff --cached --binary --ignore-submodules "$pin" > "$tmp/subs/$n.diff"
+        if [[ -s "$tmp/subs/$n.diff" ]]; then
+            printf '%s %s\n' "$n" "$prefix$path" >> "$tmp/subs/list"
+        else
+            rm "$tmp/subs/$n.diff"
+        fi
+        sub_diffs "$sub" "$pin" "$prefix$path/"
+    done 3< <(git -C "$repo" ls-tree -r "$at" | grep '^160000 ')
+}
+
 sync() {
     prune "${BUILD_KEEP_DAYS:-3}"
     local commit="${1:-HEAD}" sha url diff="" private fetch="git fetch -q origin"
@@ -133,6 +167,17 @@ sync() {
         git -C "$checkout" diff HEAD --binary --ignore-submodules > "$tmp/work.diff"
         [[ -s "$tmp/work.diff" ]] && scp -q "$tmp/work.diff" "$host:$dir/work.diff" && diff=1
     fi
+    local sent=""
+    if [[ -n "$subs" ]]; then
+        mkdir -p "$tmp/subs"
+        : > "$tmp/subs/list"
+        sub_diffs "$checkout" "$sha" ""
+        tar -cf "$tmp/subs.tar" -C "$tmp/subs" .
+        scp -q "$tmp/subs.tar" "$host:$dir/subs.tar"
+        sent=1
+        echo "submodules sent as the checkout has them: $(wc -l < "$tmp/subs/list") differ from their pins," \
+            "$(( $(wc -c < "$tmp/subs.tar") / 1024 )) KB"
+    fi
     remote "set -e; cd ~/$dir; touch .lock; exec flock .lock bash -s" << EOF
 set -e
 # No fetch recurses into submodules: the submodule update below fetches what the checkout names. A recursing fetch
@@ -158,7 +203,19 @@ done
 # one) is fetched over HTTPS.
 for i in 1 2; do git submodule sync -q --recursive
     git -c url.https://github.com/.insteadOf=git@github.com: submodule update -q --init --recursive; done
-if [ -f tools/apply_runtime_patches.sh ]; then
+# -s: every submodule back to its pin and given the checkout's files (sub_diffs). A copy an earlier -s left so is
+# reset first, so its patch scripts start from the pins.
+if [ -n "$sent" ] || [ -f ../subs.applied ]; then
+    git submodule foreach --recursive -q 'git reset -q --hard && git clean -fdq'
+    rm -f ../subs.applied
+fi
+if [ -n "$sent" ]; then
+    rm -rf ../subs && mkdir ../subs && tar -xf ../subs.tar -C ../subs && rm ../subs.tar
+    s=\$(cd ../subs && pwd)
+    while read -r n path; do git -C "\$path" apply --whitespace=nowarn "\$s/\$n.diff"; done < "\$s/list"
+    rm -rf ../subs
+    touch ../subs.applied
+elif [ -f tools/apply_runtime_patches.sh ]; then
     # A patch main has since edited (N64Recomp-browser's, when it moved) makes the script stop before it touches
     # anything: then all of them start over.
     bash tools/apply_runtime_patches.sh > /dev/null 2>&1 || {
