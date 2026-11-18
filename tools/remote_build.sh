@@ -16,8 +16,9 @@
 # A copy is the work's own, and the work forgets it when it ends: copies left behind filled the host's disk (140 of
 # them, ~300 GB). So every command touches its copy's .lock, and every sync first deletes the copies nobody has used
 # for $BUILD_KEEP_DAYS days (3), by that and the copy's own mtime, unless a run holds the lock. The usual copies stay
-# however long they idle, since what they keep is the incremental build: release-linux (tools/release.sh), and publish
-# and pages-<game>, the copies page publishes reuse. Only copies are looked at (a folder with a .lock), so the ccache
+# however long they idle, since what they keep is the incremental build: release-linux (tools/release.sh), the
+# release-<repo> copy each game's tools/release.sh builds both its archives in, and publish and pages-<game>, the
+# copies page publishes reuse. Only copies are looked at (a folder with a .lock), so the ccache
 # and anything else under ~/rush2049 stays.
 #
 # Usage: BUILD_HOST=<host> tools/remote_build.sh [-C <checkout>] [-n <name>] <command>
@@ -138,7 +139,7 @@ EOF
 prune() {
     remote "cd ~/$base 2> /dev/null || exit 0
         for d in */; do d=\${d%/}
-            case \$d in $name | publish | release-linux | pages-*) continue ;; esac
+            case \$d in $name | publish | release-* | pages-*) continue ;; esac
             [ -f \$d/.lock ] && [ -z \"\$(find \$d \$d/.lock -maxdepth 0 -mtime -$1)\" ] || continue
             flock -n \$d/.lock rm -rf \$d && echo \"pruned \$d, unused for $1 days\" || true
         done"
