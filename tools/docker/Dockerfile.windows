@@ -1,0 +1,154 @@
+# The image tools/remote_build.sh's `windows` command cross-builds a recomp's Windows program in, on a Linux host: the
+# same clang-cl as the Windows build (LLVM 22's clang-cl, lld-link and llvm-rc), with Microsoft's C runtime and Windows
+# SDK in /xwin, which xwin (github.com/Jake-Shadle/xwin) downloads from Microsoft's own packages, accepting their
+# license, at the versions the Windows toolchain uses (MSVC 14.44, SDK 10.0.26100). They stay in this image, which is
+# built on the host and never pushed anywhere. Plain clang builds the tools a build runs (N64Recomp, file_to_c) and the
+# patches library for MIPS. CMake 3.31, as the submodules' cmake_minimum_required rejects CMake 4.
+# What it is for: a test build of a card, off the machine that runs it. The program it makes runs the same on Windows
+# with Vulkan, but its D3D12 shaders come from rt64's Linux dxc (1.8), not the Windows dxc.exe (a 1.7 build of
+# October 2023) the Windows build runs, so a release is still built on Windows (tools/release.sh).
+# remote_build.sh tags it with a hash of this file, so a change here makes the next run build a new one.
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg git make ninja-build ccache \
+    python3 xz-utils g++ && \
+    curl -sSf https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" \
+        > /etc/apt/sources.list.d/llvm.list && \
+    apt-get update && apt-get install -y --no-install-recommends clang-22 lld-22 llvm-22 && \
+    for t in clang clang++ clang-cl lld-link ld.lld llvm-rc llvm-mt llvm-lib; do ln -s /usr/bin/$t-22 /usr/local/bin/$t; done && \
+    rm -rf /var/lib/apt/lists/*
+RUN curl -sSfL https://github.com/Kitware/CMake/releases/download/v3.31.9/cmake-3.31.9-linux-x86_64.tar.gz | \
+    tar xz -C /opt && ln -s /opt/cmake-3.31.9-linux-x86_64/bin/* /usr/local/bin/
+# --preserve-ms-arch-notation: lib/x64, where clang-cl's and lld-link's /winsysroot look (xwin's default is x86_64).
+RUN curl -sSfL https://github.com/Jake-Shadle/xwin/releases/download/0.10.0/xwin-0.10.0-x86_64-unknown-linux-musl.tar.gz | \
+    tar xz -C /tmp && mv /tmp/xwin-0.10.0-x86_64-unknown-linux-musl/xwin /usr/local/bin/ && \
+    xwin --accept-license --cache-dir /tmp/xwin-cache --arch x86_64 --crt-version 14.44.17.14 --sdk-version 10.0.26100 \
+        splat --use-winsysroot-style --preserve-ms-arch-notation --output /xwin && \
+    rm -rf /tmp/xwin-cache /tmp/xwin-0.10.0-x86_64-unknown-linux-musl
+
+# The toolchain file. $XWIN_CASE is the build's folder of links (case_links.py, below), searched after everything else.
+# Compiler checks build Release: xwin leaves out the debug C runtime.
+COPY <<"EOF" /opt/xwin/toolchain.cmake
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR AMD64)
+set(CMAKE_C_COMPILER clang-cl)
+set(CMAKE_CXX_COMPILER clang-cl)
+set(CMAKE_LINKER lld-link)
+set(CMAKE_RC_COMPILER llvm-rc)
+set(CMAKE_MT llvm-mt)
+set(CMAKE_AR llvm-lib)
+set(CMAKE_C_FLAGS_INIT "-winsysroot /xwin -imsvc $ENV{XWIN_CASE}/include")
+set(CMAKE_CXX_FLAGS_INIT "-winsysroot /xwin -imsvc $ENV{XWIN_CASE}/include")
+foreach(kind EXE SHARED MODULE)
+    set(CMAKE_${kind}_LINKER_FLAGS_INIT "/winsysroot:/xwin /libpath:$ENV{XWIN_CASE}/lib")
+endforeach()
+set(CMAKE_TRY_COMPILE_CONFIGURATION Release)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+EOF
+
+# Windows finds a header or a library whatever its case, Linux doesn't: the sources include Shlobj.h for the SDK's
+# ShlObj.h and link Winmm.lib for winmm.lib. xwin links the spellings the SDK itself uses; this links the ones the
+# sources use, each name a source includes or a CMake file or #pragma links that the SDK has only in another case.
+COPY <<"EOF" /opt/xwin/case_links.py
+import os, re, sys
+src, out = sys.argv[1], sys.argv[2]
+def walk(top, exts):
+    for dp, ds, fs in os.walk(top):
+        ds[:] = [d for d in ds if d not in (".git", "build", "out") and not d.startswith("build-")]
+        for f in fs:
+            if f == "CMakeLists.txt" or f.endswith(exts):
+                try:
+                    yield open(os.path.join(dp, f), "rb").read()
+                except OSError:
+                    pass
+heads, libs = {}, {}
+for top in ["/xwin/VC/Tools/MSVC", "/xwin/Windows Kits/10/Include"]:
+    for dp, _, fs in os.walk(top):
+        parts = dp.split(os.sep)
+        for i, p in enumerate(parts):
+            if p in ("include", "um", "shared", "ucrt", "winrt", "cppwinrt"):
+                for f in fs:
+                    sub = "/".join(parts[i + 1:] + [f])
+                    heads.setdefault(sub.lower(), {})[sub] = os.path.join(dp, f)
+for top in ["/xwin/VC/Tools/MSVC", "/xwin/Windows Kits/10/Lib"]:
+    for dp, _, fs in os.walk(top):
+        if dp.endswith("x64"):
+            for f in fs:
+                libs.setdefault(f.lower(), {})[f] = os.path.join(dp, f)
+inc = re.compile(rb'^\s*#\s*include\s*[<"]([^>"]+)[>"]', re.M)
+lib = re.compile(rb'\b([A-Za-z0-9_]+\.[Ll][Ii][Bb])\b')
+want_h, want_l = set(), set()
+for data in walk(src, (".h", ".hpp", ".hh", ".c", ".cc", ".cpp", ".inl", ".rc", ".cmake")):
+    want_h.update(m.group(1).decode(errors="replace").replace("\\", "/") for m in inc.finditer(data))
+    want_l.update(m.group(1).decode() for m in lib.finditer(data))
+made = 0
+for kind, want, have in (("include", want_h, heads), ("lib", want_l, libs)):
+    for w in sorted(want):
+        found = have.get(w.lower())
+        if found and w not in found:
+            dst = os.path.join(out, kind, w)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if not os.path.lexists(dst):
+                os.symlink(next(iter(found.values())), dst)
+                made += 1
+print(f"case links: {made} new")
+EOF
+
+# Builds <target> for Windows in build/xwin-windows, from the checkout it runs in (remote_build.sh's copy):
+#   xwin-build <jobs> <target> [cmake arguments, e.g. -DCMAKE_BUILD_TYPE=Release]
+# RelWithDebInfo unless told otherwise, as a Windows test build. A cross-build runs a tool target that a custom command
+# names (file_to_c, N64RecompCLI) by its bare name from PATH, so those are built natively first, into
+# build/xwin-host. rt64 picks its dxc by the target (dxc.exe for Windows), so it is pointed at rt64's own dxc-linux,
+# the one a Linux build runs. Windows objects keep a ccache of their own beside the page builds', so neither evicts
+# the other.
+COPY --chmod=755 <<"EOF" /usr/local/bin/xwin-build
+#!/usr/bin/env bash
+set -euo pipefail
+jobs=$1 target=$2
+shift 2
+root=$PWD
+host=build/xwin-host out=build/xwin-windows
+mkdir -p $host/bin
+export CCACHE_DIR="${CCACHE_DIR%/}-windows" CCACHE_MAXSIZE=30G MIPS_CC=clang MIPS_LD=ld.lld
+export XWIN_CASE=$root/$host/case PATH=$root/$host/bin:$PATH
+native=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+if [ -f tools/recompile.sh ]; then
+    bash tools/recompile.sh -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ > $host/recompile.log 2>&1 ||
+        { tail -20 $host/recompile.log; exit 1; }
+fi
+if [ -d lib/N64ModernRuntime/N64Recomp ]; then
+    [ -f $host/n64recomp/build.ninja ] || cmake -S lib/N64ModernRuntime/N64Recomp -B $host/n64recomp "${native[@]}" \
+        > $host/n64recomp.log 2>&1 || { tail -20 $host/n64recomp.log; exit 1; }
+    ninja -C $host/n64recomp N64RecompCLI >> $host/n64recomp.log 2>&1 || { tail -20 $host/n64recomp.log; exit 1; }
+    ln -sf ../n64recomp/N64Recomp $host/bin/N64RecompCLI
+fi
+f2c=lib/rt64/src/tools/file_to_c/file_to_c.cpp
+if [ -f $f2c ] && [ $f2c -nt $host/bin/file_to_c ]; then clang++ -std=c++17 -O2 $f2c -o $host/bin/file_to_c; fi
+rt64=lib/rt64/CMakeLists.txt
+if [ -f $rt64 ] && grep -q '^    set (DXC "${PROJECT_SOURCE_DIR}/src/contrib/dxc/bin/x64/dxc.exe")' $rt64 &&
+    ! grep -q 'XWIN_HOST_DXC' $rt64; then
+    python3 - $rt64 << 'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = '    set (DXC "${PROJECT_SOURCE_DIR}/src/contrib/dxc/bin/x64/dxc.exe")\n'
+new = ('    if (NOT CMAKE_HOST_WIN32) # XWIN_HOST_DXC: a cross-build runs the host\'s dxc (Dockerfile.windows)\n'
+       '        set (DXC "LD_LIBRARY_PATH=${PROJECT_SOURCE_DIR}/src/contrib/dxc/lib/x64" '
+       '"${PROJECT_SOURCE_DIR}/src/contrib/dxc/bin/x64/dxc-linux")\n'
+       '    else()\n    ' + old + '    endif()\n')
+open(p, "w").write(s.replace(old, new, 1))
+PY
+fi
+python3 /opt/xwin/case_links.py . $XWIN_CASE
+if [ ! -f $out/build.ninja ] || [ $# -gt 0 ]; then
+    cmake -S . -B $out -G Ninja --toolchain /opt/xwin/toolchain.cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DPATCHES_C_COMPILER=clang -DPATCHES_LD=ld.lld \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache "$@" > $out.log 2>&1 ||
+        { tail -30 $out.log; rm -f $out/build.ninja; exit 1; }
+fi
+ninja -C $out -j "$jobs" "$target" > $out/build.log 2>&1 ||
+    { grep -E ' error|FAILED|undefined|not found' $out/build.log | head -20; exit 1; }
+ls -l $out/*.exe $out/*.dll | sed "s|$root/||"
+EOF
