@@ -1,4 +1,4 @@
-# The image tools/release.sh builds the Linux release in (tools/remote_build.sh -d): Ubuntu 22.04, so the binary needs
+# The image tools/release.sh linux builds the Linux release in: Ubuntu 22.04, so the binary needs
 # glibc 2.35 and runs there, on Debian 12 and on anything newer (Ubuntu 24.04's toolchain asks for 2.38). clang 18 from
 # apt.llvm.org (jammy's own is 14), g++ 12's libstdc++ headers for C++20 (the game links it statically), CMake 3.31,
 # Ninja, ccache, GTK 3 and FreeType, patchelf, and SDL2 2.32.10 built from source, the version the Windows build ships:

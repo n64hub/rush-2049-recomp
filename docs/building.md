@@ -20,23 +20,6 @@ checkout, the same script with no argument gives this one its own (its header sa
 with `bad object HEAD` in a nested submodule, a fetch hit Windows' path limit; repair it with
 `git -c core.longpaths=true submodule foreach --recursive 'git config core.longpaths true; git cat-file -e $sha1 || git fetch origin $sha1'`.
 
-## Building on a Linux host
-
-`tools/remote_build.sh` (its header says how) builds over ssh instead (`BUILD_HOST`), in a Docker image of the tools,
-`tools/docker/Dockerfile`: it sends a checkout's HEAD and its uncommitted changes to a copy of its own there, `web`
-builds the game's page in that copy's `build-web/`, `get build-web <dir>` brings it back, and `-C <checkout>` does
-`sync`, `run` and `get` for another repo, a game fork. A tool a build lacks goes into the Dockerfile.
-
-`windows <target>` cross-builds the Windows program there, any recomp's with `-C <its checkout>`, with the same
-clang-cl, MSVC and Windows SDK as a Windows build (`tools/docker/Dockerfile.windows` says how), into the
-copy's `build/xwin-windows/`; `get build/xwin-windows <dir>` brings back the program and its DLLs to run here. Its
-shaders are built by rt64's own dxc.exe under Wine, so they are a Windows build's byte for byte, and a release's
-Windows zip is built this way too (docs/releasing.md).
-
-A sync sends the submodules as their pins and patches them there, so a change to a fork tried in the checkout's
-submodules before it is pushed needs `-s`, which sends each submodule's files as the checkout has them (the patches
-in them included): `tools/remote_build.sh -s -C <checkout> windows <target>`, or `-s web`.
-
 ## Running the game
 
 `iterate.sh <secs>` boots with `--boot --stacks` into `run.log`, and `ninja -C build Rush2049Recompiled` is enough after
