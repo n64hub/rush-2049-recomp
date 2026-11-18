@@ -29,7 +29,7 @@ points at the other.
   commit. A finding that explains code goes beside that code.
 - `docs/`, read when the task needs it:
   - `docs/building.md`: a fresh checkout, the remote build, running the game, the developer flags, testing in the game.
-  - `docs/releasing.md`: desktop releases, publishing the page, moving `lib/N64Recomp-browser`.
+  - `docs/releasing.md`: desktop releases, moving `lib/N64Recomp-browser`.
   - `docs/web.md`: what of the web target is this game's own, and the `headless/` build.
   - `docs/ruled-out.md`: what has been tried and measured, so don't retry it. Read it before a performance or
     rendering change.

@@ -18,10 +18,10 @@
 // On the web, 60 fps holds the game to 30 while it can't keep 60 up. A frame the game doesn't finish in one retrace
 // takes two, and RT64 draws few frames between those of a game that mixes frames of one and two retraces (it takes a
 // frame's length from the shortest of the last three): on a phone whose CPU held the race to 30-31 frames a second,
-// the page presented 41-44 a second at 60 and 55-56 at 30 (N64Recomp-browser's docs/phones.md). Two seconds in a row
-// with 20-50 frames each hold the game to 30 (fewer is a load or a stall, and a single one a load's end: a page on a
-// desktop GPU has one at each load), and it tries 60 again for a second 10 s later, twice as long after each try that
-// didn't keep up, at most 80 s. A desktop build keeps 60.
+// the page presented 41-44 a second at 60 and 55-56 at 30. Two seconds in a row with 20-50 frames each hold the game to
+// 30 (fewer is a load or a stall, and a single one a load's end: a page on a desktop GPU has one at each load), and it
+// tries 60 again for a second 10 s later, twice as long after each try that didn't keep up, at most 80 s. A desktop
+// build keeps 60.
 
 #include <algorithm>
 #include <atomic>
