@@ -2,7 +2,8 @@
 # Linux build by a soak (frame_dump.mjs --soak 185, with --args "--players 2"), which fails on a Crash: line, the
 # program exiting, or the picture standing still for 10 s, saying whether the game's RAM went on changing (a frozen
 # picture) or not (a hang). Its steps are capture_window.ps1's plan steps, plus `<t> random <key>,...`, which presses
-# those keys at random until `<t> random off`. RESULT_LINE
+# those keys at random until `<t> random off`. It failed v0.1.51 (from the two-player race's car select on, the
+# picture black and still, the game's RAM changing) and passes v0.1.78.
 #
 # A round, one player: Stunt's first arena with Rewind held twice (#257's crash), its pause menu's QUIT, the score
 # sheet and GAME OVER's QUIT; Ghost Race on Track 1 with its time limit made 5 s, so it plays to its end, BEST GHOSTS
