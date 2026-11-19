@@ -1,0 +1,206 @@
+# Rush 2049's soak plan: one round through the game's modes and scenes, three minutes with the boot, played on the
+# Linux build by a soak (frame_dump.mjs --soak 185, with --args "--players 2"), which fails on a Crash: line, the
+# program exiting, or the picture standing still for 10 s, saying whether the game's RAM went on changing (a frozen
+# picture) or not (a hang). Its steps are capture_window.ps1's plan steps, plus `<t> random <key>,...`, which presses
+# those keys at random until `<t> random off`. RESULT_LINE
+#
+# A round, one player: Stunt's first arena with Rewind held twice (#257's crash), its pause menu's QUIT, the score
+# sheet and GAME OVER's QUIT; Ghost Race on Track 1 with its time limit made 5 s, so it plays to its end, BEST GHOSTS
+# and GAME OVER's QUIT (#200's freeze); Practice on Track 1, its QUIT back to SELECT TRACK; Circuit's first race under
+# random input and its QUIT. Then two players (--players 2 gives the keyboard's input to port 2 as well): Single Race
+# on Track 2 (split screen: #303's frozen picture, and v0.1.51's black one) and Battle under random input, each left
+# by its QUIT; then the main menu's cursor moved at random until the time is up. Each race starts with the gas held
+# through the countdown; each `shot` is a picture of a GAME OVER menu with QUIT picked, where the round got to.
+#
+# Times are seconds since the program started; each until waits on the game's RAM and moves the later steps on by its
+# wait, so the round keeps step with the game, not the clock. 0x801174B4 is the frame loop's state, a bit a screen
+# (src/rewind.cpp): 0x8 the title's attract race, 0x10 the main menu, 0x40 SELECT MODE, 0x80 SELECT TRACK, 0x400000 a
+# race, 0x800000 a race's end screens (a score sheet, GAME OVER), 0x2000000 Ghost Race's BEST GHOSTS. SELECT MODE's
+# cursor, the low byte of 0x803B469C, holds the mode's own number (0 Single Race, 1 Practice, 2 Ghost Race, 3 Circuit,
+# 4 Stunt, 6 Battle; Ghost Race and Circuit only with one player, Battle only with more) and stays where it was left;
+# the track is the top byte of 0x8014978C (0 Track 1, 1 Track 2, 14 Stunt's first arena); the pause menu's cursor is
+# the low byte of 0x80149D98, QUIT its eighth line (7), then Left to YES. GAME OVER's cursor is not in the steps: its
+# QUIT is four lines down (Circuit's menu, one). Ghost Race's time limits are a float per track from 0x80111754. Keys
+# are the keyboard's defaults (README, Controls): Enter Start, Space A and the gas, Shift B, Backspace Rewind.
+
+# The title, the main menu (one player), SELECT MODE.
+0 until 0x801174B4 0x8 0x8 90
+1 until 0x801174B4 0x10 0x10 20 Enter
+1.3 until 0x801174B4 0x40 0x40 10 Space
+# Stunt, its first arena, Rewind held twice; QUIT shows the score sheet, Enter GAME OVER, its QUIT the main menu.
+1.7 key Down 150
+2.1 key Down 150
+2.5 key Down 150
+2.9 key Down 150
+3.3 until 0x803B469C 0xFF 0x4 8 Down
+3.6 key Space 150
+5 until 0x8014978C 0xFF000000 0x0E000000 10 Right
+5.4 until 0x801174B4 0x400000 0x400000 20 Space
+8.9 down Space
+10.9 down Backspace
+13.4 up Backspace
+14.9 down Backspace
+17.4 up Backspace
+17.4 up Space
+17.6 key Enter 300
+18.7 key Down 150
+19.1 key Down 150
+19.5 key Down 150
+19.9 key Down 150
+20.3 key Down 150
+20.7 key Down 150
+21.1 key Down 150
+21.5 until 0x80149D98 0xFF 0x7 6 Down
+21.8 key Space 300
+22.6 key Left 300
+23.2 key Space 300
+23.5 until 0x801174B4 0x400000 0x0 10
+23.8 until 0x801174B4 0x800000 0x800000 6
+25 key Enter 150
+25.3 until 0x801174B4 0x800000 0x800000 6
+25.7 key Down 150
+26.1 key Down 150
+26.5 key Down 150
+26.9 key Down 150
+27.3 shot stunt
+27.5 key Space 150
+27.8 until 0x801174B4 0x10 0x10 8
+28.1 until 0x801174B4 0x40 0x40 10 Space
+# Ghost Race on Track 1 with its time limit (0x80111754, a float) made 5 s: the race ends, BEST GHOSTS, GAME OVER, QUIT.
+28.5 key Down 150
+28.9 key Down 150
+29.3 until 0x803B469C 0xFF 0x2 8 Down
+29.6 key Space 150
+31 until 0x8014978C 0xFF000000 0x00000000 10 Right
+31.3 poke 0x80111754 0x40A00000
+31.7 until 0x801174B4 0x400000 0x400000 20 Space
+35.2 down Space
+35.7 until 0x801174B4 0x02000000 0x02000000 30
+35.7 up Space
+36.9 key Space 150
+37.2 until 0x801174B4 0x800000 0x800000 6
+37.6 key Down 150
+38 key Down 150
+38.4 key Down 150
+38.8 key Down 150
+39.2 shot ghost
+39.4 key Space 150
+39.7 until 0x801174B4 0x10 0x10 8
+40 until 0x801174B4 0x40 0x40 10 Space
+# Practice on Track 1: its QUIT goes back to SELECT TRACK, B to SELECT MODE.
+40.4 key Down 150
+40.8 until 0x803B469C 0xFF 0x1 8 Down
+41.1 key Space 150
+42.5 until 0x8014978C 0xFF000000 0x00000000 10 Right
+42.9 until 0x801174B4 0x400000 0x400000 20 Space
+46.4 down Space
+49.4 up Space
+49.6 key Enter 300
+50.7 key Down 150
+51.1 key Down 150
+51.5 key Down 150
+51.9 key Down 150
+52.3 key Down 150
+52.7 key Down 150
+53.1 key Down 150
+53.5 until 0x80149D98 0xFF 0x7 6 Down
+53.8 key Space 300
+54.6 key Left 300
+55.2 key Space 300
+55.5 until 0x801174B4 0x400000 0x0 10
+55.8 until 0x801174B4 0x80 0x80 8
+56.1 until 0x801174B4 0x40 0x40 6 Shift
+# Circuit, its first race, random input; its GAME OVER has LAP TIMES and QUIT.
+56.5 key Down 150
+56.9 key Down 150
+57.3 until 0x803B469C 0xFF 0x3 8 Down
+57.6 key Space 150
+58 until 0x801174B4 0x400000 0x400000 20 Space
+61.5 down Space
+62 random Left,Right,Up,Down,Space,Shift,E,R,G,F
+65.5 random off
+65.5 up Space
+65.7 key Enter 300
+66.8 key Down 150
+67.2 key Down 150
+67.6 key Down 150
+68 key Down 150
+68.4 key Down 150
+68.8 key Down 150
+69.2 key Down 150
+69.6 until 0x80149D98 0xFF 0x7 6 Down
+69.9 key Space 300
+70.7 key Left 300
+71.3 key Space 300
+71.6 until 0x801174B4 0x400000 0x0 10
+71.9 until 0x801174B4 0x800000 0x800000 6
+72.3 key Down 150
+72.7 shot circuit
+72.9 key Space 150
+73.2 until 0x801174B4 0x10 0x10 8
+# Two players: Single Race on Track 2, then Battle with random input.
+73.5 key Right 150
+73.8 until 0x801174B4 0x40 0x40 10 Space
+74.2 until 0x803B469C 0xFF 0x0 8 Down
+74.5 key Space 150
+75.9 until 0x8014978C 0xFF000000 0x01000000 10 Right
+76.3 until 0x801174B4 0x400000 0x400000 20 Space
+79.8 down Space
+83.8 up Space
+84 key Enter 300
+85.1 key Down 150
+85.5 key Down 150
+85.9 key Down 150
+86.3 key Down 150
+86.7 key Down 150
+87.1 key Down 150
+87.5 key Down 150
+87.9 until 0x80149D98 0xFF 0x7 6 Down
+88.2 key Space 300
+89 key Left 300
+89.6 key Space 300
+89.9 until 0x801174B4 0x400000 0x0 10
+90.2 until 0x801174B4 0x800000 0x800000 6
+90.6 key Down 150
+91 key Down 150
+91.4 key Down 150
+91.8 key Down 150
+92.2 shot race2p
+92.4 key Space 150
+92.7 until 0x801174B4 0x10 0x10 8
+93 until 0x801174B4 0x40 0x40 10 Space
+93.4 key Down 150
+93.8 key Down 150
+94.2 key Down 150
+94.6 until 0x803B469C 0xFF 0x6 8 Down
+94.9 key Space 150
+95.3 until 0x801174B4 0x400000 0x400000 20 Space
+98.8 down Space
+99.3 random Left,Right,Up,Down,Space,Shift,E,R,G,F
+103.8 random off
+103.8 up Space
+104 key Enter 300
+105.1 key Down 150
+105.5 key Down 150
+105.9 key Down 150
+106.3 key Down 150
+106.7 key Down 150
+107.1 key Down 150
+107.5 key Down 150
+107.9 until 0x80149D98 0xFF 0x7 6 Down
+108.2 key Space 300
+109 key Left 300
+109.6 key Space 300
+109.9 until 0x801174B4 0x400000 0x0 10
+110.2 until 0x801174B4 0x800000 0x800000 6
+111.4 key Enter 150
+111.7 until 0x801174B4 0x800000 0x800000 6
+112.1 key Down 150
+112.5 key Down 150
+112.9 key Down 150
+113.3 key Down 150
+113.7 shot battle
+113.9 key Space 150
+114.2 until 0x801174B4 0x10 0x10 8
+# The main menu, its cursor moved at random until the time is up.
+114.5 random Up,Down
