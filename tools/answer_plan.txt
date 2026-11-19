@@ -1,0 +1,24 @@
+# Rush 2049's answer plan: a press reaches the picture at once and stays where it leaves it, on its Linux build, for
+# N64Recomp-browser's tools/frame_dump.mjs answer steps (through tools/remote_frame_dump.sh, its header says how):
+#
+#   tools/remote_frame_dump.sh <game dir> Rush2049Recompiled rush2049.n64.us <rom> tools/answer_plan.txt <out> --no-dump
+#
+# Each answer step presses a control from a picture that holds still and fails when the picture answers later than
+# 500 ms after the press, or settles later than 1000 ms after the release. Rush 2049 has no view a player turns, and a
+# race's picture never holds still (the car creeps from the moment the race starts), so its START GAME menu's cursor is
+# the view: Enter at the title to the main menu (0x801174B4, the frame loop's state: 0x4 the title, 0x10 the main
+# menu, as tools/soak_plan.txt says), then the cursor moved down from PLAYERS to RECORDS on the stick and on a key,
+# each put back by untimed steps. The move changes about 6% of the picture, with 99% of it holding still. v0.1.78
+# passed it at 1280x720, answering in 86-89 ms and settling 0-20 ms after the release.
+0 until 0x801174B4 0xFFFFFFFF 0x4 90
+2 key Enter 150
+2.5 until 0x801174B4 0xFFFFFFFF 0x10 10
+5 shot menu
+6 answer menu-stick lefty 32767 0.4 500 1000
+11 pad lefty -32768
+11.4 pad lefty 0
+13 shot menu-back
+14 answer menu-key key:Down 1 0.4 500 1000
+19 key Up 100
+21 shot end
+22 end
