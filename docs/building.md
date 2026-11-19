@@ -71,3 +71,7 @@ an RTX 2070 are beside `start_gpu_profiler` in `src/main.cpp`.
   check by machine on the Linux build, `tools/save_plan.txt` the save run's plan and `tools/load_plan.txt` the load
   run's after the restart (a player made on the pak, then read back and a second one written through the links).
   v0.1.15, which renamed a new pak over a symlink, fails it; v0.1.16 on passes.
+- One round through every mode in three minutes, for a crash or a hang that comes in one scene (Stunt's Rewind, the
+  Quit after a race, a two-player race): a soak by machine on the Linux build, `tools/soak_plan.txt` its plan (its
+  header says what a round plays), started with `--players 2`. It fails on a crash, the program exiting or the
+  picture standing still for 10 s. v0.1.51, black from a two-player race's car select on, fails it; v0.1.78 passes.
