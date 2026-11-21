@@ -302,7 +302,7 @@ static void set_rumble_logged(int controller_num, bool rumble) {
 
 ultramodern::input::connected_device_info_t get_connected_device_info(int) {
     // All four ports always have a controller with the accessory picked in the config plugged in, so every port's
-    // Controller Pak (src/controller_pak.cpp) can be loaded from and saved to. A port nobody plays on reads as a
+    // Controller Pak (the runtime's, src/controller_pak.cpp) can be loaded from and saved to. A port nobody plays on reads as a
     // controller left alone (get_n64_input_logged). osPfsInitPak fails for a Rumble Pak, and the runtime's
     // osMotorInit always succeeds, so reporting RumblePak here for every Controller Accessory is harmless (with Both,
     // osMotorInit is called on the Controller Pak's OSPfs: src/controller_pak.cpp).
@@ -566,13 +566,15 @@ std::vector<recomp::GameEntry> supported_games = {
         .display_name = "San Francisco Rush 2049",
         .game_id = u8"rush2049.n64.us",
         .mod_game_id = "rush2049",
-        // Saves go to the Controller Pak, which the runtime doesn't emulate yet.
+        // Saves go to the Controller Pak, the runtime's, in every port (src/controller_pak.cpp).
         .save_type = recomp::SaveType::None,
         .is_enabled = false,
         // Not compressed for the game itself (it inflates its own code), but the runtime needs the inflated code to
         // recompile a function a mod hooks: see build_recomp_rom.
         .decompression_routine = rush2049::build_recomp_rom,
         .has_compressed_code = true,
+        .controller_pak_ports = 0xF,
+        .controller_pak_banks = rush2049::controller_pak_banks,
         .entrypoint_address = get_entrypoint_address(),
         .entrypoint = recomp_entrypoint,
     },

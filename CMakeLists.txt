@@ -246,7 +246,6 @@ target_sources(Rush2049Recompiled PRIVATE
     ${CMAKE_SOURCE_DIR}/src/music_thread.cpp
     ${CMAKE_SOURCE_DIR}/src/audio_resampler.cpp
     ${CMAKE_SOURCE_DIR}/src/audio_limiter.cpp
-    ${CMAKE_SOURCE_DIR}/src/save_file.cpp
     ${CMAKE_SOURCE_DIR}/src/musyx_hle.cpp
     ${CMAKE_SOURCE_DIR}/src/gsm_decoder.cpp
     ${CMAKE_SOURCE_DIR}/src/hle/musyx.c

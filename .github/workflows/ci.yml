@@ -70,10 +70,6 @@ jobs:
         run: |
           g++ -std=c++20 -O2 -Wall -Iinclude tests/audio_limiter_test.cpp src/audio_limiter.cpp -o limiter_test
           ./limiter_test
-      - name: Save file tests
-        run: |
-          g++ -std=c++20 -O2 -Wall -Iinclude tests/save_file_test.cpp src/save_file.cpp -o save_file_test
-          ./save_file_test
       - name: Draw distance tests
         run: |
           g++ -std=c++20 -O2 -Wall -Iinclude -Ilib/N64ModernRuntime/N64Recomp/include tests/draw_distance_test.cpp \
