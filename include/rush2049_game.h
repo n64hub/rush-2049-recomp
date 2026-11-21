@@ -22,6 +22,9 @@ namespace rush2049 {
     bool both_paks_selected();
     // The "Controller Pak Size" setting: 62 banks (about 1.9 MB) rather than the original 32 KiB.
     bool large_controller_pak();
+    // What every port's slot holds for the runtime's Controller Pak, from those two (src/controller_pak.cpp): the pak's
+    // banks, or 0 for a Rumble Pak.
+    int controller_pak_banks(int port);
     // The "Save Ghosts" setting: the SAVE GHOST prompt after every finished Ghost Race, not only a developer's.
     bool save_ghosts();
     // The "Race Players" setting: Single Race and Practice for 3 and 4 players too (src/four_player_races.cpp).
