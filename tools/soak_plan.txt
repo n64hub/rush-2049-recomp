@@ -22,9 +22,11 @@
 # the track is the top byte of 0x8014978C (0 Track 1, 1 Track 2, 14 Stunt's first arena); the pause menu's cursor is
 # the low byte of 0x80149D98, QUIT its eighth line (7), then Left to YES. GAME OVER's cursor, the low byte of
 # 0x801391E0, holds the number of the item under it, not its line (Stunt's: 0 SCOREBOARD, 1 RACE AGAIN, 3 NEW TRACK,
-# 4 NEW CAR, 6 QUIT), and Down from QUIT wraps to the top; Downs pressed blind while the menu comes in were sometimes
-# lost, and Space then started a race again. Ghost Race's time limits are a float per track from 0x80111754. Keys
-# are the keyboard's defaults (README, Controls): Enter Start, Space A and the gas, Shift B, Backspace Rewind.
+# 4 NEW CAR, 6 QUIT; QUIT is 6 in every mode's, Circuit's too, under LAP TIMES), reads 0 as the menu comes in, and
+# Down from QUIT wraps to the top. A Down pressed while the menu comes in can be lost, so Down is pressed until the
+# cursor is on QUIT, never a count of times: a cursor left on RACE AGAIN starts a race again. Ghost Race's time
+# limits are a float per track from 0x80111754. Keys are the keyboard's defaults (README, Controls): Enter Start, Space
+# A and the gas, Shift B, Backspace Rewind.
 
 # The title, the main menu (one player), SELECT MODE.
 0 until 0x801174B4 0x8 0x8 90
