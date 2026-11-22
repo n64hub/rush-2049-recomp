@@ -399,3 +399,7 @@ Dario and the N64Recomp contributors; function signatures from [n64sym](https://
 audio through mupen64plus-rsp-hle's HLE (GPL-2.0-or-later); the title screen upscaled with
 [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN). *San Francisco Rush 2049* belongs to its rights holders; this
 project ships none of it. This project is GPLv3, see [COPYING](COPYING).
+
+Thanks to [Deozaan](https://github.com/Deozaan) for testing it thoroughly and reporting what they found, from
+controllers and ghost data to rewinding, wide windows and draw distance, and to [IZIDIOZZ](https://github.com/IZIDIOZZ)
+for races of 3 and 4 players and split screen at a wide window's full width.
