@@ -36,8 +36,9 @@ points at the other.
 - **This file**: only what an agent can't get from the others. It changes when a rule changes.
 
 This repo and the web repos are public. Write for a stranger, in the present tense: nothing about a contributor's own
-machine, servers, paths or accounts, no person's name, no history of renames or "until <date>", and nothing about where
-anyone keeps ROMs.
+machine, servers, paths or accounts, no person's name (but a tester or contributor thanked by
+their GitHub handle in the README's Credits), no history of renames or "until <date>", and nothing about where anyone
+keeps ROMs.
 
 ## Rules
 

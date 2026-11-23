@@ -107,7 +107,9 @@ option has an Original value that runs the game as it shipped.
 Settings are saved as JSON in `%LOCALAPPDATA%\Rush2049Recompiled\` (`~/.config/Rush2049Recompiled/` on Linux), or
 in the working directory when it holds a `portable.txt`, so they can also be edited by hand while the game is
 closed. Controller Pak saves are there too, as `saves/controllerpak_<port>.mpk` (the `.mpk` format emulators use); one
-can be a symlink, to share saves through a synced folder, and stays one when the game saves. For the game exactly as it
+can be a symlink, to share saves through a synced folder, and stays one when the game saves. Start held down while the
+game starts opens the game's own CONTROLLER PAK screen, as on the console: A on a controller lists its pak's notes,
+where one can be deleted, and B goes back, then on to the game, with nothing changed. For the game exactly as it
 shipped, set every Original value:
 
 | Enhancement | Option | Key | Default | Original |
@@ -398,3 +400,7 @@ Dario and the N64Recomp contributors; function signatures from [n64sym](https://
 audio through mupen64plus-rsp-hle's HLE (GPL-2.0-or-later); the title screen upscaled with
 [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN). *San Francisco Rush 2049* belongs to its rights holders; this
 project ships none of it. This project is GPLv3, see [COPYING](COPYING).
+
+Thanks to [Deozaan](https://github.com/Deozaan) for testing it thoroughly and reporting what they found, from
+controllers and ghost data to rewinding, wide windows and draw distance, and to [IZIDIOZZ](https://github.com/IZIDIOZZ)
+for races of 3 and 4 players and split screen at a wide window's full width.
