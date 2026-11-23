@@ -154,7 +154,8 @@ later), a Vulkan driver, and GTK 3 and FreeType, which desktop distributions hav
 
 **The ROM.** *San Francisco Rush 2049 (U)*, the US release, as a `.z64` with SHA-1
 `3f99351d7bb61656614bdb2aa1a90cfe55d1922c`. The build and the launcher both check its hash. Other regions and
-revisions are not supported.
+revisions are not supported. The launcher also takes it packed in a `.zip`, `.7z`, `.gz`, `.xz` or `.tar` (a `.tar.gz`
+or `.tar.xz` too) and finds the ROM inside.
 
 **The toolchain** (Windows): LLVM's clang-cl 15 or newer with the MSVC build tools and the Windows SDK, CMake 3.x
 (CMake 4 rejects some of the submodules), Ninja, GNU make, Python 3.11, and for the mod-support library a clang built
@@ -185,8 +186,8 @@ to `us.toml` or `syms/`, run it again before `ninja`. To change the symbols, edi
 `git clone https://github.com/shygoo/n64sym ref/n64sym` (MIT).
 
 **Run** `build/Rush2049Recompiled.exe` from the repo's root. The launcher finds the ROM by itself if it sits
-in a usual place (the working directory, `roms/`, Downloads, Desktop, Documents and one level of subfolders),
-otherwise pick it with Load ROM. It opens no console window and writes its log to `rush2049.log` in the folder its
+in a usual place (the working directory, `roms/`, Downloads, Desktop, Documents and one level of subfolders), packed
+in an archive or not, otherwise pick it, or an archive holding it, with Load ROM. It opens no console window and writes its log to `rush2049.log` in the folder its
 settings are in (above: beside the exe with a `portable.txt`), keeping the run before as `rush2049.old.log`; to watch
 the log as it plays, run it with `--show-console` instead.
 
