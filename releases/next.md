@@ -1,1 +1,0 @@
-- The launcher takes the ROM packed in a `.zip`, `.7z`, `.gz`, `.xz` or `.tar` (a `.tar.gz` or `.tar.xz` too): pick the archive with **Load ROM**, or leave it where the launcher looks by itself, and it finds the ROM inside.
