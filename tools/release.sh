@@ -35,8 +35,8 @@
 # from this commit with the flags above, its DLLs and .pdb (a cross-build, say), windows packs that instead of
 # building, and run inside a container of tools/docker/Dockerfile.linux's image (where there is no Docker), linux
 # builds right there.
-# Both hold assets/, recompcontrollerdb.txt and COPYING beside the program: the game finds them in its working
-# directory, or in its own folder when started from another (src/main.cpp).
+# Both hold assets/, recompcontrollerdb.txt, recomplauncher.json and COPYING beside the program: the game finds them in
+# its working directory, or in its own folder when started from another (src/main.cpp).
 #
 # boot runs $BOOT_RELEASE on the archive, which unpacks it into a new folder with the ROM stored, runs it with --boot
 # (and any arguments after the OS) with its own window captured, and writes the <archive>.booted publish asks for.
@@ -98,7 +98,7 @@ windows)
     stage="out/$name-windows-x64"
     rm -rf "$stage" "$stage.zip"
     mkdir -p "$stage"
-    cp "$build"/{Rush2049Recompiled.exe,SDL2.dll,dxil.dll,dxcompiler.dll} recompcontrollerdb.txt COPYING "$stage"/
+    cp "$build"/{Rush2049Recompiled.exe,SDL2.dll,dxil.dll,dxcompiler.dll} recompcontrollerdb.txt recomplauncher.json COPYING "$stage"/
     cp "$build/Rush2049Recompiled.pdb" "$stage.pdb"
     cp -r assets "$stage"/
     # CMake's own zip, so packing needs nothing the build doesn't.
@@ -123,7 +123,7 @@ linux)
         stage=out/$name-linux-x64
         rm -rf \$stage \$stage.tar.gz
         mkdir -p \$stage
-        cp \$build/Rush2049Recompiled recompcontrollerdb.txt COPYING \$stage/
+        cp \$build/Rush2049Recompiled recompcontrollerdb.txt recomplauncher.json COPYING \$stage/
         cp -L /usr/local/lib/libSDL2-2.0.so.0 /usr/lib/x86_64-linux-gnu/libatomic.so.1 \$stage/
         patchelf --set-rpath '\$ORIGIN' \$stage/Rush2049Recompiled
         cp -r assets \$stage/

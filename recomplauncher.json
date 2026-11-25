@@ -1,0 +1,943 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "San Francisco Rush 2049: Recompiled",
+  "repo": "n64hub/rush-2049-recomp",
+  "start": {
+    "program": [
+      "Rush2049Recompiled.exe",
+      "Rush2049Recompiled"
+    ]
+  },
+  "config": [
+    {
+      "id": "general",
+      "format": "json",
+      "file": [
+        {
+          "path": "{install}/general.json",
+          "if": "{install}/portable.txt"
+        },
+        {
+          "path": "{config}/Rush2049Recompiled/general.json",
+          "if": "{install}/Rush2049Recompiled"
+        },
+        {
+          "path": "{local}/Rush2049Recompiled/general.json"
+        }
+      ]
+    },
+    {
+      "id": "graphics",
+      "format": "json",
+      "file": [
+        {
+          "path": "{install}/graphics.json",
+          "if": "{install}/portable.txt"
+        },
+        {
+          "path": "{config}/Rush2049Recompiled/graphics.json",
+          "if": "{install}/Rush2049Recompiled"
+        },
+        {
+          "path": "{local}/Rush2049Recompiled/graphics.json"
+        }
+      ]
+    },
+    {
+      "id": "sound",
+      "format": "json",
+      "file": [
+        {
+          "path": "{install}/sound.json",
+          "if": "{install}/portable.txt"
+        },
+        {
+          "path": "{config}/Rush2049Recompiled/sound.json",
+          "if": "{install}/Rush2049Recompiled"
+        },
+        {
+          "path": "{local}/Rush2049Recompiled/sound.json"
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "id": "rumble_strength",
+      "label": "Rumble Strength",
+      "help": "Controls the strength of rumble when using a controller that supports it. Setting this to zero will disable rumble.",
+      "in": "general",
+      "group": "General",
+      "slider": {
+        "key": "rumble_strength",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "format": "%d"
+      },
+      "defaults": {
+        "rumble_strength": "25"
+      }
+    },
+    {
+      "id": "joystick_deadzone",
+      "label": "Joystick Deadzone",
+      "help": "Applies a deadzone to joystick inputs.",
+      "in": "general",
+      "group": "General",
+      "slider": {
+        "key": "joystick_deadzone",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "format": "%d"
+      },
+      "defaults": {
+        "joystick_deadzone": "5"
+      }
+    },
+    {
+      "id": "background_input_mode",
+      "label": "Background Input Mode",
+      "help": "Allows the game to read controller input when out of focus. This setting does not affect keyboard input.",
+      "in": "general",
+      "group": "General",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "background_input_mode": "\"Off\""
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "background_input_mode": "\"On\""
+          }
+        }
+      ],
+      "defaults": {
+        "background_input_mode": "\"On\""
+      }
+    },
+    {
+      "id": "accessory",
+      "label": "Controller Accessory",
+      "help": "What is plugged into each controller. A real controller has one accessory slot, so the game was made for either saving or rumble. Controller Pak: saves players, records and ghosts. Rumble Pak: rumble, but the game can't save. Both: saves, and rumble in races.",
+      "in": "general",
+      "group": "General",
+      "choices": [
+        {
+          "label": "Controller Pak",
+          "set": {
+            "accessory": "\"Controller Pak\""
+          }
+        },
+        {
+          "label": "Rumble Pak",
+          "set": {
+            "accessory": "\"Rumble Pak\""
+          }
+        },
+        {
+          "label": "Both",
+          "set": {
+            "accessory": "\"Both\""
+          }
+        }
+      ],
+      "defaults": {
+        "accessory": "\"Both\""
+      }
+    },
+    {
+      "id": "controllers",
+      "label": "Controllers",
+      "help": "How controllers and the keyboard map to players. Per Player: each controller is a player of its own, as on the console, in the order they were plugged in: the first is player 1, the second player 2, and so on, and the keyboard drives player 1. Assign Players on the Controls tab puts them in another order or gives the keyboard to another player. One Player: every controller and the keyboard drive player 1.",
+      "in": "general",
+      "group": "General",
+      "choices": [
+        {
+          "label": "Per Player",
+          "set": {
+            "controllers": "\"PerPlayer\""
+          }
+        },
+        {
+          "label": "One Player",
+          "set": {
+            "controllers": "\"OnePlayer\""
+          }
+        }
+      ],
+      "defaults": {
+        "controllers": "\"PerPlayer\""
+      }
+    },
+    {
+      "id": "pak_size",
+      "label": "Controller Pak Size",
+      "help": "How much each Controller Pak holds. A player profile takes 9 of a pak's pages, and a pak holds 16 files whatever its size. Original: Nintendo's 32 KiB pak, 123 pages, about 13 profiles. Large: 62 banks, 7748 pages, the most libultra can address, so it never fills up. Emulators that only take 32 KiB paks can't read it. Saves are moved to the new size the next time the game starts. A pak whose saves don't fit in 32 KiB stays large.",
+      "in": "general",
+      "group": "General",
+      "choices": [
+        {
+          "label": "Original (32 KiB)",
+          "set": {
+            "pak_size": "\"Original\""
+          }
+        },
+        {
+          "label": "Large (1.9 MB)",
+          "set": {
+            "pak_size": "\"Large\""
+          }
+        }
+      ],
+      "defaults": {
+        "pak_size": "\"Large\""
+      }
+    },
+    {
+      "id": "rewind",
+      "label": "Rewind",
+      "help": "Hold Rewind (Controls tab) in a single-player race and the race runs backwards: every car, the clock, the laps and the ghost. Let go to drive on from there. Goes back up to about a minute, and uses up to 128 MB of memory for it.",
+      "in": "general",
+      "group": "General",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "rewind": "\"Off\""
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "rewind": "\"On\""
+          }
+        }
+      ],
+      "defaults": {
+        "rewind": "\"On\""
+      }
+    },
+    {
+      "id": "save_ghosts",
+      "label": "Save Ghosts",
+      "help": "Whether a Ghost Race you finish inside the time limit can be saved to the Controller Pak, to race against in later sessions as GHOST 2 to 4. On: the game's own SAVE GHOST prompt comes up after every such race. Original: as the game shipped, a ghost lasts only until you quit, as GHOST 1 on the same track. The game saves one only for a developer's profile.",
+      "in": "general",
+      "group": "General",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "save_ghosts": "\"Original\""
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "save_ghosts": "\"On\""
+          }
+        }
+      ],
+      "defaults": {
+        "save_ghosts": "\"On\""
+      }
+    },
+    {
+      "id": "race_players",
+      "label": "Race Players",
+      "help": "How many players can race each other in Single Race and Practice. The game's split screen draws four views, and Stunt and Battle take four players. Up to 4: 3 and 4 players can race too, each in a quarter of the screen; with 3, the fourth quarter shows the track map and the clock. Computer cars fill the field as they do for 1 and 2 players: 3 of them with 3 players, and 1 with 4. Original: as the game shipped, Select Mode offers a race to 1 or 2 players only.",
+      "in": "general",
+      "group": "General",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "race_players": "\"Original\""
+          }
+        },
+        {
+          "label": "Up to 4",
+          "set": {
+            "race_players": "\"UpToFour\""
+          }
+        }
+      ],
+      "defaults": {
+        "race_players": "\"UpToFour\""
+      }
+    },
+    {
+      "id": "race_position",
+      "label": "Race Position",
+      "help": "When each player's race position (3/5) is on the race HUD. Always: through the whole race, a crash too. Original: as the game shipped, it goes off the screen while the car is wrecked and for 5 seconds after it is put back on the track.",
+      "in": "general",
+      "group": "General",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "race_position": "\"Original\""
+          }
+        },
+        {
+          "label": "Always",
+          "set": {
+            "race_position": "\"Always\""
+          }
+        }
+      ],
+      "defaults": {
+        "race_position": "\"Always\""
+      }
+    },
+    {
+      "id": "mouse_cursor",
+      "label": "Mouse Cursor",
+      "help": "Whether the mouse cursor stays on screen while you play with a controller or the keyboard. Original: hidden as soon as a controller or a key is pressed, and shown again when the mouse moves. Always Shown: stays where you left it, for pointing at things in a recording. Shown While Moving: shown whenever the mouse moves, with a controller too, and hidden once it has been still for two seconds.",
+      "in": "general",
+      "group": "General",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "mouse_cursor": "\"Original\""
+          }
+        },
+        {
+          "label": "Always Shown",
+          "set": {
+            "mouse_cursor": "\"Shown\""
+          }
+        },
+        {
+          "label": "Shown While Moving",
+          "set": {
+            "mouse_cursor": "\"Moving\""
+          }
+        }
+      ],
+      "defaults": {
+        "mouse_cursor": "\"Original\""
+      }
+    },
+    {
+      "id": "res_option",
+      "label": "Resolution",
+      "help": "Sets the output resolution of the game. Original matches the game's original 240p resolution. Original 2x will render at 480p. Auto will scale based on the game window's resolution.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "res_option": "\"Original\""
+          }
+        },
+        {
+          "label": "Original 2x",
+          "set": {
+            "res_option": "\"Original2x\""
+          }
+        },
+        {
+          "label": "Auto",
+          "set": {
+            "res_option": "\"Auto\""
+          }
+        }
+      ],
+      "defaults": {
+        "res_option": "\"Auto\""
+      }
+    },
+    {
+      "id": "ds_option",
+      "label": "Downsampling Quality",
+      "help": "Renders at a higher resolution and scales it down to the output resolution for increased quality. Only available in Original and Original 2x resolution. Note: 4x downsampling quality at Original 2x resolution may cause performance issues on low end devices, as it will cause the game to render at almost 4k internal resolution.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "ds_option": "0"
+          }
+        },
+        {
+          "label": "2x",
+          "set": {
+            "ds_option": "2"
+          }
+        },
+        {
+          "label": "4x",
+          "set": {
+            "ds_option": "4"
+          }
+        }
+      ],
+      "defaults": {
+        "ds_option": "0"
+      }
+    },
+    {
+      "id": "ar_option",
+      "label": "Aspect Ratio",
+      "help": "Sets the horizontal aspect ratio. Original uses the game's original 4:3 aspect ratio. Expand will adjust to match the game window's aspect ratio.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "ar_option": "\"Original\""
+          }
+        },
+        {
+          "label": "Expand",
+          "set": {
+            "ar_option": "\"Expand\""
+          }
+        }
+      ],
+      "defaults": {
+        "ar_option": "\"Expand\""
+      }
+    },
+    {
+      "id": "wm_option",
+      "label": "Window Mode",
+      "help": "Sets whether the game should display Windowed or Fullscreen. You can also use F11 or Alt + Enter to toggle this option.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Windowed",
+          "set": {
+            "wm_option": "\"Windowed\""
+          }
+        },
+        {
+          "label": "Fullscreen",
+          "set": {
+            "wm_option": "\"Fullscreen\""
+          }
+        }
+      ],
+      "defaults": {
+        "wm_option": "\"Windowed\""
+      }
+    },
+    {
+      "id": "rr_option",
+      "label": "Framerate",
+      "help": "Sets the game's output framerate. This option does not affect gameplay. Note: If you have issues with Display mode while using an external frame limiter, use Manual mode instead and configure it to that same frame limit.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "rr_option": "\"Original\""
+          }
+        },
+        {
+          "label": "Display",
+          "set": {
+            "rr_option": "\"Display\""
+          }
+        },
+        {
+          "label": "Manual",
+          "set": {
+            "rr_option": "\"Manual\""
+          }
+        }
+      ],
+      "defaults": {
+        "rr_option": "\"Display\""
+      }
+    },
+    {
+      "id": "rr_manual_value",
+      "label": "Manual Framerate",
+      "help": "The framerate Manual draws the game at. This option does not affect gameplay.",
+      "in": "graphics",
+      "group": "Graphics",
+      "slider": {
+        "key": "rr_manual_value",
+        "min": 20,
+        "max": 240,
+        "step": 1,
+        "format": "%d"
+      },
+      "defaults": {
+        "rr_manual_value": "60"
+      },
+      "when": {
+        "rr_option": "\"Manual\""
+      }
+    },
+    {
+      "id": "msaa_option",
+      "label": "MS Anti-Aliasing",
+      "help": "Sets the multisample anti-aliasing (MSAA) quality level. This reduces jagged edges in the final image at the expense of rendering performance. Note: This option won't be available if your GPU does not support programmable MSAA sample positions, as it is currently required to avoid rendering glitches.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "None",
+          "set": {
+            "msaa_option": "\"None\""
+          }
+        },
+        {
+          "label": "2X",
+          "set": {
+            "msaa_option": "\"MSAA2X\""
+          }
+        },
+        {
+          "label": "4X",
+          "set": {
+            "msaa_option": "\"MSAA4X\""
+          }
+        }
+      ],
+      "defaults": {
+        "msaa_option": "\"MSAA2X\""
+      }
+    },
+    {
+      "id": "hr_option",
+      "label": "HUD Placement",
+      "help": "Adjusts the placement of HUD elements to fit the selected aspect ratio. Expand will use the aspect ratio of the game's output window.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "hr_option": "\"Original\""
+          }
+        },
+        {
+          "label": "16:9",
+          "set": {
+            "hr_option": "\"Clamp16x9\""
+          }
+        },
+        {
+          "label": "Expand",
+          "set": {
+            "hr_option": "\"Expand\""
+          }
+        }
+      ],
+      "defaults": {
+        "hr_option": "\"Clamp16x9\""
+      }
+    },
+    {
+      "id": "game_frame_rate",
+      "label": "Game Frame Rate",
+      "help": "How often the game draws a new frame. The original draws on every other screen refresh, 30 times a second. Car physics and timers follow real time, so a race runs at the same speed at any rate. Match Framerate: a new frame for every frame Framerate above presents, so Display draws at the monitor's refresh rate and Manual at its value (60 at least).",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "30 FPS (Original)",
+          "set": {
+            "game_frame_rate": "\"Original\""
+          }
+        },
+        {
+          "label": "60 FPS",
+          "set": {
+            "game_frame_rate": "\"60\""
+          }
+        },
+        {
+          "label": "Match Framerate",
+          "set": {
+            "game_frame_rate": "\"MatchFramerate\""
+          }
+        }
+      ],
+      "defaults": {
+        "game_frame_rate": "\"60\""
+      }
+    },
+    {
+      "id": "input_lag",
+      "label": "Input Lag",
+      "help": "Reduced: each frame is drawn as soon as the game has worked it out, so what you press shows on screen one frame sooner (17 ms at 60 fps). At 30 FPS (Original) Game Frame Rate it changes nothing. Original: each frame waits for the next refresh before it is drawn, as on the console.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Reduced",
+          "set": {
+            "input_lag": "\"Reduced\""
+          }
+        },
+        {
+          "label": "Original",
+          "set": {
+            "input_lag": "\"Original\""
+          }
+        }
+      ],
+      "defaults": {
+        "input_lag": "\"Reduced\""
+      }
+    },
+    {
+      "id": "hires_font",
+      "label": "Hi-res Font",
+      "help": "Draws the menu and HUD text from smooth, 4x upscaled copies of the game's fonts instead of the blocky originals. The copies are made from your ROM as each font first appears, and kept in the app folder. Texture packs you enable take priority.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "hires_font": "\"Off\""
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "hires_font": "\"On\""
+          }
+        }
+      ],
+      "defaults": {
+        "hires_font": "\"On\""
+      }
+    },
+    {
+      "id": "hires_title",
+      "label": "Hi-res Title Screen",
+      "help": "Draws the title screen from a 4x upscale of its picture (made with Real-ESRGAN) instead of the 240p original. The game rebuilds the upscale from its own picture and a patch that ships with it. Texture packs you enable take priority.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "hires_title": "\"Original\""
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "hires_title": "\"On\""
+          }
+        }
+      ],
+      "defaults": {
+        "hires_title": "\"On\""
+      }
+    },
+    {
+      "id": "draw_distance",
+      "label": "Draw Distance",
+      "help": "How far away scenery is still drawn, as a multiple of the original distance. Farther scenery, like a building far down the road, appears sooner instead of popping in. Most of what the original leaves out is hidden behind something nearer anyway, so the difference shows only in places.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "draw_distance": "\"Original\""
+          }
+        },
+        {
+          "label": "4x",
+          "set": {
+            "draw_distance": "\"Far\""
+          }
+        },
+        {
+          "label": "16x",
+          "set": {
+            "draw_distance": "\"Farthest\""
+          }
+        }
+      ],
+      "defaults": {
+        "draw_distance": "\"Far\""
+      }
+    },
+    {
+      "id": "level_of_detail",
+      "label": "Level of Detail",
+      "help": "How far away models keep their detailed versions before the game swaps in simpler ones. The original simplifies them close to the car: curves go blocky and small details like traffic lights disappear. High: four times the original distances. Highest: always the most detailed version.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "level_of_detail": "\"Original\""
+          }
+        },
+        {
+          "label": "High",
+          "set": {
+            "level_of_detail": "\"High\""
+          }
+        },
+        {
+          "label": "Highest",
+          "set": {
+            "level_of_detail": "\"Highest\""
+          }
+        }
+      ],
+      "defaults": {
+        "level_of_detail": "\"High\""
+      }
+    },
+    {
+      "id": "scenery_culling",
+      "label": "Scenery Culling",
+      "help": "The original game leaves out the scenery it reckons can't be seen from the stretch of road you are on, so buildings, signs and roadside pieces pop in and out as you drive from one stretch into the next, some of them close to the car. Reduced: what can be seen from the stretches of road around you is drawn too, and the tallest towers and any building that already looks more than a sliver tall from where you are, wherever they are in view, so scenery comes in while it is still small, for much less than Off costs. Off: all of the track's scenery is drawn wherever you are, and only Draw Distance decides how far.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "scenery_culling": "\"Original\""
+          }
+        },
+        {
+          "label": "Reduced",
+          "set": {
+            "scenery_culling": "\"Reduced\""
+          }
+        },
+        {
+          "label": "Off",
+          "set": {
+            "scenery_culling": "\"Off\""
+          }
+        }
+      ],
+      "defaults": {
+        "scenery_culling": "\"Off\""
+      }
+    },
+    {
+      "id": "see_through_order",
+      "label": "See-Through Order",
+      "help": "Trees, lamps, sails and glass are see-through pictures, and the original game draws each one wherever it comes in its list, so solid scenery behind one that is drawn after it covers it: a tree goes missing in front of some walls and not others. Sorted: see-through scenery is drawn after the rest of the scene, farthest first, so it shows over whatever is behind it, a sail over the boats behind it as well as over a wall. Your car's flame, the smoke and the ghosts' arrows are drawn over it as they were.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "see_through_order": "\"Original\""
+          }
+        },
+        {
+          "label": "Sorted",
+          "set": {
+            "see_through_order": "\"Sorted\""
+          }
+        }
+      ],
+      "defaults": {
+        "see_through_order": "\"Sorted\""
+      }
+    },
+    {
+      "id": "ghost_arrows",
+      "label": "Ghost Arrows",
+      "help": "The arrow over a ghost is drawn before part of the scenery in the original game, so buildings far behind a ghost can cover its arrow while the ghost is in plain view. After Scenery: the arrows are drawn after the scenery, so only what is between you and an arrow covers it, and only the part of it behind that.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "ghost_arrows": "\"Original\""
+          }
+        },
+        {
+          "label": "After Scenery",
+          "set": {
+            "ghost_arrows": "\"AfterScenery\""
+          }
+        }
+      ],
+      "defaults": {
+        "ghost_arrows": "\"AfterScenery\""
+      }
+    },
+    {
+      "id": "split_screen_ratio",
+      "label": "Split-Screen Aspect Ratio",
+      "help": "How the 2- and 4-player views fit a wide window. The original game splits a 4:3 screen, so at 16:9 the views sit inside a 4:3 area with bars at the sides. Expand: each view widens to fill its share of the window, and its HUD moves with it, as far as HUD Placement lets the HUD go: at 16:9, a wider window keeps bars at the sides. Full Window: the same, out to the window's edges whatever HUD Placement says, which then only sets where a single player's HUD sits. Both need Aspect Ratio at Expand and HUD Placement at something other than Original.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Expand",
+          "set": {
+            "split_screen_ratio": "\"Expand\""
+          }
+        },
+        {
+          "label": "Full Window",
+          "set": {
+            "split_screen_ratio": "\"Full\""
+          }
+        },
+        {
+          "label": "Original",
+          "set": {
+            "split_screen_ratio": "\"Original\""
+          }
+        }
+      ],
+      "defaults": {
+        "split_screen_ratio": "\"Expand\""
+      }
+    },
+    {
+      "id": "split_screen_map",
+      "label": "Split-Screen Map",
+      "help": "The track map in the middle of a 4-player split screen, where the four views meet. The original game draws a smaller picture of the track there than 1 to 3 players see, 32 pixels square on a dark square, with the cars' markers on top of each other. Large: the 64-pixel map 1 to 3 players see, see-through as theirs, with no dark square behind it.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Large",
+          "set": {
+            "split_screen_map": "\"Large\""
+          }
+        },
+        {
+          "label": "Original",
+          "set": {
+            "split_screen_map": "\"Original\""
+          }
+        }
+      ],
+      "defaults": {
+        "split_screen_map": "\"Large\""
+      }
+    },
+    {
+      "id": "menu_ratio",
+      "label": "Menu Aspect Ratio",
+      "help": "How the menus fit a wide window. The original game draws them on a 4:3 picture, so at 16:9 there are bars at the sides. Expand: the menu stays where it is and the background picture is mirrored out to the window's edges (up to about 21:9). Needs Aspect Ratio at Expand.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Expand",
+          "set": {
+            "menu_ratio": "\"Expand\""
+          }
+        },
+        {
+          "label": "Original",
+          "set": {
+            "menu_ratio": "\"Original\""
+          }
+        }
+      ],
+      "defaults": {
+        "menu_ratio": "\"Expand\""
+      }
+    },
+    {
+      "id": "copy_frames_to_ram",
+      "label": "Copy Frames to RAM",
+      "help": "Whether every frame is also copied back into the console's memory, as the N64 leaves it there for the game to read. The copy is a second draw of each frame at 320x240, and in a browser it holds each frame back by about 6 ms. Off: no copy. The game isn't known to read its frames back. Original: every frame is copied, as on the console. Try it if something looks or behaves wrong. Takes effect the next time the game is started.",
+      "in": "graphics",
+      "group": "Graphics",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "copy_frames_to_ram": "\"Off\""
+          }
+        },
+        {
+          "label": "Original",
+          "set": {
+            "copy_frames_to_ram": "\"Original\""
+          }
+        }
+      ],
+      "defaults": {
+        "copy_frames_to_ram": "\"Off\""
+      }
+    },
+    {
+      "id": "main_volume",
+      "label": "Main Volume",
+      "help": "Controls the main volume of the game.",
+      "in": "sound",
+      "group": "Sound",
+      "slider": {
+        "key": "main_volume",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "format": "%d"
+      },
+      "defaults": {
+        "main_volume": "100"
+      }
+    },
+    {
+      "id": "musyx_mix",
+      "label": "MusyX Mixing",
+      "help": "High Quality mixes the game's music and sound effects at 44.1 kHz with a sharper interpolator, so sounds played above their recorded pitch keep their treble and loud passages don't clip. Original plays the game's own 22 kHz mix.",
+      "in": "sound",
+      "group": "Sound",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "musyx_mix": "\"Original\""
+          }
+        },
+        {
+          "label": "High Quality",
+          "set": {
+            "musyx_mix": "\"HighQuality\""
+          }
+        }
+      ],
+      "defaults": {
+        "musyx_mix": "\"HighQuality\""
+      }
+    }
+  ],
+  "saves": [
+    "{install}/saves",
+    "{config}/Rush2049Recompiled/saves",
+    "{local}/Rush2049Recompiled/saves"
+  ],
+  "system": {
+    "windows": {
+      "version": "10"
+    },
+    "linux": {
+      "glibc": "2.35"
+    }
+  }
+}
