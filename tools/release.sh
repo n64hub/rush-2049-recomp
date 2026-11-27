@@ -15,10 +15,11 @@
 # support and other games' pages, which the zip doesn't have). The tag is v<version_string>. Both builds and the
 # publish run on that PR's merge commit, checked out with a clean tree (the runtime patches applied to the submodules
 # don't count): each build refuses a tree with changes and records the commit it was built from
-# (out/<archive>.commit), and publish refuses archives from another one or that haven't booted (boot), a tree with
-# changes, a commit not on origin/main or still holding releases/next.md, or a tag that exists. A change merged
-# meanwhile goes in the next release and doesn't stop this one. Each build regenerates the recompiled code from the
-# committed symbols (tools/recompile.sh), so it matches this commit and not a dev build's.
+# (out/<archive>.commit), and publish refuses archives from another one, a Linux archive that hasn't booted or a Windows
+# zip whose boot doesn't match it (boot), a tree with changes, a commit not on origin/main or still holding
+# releases/next.md, or a tag that exists. A change merged meanwhile goes in the next release and doesn't stop this one.
+# Each build regenerates the recompiled code from the committed symbols (tools/recompile.sh), so it matches this commit
+# and not a dev build's.
 #
 # Windows: Release's own flags plus debug info, which doesn't change the code, in build/release-windows, so the dev
 # build in build keeps its RelWithDebInfo configuration. The .pdb goes to out/ beside the zip and is never published:
@@ -40,6 +41,8 @@
 #
 # boot runs $BOOT_RELEASE on the archive, which unpacks it into a new folder with the ROM stored, runs it with --boot
 # (and any arguments after the OS) with its own window captured, and writes the <archive>.booted publish asks for.
+# Publish needs the Linux archive's; the Windows zip's boot is optional, since no release's Windows boot has caught
+# anything the Linux boot didn't, but a .booted beside the zip must match it.
 # On lavapipe Ubuntu 24.04 and Arch boot it, find the ROM and draw the title and the first attract race, and then
 # lavapipe (Mesa 25, 26.2) crashes on one of its own llvmpipe threads as the second race begins, about 50 s in. That is
 # lavapipe's: it is the first draw with one of RT64's specialized pixel shaders (two LOD tiles, S mirrored), whose
@@ -167,8 +170,9 @@ publish)
     for f in "${files[@]}"; do
         [ -f "$f" ] || { echo "no $f: run tools/release.sh windows and linux first" >&2; exit 1; }
         [ "$(cat "$f.commit" 2> /dev/null)" = "$commit" ] || { echo "$f wasn't built from $commit" >&2; exit 1; }
+        [ "$f" != "out/$name-windows-x64.zip" ] || [ -e "$f.booted" ] || continue  # its boot is optional (above)
         [ "$(cat "$f.booted" 2> /dev/null)" = "$(sha256sum "$f" | cut -d' ' -f1)" ] ||
-            { echo "$f hasn't booted: run tools/release.sh boot windows and linux first" >&2; exit 1; }
+            { echo "$f hasn't booted as it is now: run tools/release.sh boot on its OS first" >&2; exit 1; }
     done
     gh release create "$tag" "${files[@]}" --target "$commit" --title "Rush 2049 Recompiled $tag" --notes-file "$notes"
     ;;
